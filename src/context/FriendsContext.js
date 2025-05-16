@@ -25,7 +25,7 @@ const friendsReducer = (state, action) => {
         friendIds: action.payload,
         loading: false,
         error: null
-      };
+      }; 
     case "SET_FRIEND_REQUESTS":
       return { 
         ...state, 
