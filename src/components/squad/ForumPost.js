@@ -6,21 +6,29 @@ import COLORS from "../../constants/COLORS";
 import HeightSpacer from "../reusable/HeightSpacer";
 
 const ForumPost = ({ 
-  content, 
-  title, 
-  tags = [], 
-  username, 
-  userTitle = "Member", 
-  createdAt, 
-  comments,
-  avatar = "https://randomuser.me/api/portraits/lego/1.jpg",
-  userId,
+  post,
+  navigation,
   onAvatarPress
 }) => {
-
+  // Extract post properties with defaults for safety
+  const {
+    id,
+    content = "No content available.", 
+    title = "Untitled Post", 
+    tags = [], 
+    username = "Anonymous", 
+    userId,
+    createdAt,
+    comments = [],
+    likes = [],
+    avatar = "https://randomuser.me/api/portraits/lego/1.jpg"
+  } = post || {};
+  
   // Handle formatted time display
   const getFormattedTime = () => {
     try {
+      if (!createdAt) return "Unknown date";
+      
       // If createdAt is already a formatted string
       if (typeof createdAt === 'string') {
         // Try to clean it up for display if needed
@@ -29,6 +37,28 @@ const ForumPost = ({
           return parts[0] + ' ' + parts[1];
         }
         return createdAt;
+      }
+      
+      // Handle object with _seconds/_nanoseconds (new Firestore format)
+      if (createdAt._seconds !== undefined) {
+        const date = new Date(createdAt._seconds * 1000);
+        return format(date, "MMM d, h:mm a");
+      }
+      
+      // Handle object with seconds/nanoseconds (old Firestore format)
+      if (createdAt.seconds !== undefined) {
+        const date = new Date(createdAt.seconds * 1000);
+        return format(date, "MMM d, h:mm a");
+      }
+      
+      // Handle numeric timestamp (unix epoch)
+      if (typeof createdAt === 'number') {
+        // Assuming milliseconds if > 10^12, otherwise seconds
+        if (createdAt > 10000000000) {
+          return format(new Date(createdAt), "MMM d, h:mm a");
+        } else {
+          return format(new Date(createdAt * 1000), "MMM d, h:mm a");
+        }
       }
       
       // Fallback
@@ -44,13 +74,25 @@ const ForumPost = ({
       onAvatarPress(userId);
     }
   };
+  
+  const navigateToPostDetails = () => {
+    if (navigation && id) {
+      navigation.navigate("ForumPostScreen", { post });
+    }
+  };
 
   return (
-    <View style={styles.postCard}>
-      <Text style={styles.postTitle}>{title || "Untitled Post"}</Text>
+    <TouchableOpacity onPress={navigateToPostDetails} style={styles.postCard}>
+      <Text style={styles.postTitle}>{title}</Text>
 
       {/* Content */}
-      <Text style={styles.postDescription}>{content || "No content available."}</Text> 
+      <Text 
+        style={styles.postDescription}
+        numberOfLines={3}
+        ellipsizeMode="tail"
+      >
+        {content}
+      </Text> 
 
       {/* Tags & Comments Row */}
       <View style={styles.row}>
@@ -65,8 +107,11 @@ const ForumPost = ({
           )}
         </View>
         
-        {/* Comments Count */}
-        <Text style={styles.commentCount}>💬 {comments.length}</Text>
+        {/* Comments & Likes Count */}
+        <View style={styles.statsContainer}>
+          <Text style={styles.statsItem}>💬 {comments.length}</Text>
+          <Text style={styles.statsItem}>❤️ {likes.length}</Text>
+        </View>
       </View>
 
       <HeightSpacer height={moderateScale(5)} />
@@ -80,13 +125,13 @@ const ForumPost = ({
           />
         </TouchableOpacity>
         <View style={styles.userInfoContainer}>
-          <Text style={styles.username}>{username || "Anonymous"}</Text>
-          <Text style={styles.userTitle}>• {userTitle}</Text>
+          <Text style={styles.username}>{username}</Text>
+          <Text style={styles.userTitle}>• Member</Text>
         </View>
         <Text style={styles.time}>{getFormattedTime()}</Text>
       </View>
       
-    </View>
+    </TouchableOpacity>
   );
 };
 
@@ -163,10 +208,15 @@ const styles = StyleSheet.create({
     fontSize: moderateScale(10),
     marginLeft: "auto",
   },
-  commentCount: {
+  statsContainer: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    alignItems: "center",
+  },
+  statsItem: {
     color: COLORS.lightGray,
     fontSize: moderateScale(12),
-    textAlign: "right",
+    marginLeft: moderateScale(10),
     marginTop: moderateScale(5)
   },
 }); 

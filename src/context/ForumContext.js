@@ -2,11 +2,18 @@ import createDataContext from './createDataContext';
 import api from '../utilities/backendApi'; 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+// Constants for caching
+const FORUM_POSTS_CACHE_KEY = 'forum_posts_cache';
+const FORUM_CACHE_TTL = 5 * 60 * 1000; // 5 minutes cache lifetime
+const FORUM_CACHE_STALE_TTL = 2 * 60 * 1000; // 2 minutes before refresh in background
+
 // Reducer function to manage state
 const forumReducer = (state, action) => {
     switch (action.type) {
         case 'fetch_posts':
-            return { ...state, posts: action.payload };
+            return { ...state, posts: action.payload, loading: false };
+        case 'set_loading':
+            return { ...state, loading: action.payload };
         case 'create_post':
             return { ...state, posts: [action.payload, ...state.posts] }; 
         case 'like_post':
@@ -48,9 +55,49 @@ const forumReducer = (state, action) => {
 };
 
 // Fetch all posts
-const fetchPosts = dispatch => async () => {
-    const idToken = await AsyncStorage.getItem("idToken"); 
+const fetchPosts = dispatch => async (forceFetch = false) => {
     try {
+        dispatch({ type: 'set_loading', payload: true });
+        console.log(`🔄 ${forceFetch ? 'Force fetching' : 'Fetching'} forum posts...`);
+        
+        const now = new Date().getTime();
+        let cacheData = null;
+        
+        // Try to load from cache if not forcing a fetch
+        if (!forceFetch) {
+            try {
+                const cachedContent = await AsyncStorage.getItem(FORUM_POSTS_CACHE_KEY);
+                if (cachedContent) {
+                    const { data, timestamp } = JSON.parse(cachedContent);
+                    const cacheAge = now - timestamp;
+                    
+                    // If cache is fresh enough to use
+                    if (cacheAge < FORUM_CACHE_TTL) {
+                        cacheData = data;
+                        console.log(`📦 Using cached forum posts (${cacheAge / 1000}s old)`);
+                        
+                        // Set immediately to improve UI responsiveness
+                        dispatch({ type: 'fetch_posts', payload: data });
+                        
+                        // If cache is getting stale, refresh in background
+                        if (cacheAge > FORUM_CACHE_STALE_TTL) {
+                            console.log('🔄 Cache getting stale, refreshing in background');
+                            setTimeout(() => fetchPosts(dispatch)(true), 100);
+                        }
+                        
+                        return data;
+                    } else {
+                        console.log('📦 Cache expired, fetching fresh data');
+                    }
+                }
+            } catch (error) {
+                console.error('❌ Error reading from cache:', error);
+                // Continue with API fetch if cache fails
+            }
+        } 
+        
+        // Fetch from API if forceFetch or no valid cache
+        const idToken = await AsyncStorage.getItem("idToken"); 
         const response = await api.get('/forum/posts',
             {
                 headers: {
@@ -58,9 +105,42 @@ const fetchPosts = dispatch => async () => {
                 }
             }
         );
-        dispatch({ type: 'fetch_posts', payload: response.data });
+        
+        const postsData = response.data;
+        console.log(`✅ Fetched ${postsData.length} forum posts from API`);
+        
+        // Update state
+        dispatch({ type: 'fetch_posts', payload: postsData });
+        
+        // Save to cache
+        try {
+            await AsyncStorage.setItem(FORUM_POSTS_CACHE_KEY, JSON.stringify({
+                data: postsData,
+                timestamp: now
+            }));
+            console.log('💾 Saved forum posts to cache');
+        } catch (error) {
+            console.error('❌ Error saving to cache:', error);
+            // Continue even if caching fails
+        }
+        
+        return postsData;
     } catch (error) {
-        console.error("Error fetching posts:", error);
+        console.error("❌ Error fetching posts:", error);
+        dispatch({ type: 'set_loading', payload: false });
+        return [];
+    }
+};
+
+// Clear forum cache (useful after creating posts)
+const clearForumCache = dispatch => async () => {
+    try {
+        await AsyncStorage.removeItem(FORUM_POSTS_CACHE_KEY);
+        console.log('🧹 Forum cache cleared');
+        return true;
+    } catch (error) {
+        console.error('❌ Error clearing forum cache:', error);
+        return false;
     }
 };
 
@@ -87,24 +167,26 @@ const createPost = dispatch => async (userId, username, content, tags, title, ca
             nanoseconds: 0
         };
 
-        dispatch({ 
-            type: 'create_post', 
-            payload: { 
-                id: response.data.postId, 
-                userId, 
-                username, 
-                title, 
-                content, 
-                tags, 
-                likes: [], 
-                comments: [], 
-                createdAt
-            } 
-        });
+        const newPost = { 
+            id: response.data.postId, 
+            userId, 
+            username, 
+            title, 
+            content, 
+            tags, 
+            likes: [], 
+            comments: [], 
+            createdAt
+        };
+        
+        dispatch({ type: 'create_post', payload: newPost });
+
+        // Clear cache since we added a new post
+        await clearForumCache(dispatch)();
 
         if (callback) callback(); // Navigate or show success message
     } catch (error) {
-        console.error("Error creating post:", error);
+        console.error("❌ Error creating post:", error);
     }
 };
 
@@ -114,7 +196,7 @@ const likePost = dispatch => async (postId, userId) => {
         const idToken = await AsyncStorage.getItem("idToken"); 
         // Make sure userId is being passed correctly
         if (!userId) {
-            console.error("Error: userId is undefined or null");
+            console.error("❌ Error: userId is undefined or null");
             return;
         }
         
@@ -126,8 +208,11 @@ const likePost = dispatch => async (postId, userId) => {
         });
 
         dispatch({ type: 'like_post', payload: { postId, userId } });
+        
+        // Update cache after liking
+        updateCacheForPostAction('like_post', { postId, userId });
     } catch (error) {
-        console.error("Error liking post:", error.response ? error.response.data : error);
+        console.error("❌ Error liking post:", error.response ? error.response.data : error);
     }
 };
 
@@ -137,7 +222,7 @@ const unlikePost = dispatch => async (postId, userId) => {
         const idToken = await AsyncStorage.getItem("idToken"); 
         // Make sure userId is being passed correctly
         if (!userId) {
-            console.error("Error: userId is undefined or null");
+            console.error("❌ Error: userId is undefined or null");
             return;
         }
         
@@ -149,8 +234,11 @@ const unlikePost = dispatch => async (postId, userId) => {
         });
 
         dispatch({ type: 'unlike_post', payload: { postId, userId } });
+        
+        // Update cache after unliking
+        updateCacheForPostAction('unlike_post', { postId, userId });
     } catch (error) {
-        console.error("Error unliking post:", error.response ? error.response.data : error);
+        console.error("❌ Error unliking post:", error.response ? error.response.data : error);
     }
 };
 
@@ -161,7 +249,7 @@ const addComment = dispatch => async (postId, userId, username, content) => {
         
         // Validate required fields
         if (!userId || !username || !content) {
-            console.error("Error: Missing required fields for comment");
+            console.error("❌ Error: Missing required fields for comment");
             return;
         }
         
@@ -202,13 +290,75 @@ const addComment = dispatch => async (postId, userId, username, content) => {
         };
 
         dispatch({ type: 'add_comment', payload: { postId, comment: newComment } });
+        
+        // Update cache after adding comment
+        updateCacheForPostAction('add_comment', { postId, comment: newComment });
     } catch (error) {
-        console.error("Error adding comment:", error.response ? error.response.data : error);
+        console.error("❌ Error adding comment:", error.response ? error.response.data : error);
+    }
+};
+
+// Helper to update cache for post actions
+const updateCacheForPostAction = async (actionType, payload) => {
+    try {
+        const cachedContent = await AsyncStorage.getItem(FORUM_POSTS_CACHE_KEY);
+        if (!cachedContent) return;
+
+        const { data: posts, timestamp } = JSON.parse(cachedContent);
+        let updatedPosts = [...posts];
+
+        switch (actionType) {
+            case 'like_post':
+                updatedPosts = updatedPosts.map(post => 
+                    post.id === payload.postId 
+                        ? { ...post, likes: [...post.likes, payload.userId] } 
+                        : post
+                );
+                break;
+            case 'unlike_post':
+                updatedPosts = updatedPosts.map(post =>
+                    post.id === payload.postId
+                        ? {
+                            ...post,
+                            likes: post.likes.filter(id => id !== payload.userId)
+                        }
+                        : post
+                );
+                break;
+            case 'add_comment':
+                updatedPosts = updatedPosts.map(post =>
+                    post.id === payload.postId 
+                        ? { 
+                            ...post, 
+                            comments: [...(post.comments || []), payload.comment] 
+                        } 
+                        : post
+                );
+                break;
+            default:
+                return;
+        }
+
+        await AsyncStorage.setItem(FORUM_POSTS_CACHE_KEY, JSON.stringify({
+            data: updatedPosts,
+            timestamp  // Keep original timestamp to maintain cache expiry
+        }));
+        
+        console.log(`💾 Updated cache for ${actionType}`);
+    } catch (error) {
+        console.error('❌ Error updating forum cache:', error);
     }
 };
 
 export const { Provider, Context } = createDataContext(
     forumReducer, 
-    { fetchPosts, createPost, likePost, unlikePost, addComment }, 
-    { posts: [] } 
+    { 
+        fetchPosts, 
+        createPost, 
+        likePost, 
+        unlikePost, 
+        addComment,
+        clearForumCache
+    }, 
+    { posts: [], loading: false } 
 ); 

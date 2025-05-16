@@ -44,6 +44,7 @@ const Squad = () => {
   const [profileModalVisible, setProfileModalVisible] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState(null);
   const [messagesLoading, setMessagesLoading] = useState(true);
+  const [forumLoading, setForumLoading] = useState(true);
   
   // Track if friends data is already loaded
   const friendsLoaded = useRef(false);
@@ -54,39 +55,76 @@ const Squad = () => {
     Messages: false
   });
   
-  // Track when the screen was last focused to prevent excessive refreshes
+  // Track when the screen was last focused and the last time we fetched forum posts
   const lastFocusTime = useRef(new Date().getTime());
+  const lastForumFetchTime = useRef(0);
 
   useEffect(() => {
-    fetchPosts();
-    
-    // Only load friend requests if we don't have them already
-    if (FriendsState.friendRequests.length === 0) {
-      getFriendRequests();
-    }
-    
-    // If we don't have friends data yet, load it
-    if (!friendsLoaded.current && FriendsState.friends.length === 0) {
-      friendsLoaded.current = true;
-      getFriends();
-    }
+    const loadInitialData = async () => {
+      try {
+        // Load forum posts first
+        if (ForumState.posts.length === 0) {
+          console.log("🔄 Loading initial forum posts");
+          setForumLoading(true);
+          await fetchPosts(false); // Use cache if available
+          lastForumFetchTime.current = new Date().getTime();
+        } else {
+          console.log("📋 Using existing forum posts from state");
+        }
+      } catch (error) {
+        console.error("❌ Error loading initial data:", error);
+      } finally {
+        setForumLoading(false);
+      }
+
+      // Load friend-related data
+      if (FriendsState.friendRequests.length === 0) {
+        getFriendRequests();
+      }
+      
+      if (!friendsLoaded.current && FriendsState.friends.length === 0) {
+        friendsLoaded.current = true;
+        getFriends();
+      }
+    };
+
+    loadInitialData();
   }, []);
+  
+  // Update forum loading state when ForumState changes
+  useEffect(() => {
+    if (ForumState.loading !== undefined) {
+      setForumLoading(ForumState.loading);
+    }
+  }, [ForumState.loading]);
   
   // Reset data load flags when the screen is focused
   useFocusEffect(
     useCallback(() => {
       const now = new Date().getTime();
       
-      // Only refresh data if returning after a significant time (e.g., 5+ minutes)
-      // This prevents unnecessary refreshes when quickly navigating between screens
+      // Only refresh data if returning after a significant time (e.g., 2+ minutes)
       const timeSinceLastFocus = now - lastFocusTime.current;
-      const shouldRefreshOnFocus = timeSinceLastFocus > 5 * 60 * 1000; // 5 minutes
+      const shouldRefreshOnFocus = timeSinceLastFocus > 2 * 60 * 1000; // 2 minutes
       
-      if (activeTab === "Messages" && shouldRefreshOnFocus) {
+      if (activeTab === "Forums" && shouldRefreshOnFocus) {
+        // If it's been a while since we last fetched forums, refresh them
+        const timeSinceLastForumFetch = now - lastForumFetchTime.current;
+        const shouldRefreshForums = timeSinceLastForumFetch > 5 * 60 * 1000; // 5 minutes
+        
+        if (shouldRefreshForums) {
+          console.log("🔄 Refreshing forum posts after returning to screen");
+          fetchPosts(true); // Force refresh
+          lastForumFetchTime.current = now;
+        }
+      } else if (activeTab === "Messages" && shouldRefreshOnFocus) {
         // Only reload conversations when returning after significant time away
         initialDataLoaded.current.Messages = false;
         lastFocusTime.current = now;
       }
+      
+      // Update last focus time
+      lastFocusTime.current = now;
       
       return () => {
         // No cleanup needed
@@ -101,7 +139,17 @@ const Squad = () => {
       loadConversations(false); // Don't force refresh by default
       initialDataLoaded.current.Messages = true;
     } else if (activeTab === "Forums" && !initialDataLoaded.current.Forums) {
-      fetchPosts();
+      // Check if we need to refresh the forum posts
+      const now = new Date().getTime();
+      const timeSinceLastFetch = now - lastForumFetchTime.current;
+      const shouldRefresh = timeSinceLastFetch > 5 * 60 * 1000; // 5 minutes
+      
+      if (shouldRefresh || ForumState.posts.length === 0) {
+        console.log("🔄 Loading forum posts after tab change");
+        fetchPosts(false); // Use cache if available
+        lastForumFetchTime.current = now;
+      }
+      
       initialDataLoaded.current.Forums = true;
     }
   }, [activeTab]);
@@ -353,6 +401,19 @@ const Squad = () => {
     </View>
   );
 
+  // Render a loading indicator for forums
+  const renderForumLoading = () => {
+    if (forumLoading) {
+      return (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={COLORS.gradientPink} />
+          <Text style={styles.loadingText}>Loading community posts...</Text>
+        </View>
+      );
+    }
+    return null;
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.innerContainer}> 
@@ -413,66 +474,41 @@ const Squad = () => {
 
       {/* Tab Content */}
       {activeTab === "Forums" ? (
-        // Forums Tab Content
-        ForumState.posts.length === 0 ? (
-          <ActivityIndicator size="large" color={COLORS.gradientPink} />
-        ) : (
-          <ScrollView
-            style={styles.postsContainer}
-            contentContainerStyle={styles.postsContent}
-            overScrollMode="never"
-            bounces={false}
-            showsVerticalScrollIndicator={false}
-          >
-            {!filteredPosts || filteredPosts.length === 0 ? (
-              <Text style={styles.noResultsText}>No posts match your search</Text>
-            ) : (
-              filteredPosts.map((post) => (
-                <TouchableOpacity
-                  onPress={() => navigation.navigate("ForumPostScreen", { post })}
-                  key={post.id}
-                >
+        <>
+          {renderForumLoading()}
+          
+          {!forumLoading && (
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.scrollContainer}
+            >
+              <View style={styles.postsContainer}>
+                {/* Only render posts if we're not loading */}
+                {!forumLoading && filteredPosts.length === 0 && (
+                  <View style={styles.emptyContainer}>
+                    <Text style={styles.emptyText}>No posts yet! Be the first to share something.</Text>
+                  </View>
+                )}
+                
+                {filteredPosts.map((post) => (
                   <ForumPost
-                    username={post.username}
-                    title={post.title || "Untitled Post"}
-                    content={post.content}
-                    avatar={post.avatar}
-                    userId={post.userId || post.id}
-                    onAvatarPress={openUserProfile}
-                    createdAt={(() => {
-                      try {
-                        if (!post.createdAt) return "Unknown date";
-                        
-                        // Handle _seconds format (new)
-                        if (post.createdAt._seconds) {
-                          return format(new Date(post.createdAt._seconds * 1000), "PPpp");
-                        }
-                        
-                        // Handle seconds format (old)
-                        if (post.createdAt.seconds) {
-                          return format(new Date(post.createdAt.seconds * 1000), "PPpp");
-                        }
-                        
-                        // Handle string format
-                        if (typeof post.createdAt === 'string') {
-                          return post.createdAt;
-                        }
-                        
-                        return "Unknown date";
-                      } catch (error) {
-                        console.error("Error formatting date in Squad.js:", error);
-                        return "Unknown date";
-                      }
-                    })()}
-                    likesCount={post.likes?.length || 0}
-                    tags={post.tags || []}
-                    comments={post.comments || []}
+                    key={post.id}
+                    post={post}
+                    navigation={navigation}
+                    onAvatarPress={() => openUserProfile(post.userId)}
                   />
-                </TouchableOpacity>
-              ))
-            )}
-          </ScrollView>
-        )
+                ))}
+              </View>
+            </ScrollView>
+          )}
+          
+          <TouchableOpacity
+            style={styles.actionButton}
+            onPress={handleNewThread}
+          >
+            <Ionicons name="add" size={28} color="white" />
+          </TouchableOpacity>
+        </>
       ) : activeTab === "Messages" ? (
         // Messages Tab Content
         messagesLoading ? (
@@ -687,5 +723,28 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontSize: moderateScale(10),
     fontWeight: 'bold',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: moderateScale(20)
+  },
+  loadingText: {
+    color: COLORS.white,
+    marginTop: moderateScale(10),
+    fontSize: moderateScale(14)
+  },
+  scrollContainer: {
+    paddingBottom: moderateScale(20),
+    paddingHorizontal: moderateScale(10),
+  },
+  actionButton: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    padding: moderateScale(10),
+    backgroundColor: COLORS.gradientPurple,
+    borderRadius: moderateScale(20),
   },
 });

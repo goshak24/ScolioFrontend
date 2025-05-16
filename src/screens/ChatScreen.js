@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useContext, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useContext, useRef, useCallback, useMemo } from 'react';
 import {
     View,
     Text,
@@ -29,11 +29,66 @@ const ChatScreen = ({ route, navigation }) => {
     const [messageText, setMessageText] = useState('');
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null); 
-    const [messageVersion, setMessageVersion] = useState(0); // Add a state to track message changes
     const flatListRef = useRef(null);
     const unsubscribeRef = useRef(null);
     const prevMessageCount = useRef(0);
-    const pollingIntervalRef = useRef(null);
+    const lastMessageUpdate = useRef(Date.now());
+    const pollTimerRef = useRef(null);
+    
+    // Memoize the messages array to prevent unnecessary re-renders
+    const messages = useMemo(() => {
+        console.log(`🔄 Memoizing messages array with ${messagesState.messages.length} messages`);
+        return messagesState.messages || [];
+    }, [messagesState.messages]);
+    
+    // Log state changes to help debug
+    useEffect(() => {
+        console.log(`📊 MessagesState updated - messages: ${messagesState.messages.length}, loading: ${messagesState.loading}, error: ${messagesState.error ? 'yes' : 'no'}`);
+    }, [messagesState]);
+    
+    // Setup our own polling backup in case Firebase listener fails
+    useEffect(() => {
+        if (!userState?.user?.uid || !otherUser?.id) return;
+        
+        console.log("🔄 Setting up backup message polling");
+        
+        // Setup a polling interval to fetch messages regularly
+        const startPolling = () => {
+            // Clear any existing timer
+            if (pollTimerRef.current) {
+                clearInterval(pollTimerRef.current);
+            }
+            
+            // Create a new polling interval
+            pollTimerRef.current = setInterval(async () => {
+                try {
+                    // Skip if we're loading
+                    if (loading) return;
+                    
+                    console.log("📡 Polling for new messages");
+                    
+                    // Force fetch latest messages
+                    await getMessages(otherUser.id, true, 0, 30, userState.user.uid);
+                    
+                    console.log("✅ Poll complete");
+                } catch (err) {
+                    console.error("❌ Error in poll interval:", err);
+                }
+            }, 5000); // Poll every 5 seconds
+        };
+        
+        // Start polling
+        startPolling();
+        
+        // Clean up on unmount
+        return () => {
+            if (pollTimerRef.current) {
+                console.log("🧹 Cleaning up backup polling interval");
+                clearInterval(pollTimerRef.current);
+                pollTimerRef.current = null;
+            }
+        };
+    }, [userState?.user?.uid, otherUser?.id, loading]);
 
     // Fetch messages and setup listener on mount
     useEffect(() => {
@@ -52,6 +107,8 @@ const ChatScreen = ({ route, navigation }) => {
                     return;
                 }
 
+                console.log(`🔐 ChatScreen initializing with user ${userState.user.uid} and other user ${otherUser.id}`);
+                
                 // Store userId in AsyncStorage for future reference
                 try {
                     await AsyncStorage.setItem('userId', userState.user.uid);
@@ -62,16 +119,16 @@ const ChatScreen = ({ route, navigation }) => {
                 
                 // Get initial messages
                 if (isActive) {
-                    await getMessages(otherUser.id, false, 0, undefined, userState.user.uid);
+                    await getMessages(otherUser.id, true, 0, undefined, userState.user.uid);
+                    console.log('💬 Initial messages loaded');
                 }
                 
-                // IMMEDIATELY setup the listener BEFORE waiting for API response
-                // This ensures we catch any real-time updates that happen while loading
+                // Create conversationId manually
+                const conversationId = [userState.user.uid, otherUser.id].sort().join('_');
+                
+                // Setup listener with explicit user IDs (if active)
                 if (isActive) {
-                    console.log(`Setting up immediate listener for user ${userState.user.uid} and other user ${otherUser.id}`);
-                    
-                    // Create conversationId manually - this is just for tracking, actual security is user ID based
-                    const conversationId = [userState.user.uid, otherUser.id].sort().join('_');
+                    console.log(`📡 Setting up immediate listener for user ${userState.user.uid} and other user ${otherUser.id}`);
                     
                     // Setup listener with explicit user IDs
                     const unsubscribe = setupMessageListener(
@@ -82,26 +139,25 @@ const ChatScreen = ({ route, navigation }) => {
                     // Save unsubscribe function for cleanup
                     if (typeof unsubscribe === 'function') {
                         unsubscribeRef.current = unsubscribe;
+                        console.log('📲 Message listener setup complete');
                     }
-                    
-                    // Setup a polling interval to force UI updates
-                    startMessagePolling();
                 }
             } catch (error) {
-                console.error("Error initializing chat:", error);
+                console.error("❌ Error initializing chat:", error);
                 if (isActive) {
                     setError(error.message || "Failed to load conversation");
                 }
             } finally {
                 if (isActive) {
                     setLoading(false);
+                    console.log('📱 ChatScreen initialization complete');
                 }
             }
         };
 
         // Set up focus handler to refresh messages when returning to the screen
         const refreshOnFocus = () => {
-            console.log("Screen focused - refreshing messages");
+            console.log("🔍 Screen focused - refreshing messages");
             if (userState?.user?.uid && otherUser?.id) {
                 // Force a refresh when returning to the screen
                 getMessages(otherUser.id, true, 0, undefined, userState.user.uid);
@@ -115,7 +171,7 @@ const ChatScreen = ({ route, navigation }) => {
                     unsubscribeRef.current = null;
                 }
                 
-                console.log(`Setting up fresh listener on focus for users ${userState.user.uid} and ${otherUser.id}`);
+                console.log(`🔄 Setting up fresh listener on focus for users ${userState.user.uid} and ${otherUser.id}`);
                 
                 // Setup fresh listener with both user IDs explicitly passed
                 const unsubscribe = setupMessageListener(
@@ -127,26 +183,7 @@ const ChatScreen = ({ route, navigation }) => {
                 if (typeof unsubscribe === 'function') {
                     unsubscribeRef.current = unsubscribe;
                 }
-                
-                // Restart the polling interval
-                startMessagePolling();
             }
-        };
-
-        // Start UI update polling interval
-        const startMessagePolling = () => {
-            // Clear any existing interval
-            if (pollingIntervalRef.current) {
-                clearInterval(pollingIntervalRef.current);
-            }
-            
-            // Create a new interval to check for message updates
-            pollingIntervalRef.current = setInterval(() => {
-                if (isActive) {
-                    // Force a re-render to check for new messages
-                    setMessageVersion(prev => prev + 1);
-                }
-            }, 1000); // Check every second
         };
 
         initializeChat();
@@ -157,22 +194,22 @@ const ChatScreen = ({ route, navigation }) => {
         // Cleanup when unmounting
         return () => {
             isActive = false; // Mark as inactive first
-            console.log("ChatScreen unmounting, cleaning up listeners");
+            console.log("🧹 ChatScreen unmounting, cleaning up listeners");
             
-            // Clear polling interval
-            if (pollingIntervalRef.current) {
-                clearInterval(pollingIntervalRef.current);
-                pollingIntervalRef.current = null;
+            // Clean up polling if active
+            if (pollTimerRef.current) {
+                clearInterval(pollTimerRef.current);
+                pollTimerRef.current = null;
             }
             
             // First try to use the stored unsubscribe function
             if (unsubscribeRef.current && typeof unsubscribeRef.current === 'function') {
-                console.log("Calling stored unsubscribe function");
+                console.log("🗑️ Calling stored unsubscribe function");
                 try {
                     unsubscribeRef.current();
                     unsubscribeRef.current = null; // Clear the ref after unsubscribing
                 } catch (err) {
-                    console.error("Error calling unsubscribe function:", err);
+                    console.error("❌ Error calling unsubscribe function:", err);
                 }
             }
             
@@ -182,26 +219,56 @@ const ChatScreen = ({ route, navigation }) => {
             // Then call clearCurrentConversation to ensure proper cleanup
             clearCurrentConversation();
         };
-    }, [otherUser.id, userState.user?.uid]); // Removed messagesState.currentConversation from dependencies
+    }, [otherUser.id, userState.user?.uid]);
 
     // Scroll to bottom when messages change, but only when loading is complete
     useEffect(() => {
         // Don't scroll while initial loading or loading older messages
-        if (loading || messagesState.loadingOlderMessages) return;
+        if (loading || messagesState.loadingOlderMessages) {
+            console.log("⏳ Skip auto-scroll during loading");
+            return;
+        }
         
         // Only auto-scroll when a new message arrives
-        if (flatListRef.current && messagesState.messages.length > 0) {
-            // Add a small delay to ensure render is complete
-            const scrollTimer = setTimeout(() => {
-                if (flatListRef.current) {
-                    flatListRef.current.scrollToEnd({ animated: true });
-                }
-            }, 100);
+        if (flatListRef.current && messages.length > 0) {
+            // Check if message count has increased - we have a new message
+            if (messages.length > prevMessageCount.current) {
+                console.log(`📜 Auto-scrolling to bottom - messages increased from ${prevMessageCount.current} to ${messages.length}`);
+                
+                // Add a small delay to ensure render is complete
+                const scrollTimer = setTimeout(() => {
+                    if (flatListRef.current) {
+                        flatListRef.current.scrollToEnd({ animated: true });
+                        console.log("📜 Scrolled to end");
+                    }
+                }, 100);
+                
+                // Track the last time we updated to help debug
+                lastMessageUpdate.current = Date.now();
+                
+                // Clean up timer
+                return () => clearTimeout(scrollTimer);
+            } else {
+                console.log(`📚 No auto-scroll needed - message count unchanged at ${messages.length}`);
+            }
             
-            // Clean up timer
-            return () => clearTimeout(scrollTimer);
+            // Update the previous count
+            prevMessageCount.current = messages.length;
         }
-    }, [messagesState.messages.length, loading, messagesState.loadingOlderMessages, messageVersion]); // Added messageVersion to dependencies
+    }, [messages.length, loading, messagesState.loadingOlderMessages]);
+
+    // Monitor message changes 
+    useEffect(() => {
+        if (messages.length > 0) {
+            console.log(`💬 Messages updated: ${messages.length} messages available, last update: ${new Date(lastMessageUpdate.current).toISOString()}`);
+            
+            // Track previous count for next comparison
+            prevMessageCount.current = messages.length;
+            
+            // Force a render by updating the last message time
+            lastMessageUpdate.current = Date.now();
+        }
+    }, [messages.length]);
 
     // Handle loading more messages when user scrolls to top
     const handleLoadMore = async () => {
@@ -284,9 +351,6 @@ const ChatScreen = ({ route, navigation }) => {
             // Send the message
             await sendMessage(otherUser.id, trimmedMessage, userState.user.uid);
             
-            // Force a re-render to update the UI immediately
-            setMessageVersion(prev => prev + 1);
-            
             // Firebase listener will handle the update, but we'll scroll again after a delay
             // just to ensure the new message is visible
             setTimeout(() => {
@@ -305,11 +369,20 @@ const ChatScreen = ({ route, navigation }) => {
         // Correct ownership check - check against user's UID with null safety
         const isOwnMessage = item.senderId === userState?.user?.uid;
         
+        // Extract timestamp from the item for use in the message
+        const messageTimestamp = formatMessageTime(item.timestamp);
+        
+        // Add a unique key for better rendering and include timestamp 
+        const messageKey = `${item.id}-${item.status}-${messageTimestamp}`;
+        
         return (
-            <View style={[
-                styles.messageContainer,
-                isOwnMessage ? styles.ownMessageContainer : styles.otherMessageContainer
-            ]}>
+            <View 
+                style={[
+                    styles.messageContainer,
+                    isOwnMessage ? styles.ownMessageContainer : styles.otherMessageContainer
+                ]}
+                key={messageKey}
+            >
                 {isOwnMessage ? (
                     // Own message with gradient background
                     <LinearGradient
@@ -319,7 +392,7 @@ const ChatScreen = ({ route, navigation }) => {
                         style={styles.ownMessage}
                     >
                         <Text style={styles.messageText}>{item.content}</Text>
-                        <Text style={styles.messageTime}>{formatMessageTime(item.timestamp)}</Text>
+                        <Text style={styles.messageTime}>{messageTimestamp}</Text>
                         {item.status === 'sending' && (
                             <View style={styles.statusIndicator}>
                                 <Ionicons name="time-outline" size={10} color="rgba(255,255,255,0.7)" />
@@ -335,7 +408,7 @@ const ChatScreen = ({ route, navigation }) => {
                     // Other user's message
                     <View style={styles.otherMessage}>
                         <Text style={styles.messageText}>{item.content}</Text>
-                        <Text style={styles.messageTime}>{formatMessageTime(item.timestamp)}</Text>
+                        <Text style={styles.messageTime}>{messageTimestamp}</Text>
                     </View>
                 )}
             </View>
@@ -354,38 +427,6 @@ const ChatScreen = ({ route, navigation }) => {
         
         return null;
     };
-
-    // Monitor message changes 
-    useEffect(() => {
-        if (messagesState.messages.length > 0) {
-            console.log(`💬 Messages updated: ${messagesState.messages.length} messages available`);
-            
-            // Refresh the conversation if going from 0 to having messages
-            if (prevMessageCount.current === 0 && messagesState.messages.length > 0) {
-                console.log('First messages received, ensuring proper setup');
-                
-                // If we have a current conversation, make sure the listener is active
-                if (messagesState.currentConversation?.id && userState?.user?.uid) {
-                    console.log(`Re-establishing listener for conversation ${messagesState.currentConversation.id}`);
-                    const unsubscribe = setupMessageListener(
-                        messagesState.currentConversation.id,
-                        userState.user.uid
-                    );
-                    
-                    // Save unsubscribe function for cleanup
-                    if (typeof unsubscribe === 'function') {
-                        unsubscribeRef.current = unsubscribe;
-                    }
-                }
-            }
-            
-            // Track previous count for next comparison
-            prevMessageCount.current = messagesState.messages.length;
-            
-            // Force a messageVersion update to ensure UI re-renders
-            setMessageVersion(prev => prev + 1);
-        }
-    }, [messagesState.messages.length, messagesState.currentConversation?.id, userState?.user?.uid]);
 
     return (
         <SafeAreaView style={styles.container}>
@@ -447,9 +488,9 @@ const ChatScreen = ({ route, navigation }) => {
                             bounces={true}
                             showsVerticalScrollIndicator={false}
                             ref={flatListRef}
-                            data={messagesState.messages}
-                            extraData={[messageVersion, messagesState.messages.map(m => m.status).join(',')]} 
-                            keyExtractor={(item, index) => item.id ? String(item.id) : `msg-${index}-${Date.now()}`}
+                            data={messages}
+                            extraData={lastMessageUpdate.current}
+                            keyExtractor={(item, index) => item.id ? `${item.id}-${item.status || 'unknown'}-${lastMessageUpdate.current}` : `msg-${index}-${Date.now()}`}
                             renderItem={renderMessageItem}
                             contentContainerStyle={styles.messagesContent}
                             ListHeaderComponent={renderLoadingMoreIndicator}
@@ -461,7 +502,7 @@ const ChatScreen = ({ route, navigation }) => {
                             }
                             onEndReachedThreshold={0.1}
                             onEndReached={() => {
-                                if (!messagesState.loadingOlderMessages && flatListRef.current && messagesState.messages.length > 0) {
+                                if (!messagesState.loadingOlderMessages && flatListRef.current && messages.length > 0) {
                                     requestAnimationFrame(() => {
                                         if (flatListRef.current) {
                                             flatListRef.current.scrollToEnd({ animated: false });
@@ -470,21 +511,34 @@ const ChatScreen = ({ route, navigation }) => {
                                 }
                             }}
                             onContentSizeChange={() => {
-                                if (flatListRef.current && messagesState.messages.length > 0 && !messagesState.loadingOlderMessages) {
+                                // Scroll to bottom when content size changes (only if not loading older messages)
+                                if (flatListRef.current && messages.length > 0 && !messagesState.loadingOlderMessages) {
                                     requestAnimationFrame(() => {
                                         if (flatListRef.current) {
                                             flatListRef.current.scrollToEnd({ animated: false });
+                                            console.log("📜 Scrolled to end on content size change");
                                         }
                                     });
                                 }
                             }}
-                            onLayout={() => {}}
+                            onLayout={() => {
+                                // Scroll to bottom when layout changes
+                                if (flatListRef.current && messages.length > 0 && !messagesState.loadingOlderMessages) {
+                                    requestAnimationFrame(() => {
+                                        if (flatListRef.current) {
+                                            flatListRef.current.scrollToEnd({ animated: false });
+                                            console.log("�� Scrolled to end on layout change");
+                                        }
+                                    });
+                                }
+                            }}
                             onRefresh={handleLoadMore}
                             refreshing={messagesState.loadingOlderMessages}
                             removeClippedSubviews={false}
-                            maxToRenderPerBatch={10}
-                            windowSize={10}
-                            initialNumToRender={15}
+                            maxToRenderPerBatch={15}
+                            updateCellsBatchingPeriod={50}
+                            windowSize={15}
+                            initialNumToRender={20}
                         />
 
                         {/* Message input */}
