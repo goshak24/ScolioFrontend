@@ -4,8 +4,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Constants for caching
 const FORUM_POSTS_CACHE_KEY = 'forum_posts_cache';
-const FORUM_CACHE_TTL = 5 * 60 * 1000; // 5 minutes cache lifetime
-const FORUM_CACHE_STALE_TTL = 2 * 60 * 1000; // 2 minutes before refresh in background
+const FORUM_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours cache lifetime
+const FORUM_CACHE_STALE_TTL = 8 * 60 * 60 * 1000; // 8 hours before refresh in background
+const MAX_CACHED_POSTS = 30; // Maximum number of posts to cache
 
 // Reducer function to manage state
 const forumReducer = (state, action) => {
@@ -15,7 +16,12 @@ const forumReducer = (state, action) => {
         case 'set_loading':
             return { ...state, loading: action.payload };
         case 'create_post':
-            return { ...state, posts: [action.payload, ...state.posts] }; 
+            // Ensure we don't exceed MAX_CACHED_POSTS
+            const updatedPosts = [action.payload, ...state.posts];
+            return { 
+                ...state, 
+                posts: updatedPosts.slice(0, MAX_CACHED_POSTS)
+            }; 
         case 'like_post':
             return {
                 ...state,
@@ -74,7 +80,7 @@ const fetchPosts = dispatch => async (forceFetch = false) => {
                     // If cache is fresh enough to use
                     if (cacheAge < FORUM_CACHE_TTL) {
                         cacheData = data;
-                        console.log(`📦 Using cached forum posts (${cacheAge / 1000}s old)`);
+                        console.log(`📦 Using cached forum posts (${Math.round(cacheAge / (60 * 60 * 1000))} hours old)`);
                         
                         // Set immediately to improve UI responsiveness
                         dispatch({ type: 'fetch_posts', payload: data });
@@ -106,8 +112,11 @@ const fetchPosts = dispatch => async (forceFetch = false) => {
             }
         );
         
-        const postsData = response.data;
-        console.log(`✅ Fetched ${postsData.length} forum posts from API`);
+        // Limit to MAX_CACHED_POSTS
+        const allPosts = response.data || [];
+        const postsData = allPosts.slice(0, MAX_CACHED_POSTS);
+        
+        console.log(`✅ Fetched ${allPosts.length} forum posts from API, caching ${postsData.length}`);
         
         // Update state
         dispatch({ type: 'fetch_posts', payload: postsData });
@@ -118,7 +127,7 @@ const fetchPosts = dispatch => async (forceFetch = false) => {
                 data: postsData,
                 timestamp: now
             }));
-            console.log('💾 Saved forum posts to cache');
+            console.log(`💾 Saved ${postsData.length} forum posts to cache (expires in 24h)`);
         } catch (error) {
             console.error('❌ Error saving to cache:', error);
             // Continue even if caching fails
@@ -141,6 +150,63 @@ const clearForumCache = dispatch => async () => {
     } catch (error) {
         console.error('❌ Error clearing forum cache:', error);
         return false;
+    }
+};
+
+// Helper to update cache for post actions
+const updateCacheForPostAction = async (actionType, payload) => {
+    try {
+        const cachedContent = await AsyncStorage.getItem(FORUM_POSTS_CACHE_KEY);
+        if (!cachedContent) return;
+
+        const { data: posts, timestamp } = JSON.parse(cachedContent);
+        let updatedPosts = [...posts];
+
+        switch (actionType) {
+            case 'like_post':
+                updatedPosts = updatedPosts.map(post => 
+                    post.id === payload.postId 
+                        ? { ...post, likes: [...post.likes, payload.userId] } 
+                        : post
+                );
+                break;
+            case 'unlike_post':
+                updatedPosts = updatedPosts.map(post =>
+                    post.id === payload.postId
+                        ? {
+                            ...post,
+                            likes: post.likes.filter(id => id !== payload.userId)
+                        }
+                        : post
+                );
+                break;
+            case 'add_comment':
+                updatedPosts = updatedPosts.map(post =>
+                    post.id === payload.postId 
+                        ? { 
+                            ...post, 
+                            comments: [...(post.comments || []), payload.comment] 
+                        } 
+                        : post
+                );
+                break;
+            default:
+                return;
+        }
+
+        // Ensure we don't exceed MAX_CACHED_POSTS
+        if (updatedPosts.length > MAX_CACHED_POSTS) {
+            updatedPosts = updatedPosts.slice(0, MAX_CACHED_POSTS);
+        }
+
+        await AsyncStorage.setItem(FORUM_POSTS_CACHE_KEY, JSON.stringify({
+            data: updatedPosts,
+            timestamp  // Keep original timestamp to maintain cache expiry
+        }));
+        
+        console.log(`💾 Updated cache for ${actionType}`);
+    } catch (error) {
+        console.error('❌ Error updating forum cache:', error);
     }
 };
 
@@ -298,55 +364,32 @@ const addComment = dispatch => async (postId, userId, username, content) => {
     }
 };
 
-// Helper to update cache for post actions
-const updateCacheForPostAction = async (actionType, payload) => {
+// Get cache info - useful for debugging
+const getCacheInfo = dispatch => async () => {
     try {
         const cachedContent = await AsyncStorage.getItem(FORUM_POSTS_CACHE_KEY);
-        if (!cachedContent) return;
-
-        const { data: posts, timestamp } = JSON.parse(cachedContent);
-        let updatedPosts = [...posts];
-
-        switch (actionType) {
-            case 'like_post':
-                updatedPosts = updatedPosts.map(post => 
-                    post.id === payload.postId 
-                        ? { ...post, likes: [...post.likes, payload.userId] } 
-                        : post
-                );
-                break;
-            case 'unlike_post':
-                updatedPosts = updatedPosts.map(post =>
-                    post.id === payload.postId
-                        ? {
-                            ...post,
-                            likes: post.likes.filter(id => id !== payload.userId)
-                        }
-                        : post
-                );
-                break;
-            case 'add_comment':
-                updatedPosts = updatedPosts.map(post =>
-                    post.id === payload.postId 
-                        ? { 
-                            ...post, 
-                            comments: [...(post.comments || []), payload.comment] 
-                        } 
-                        : post
-                );
-                break;
-            default:
-                return;
+        if (!cachedContent) {
+            return { exists: false };
         }
 
-        await AsyncStorage.setItem(FORUM_POSTS_CACHE_KEY, JSON.stringify({
-            data: updatedPosts,
-            timestamp  // Keep original timestamp to maintain cache expiry
-        }));
-        
-        console.log(`💾 Updated cache for ${actionType}`);
+        const { data, timestamp } = JSON.parse(cachedContent);
+        const now = new Date().getTime();
+        const cacheAge = now - timestamp;
+        const expiresIn = FORUM_CACHE_TTL - cacheAge;
+        const refreshIn = FORUM_CACHE_STALE_TTL - cacheAge;
+
+        return {
+            exists: true,
+            count: data.length,
+            ageHours: Math.round(cacheAge / (60 * 60 * 1000) * 10) / 10,
+            expiresInHours: Math.round(expiresIn / (60 * 60 * 1000) * 10) / 10,
+            refreshInHours: Math.round(refreshIn / (60 * 60 * 1000) * 10) / 10,
+            isStale: cacheAge > FORUM_CACHE_STALE_TTL,
+            isExpired: cacheAge > FORUM_CACHE_TTL
+        };
     } catch (error) {
-        console.error('❌ Error updating forum cache:', error);
+        console.error('❌ Error getting cache info:', error);
+        return { exists: false, error: error.message };
     }
 };
 
@@ -358,7 +401,8 @@ export const { Provider, Context } = createDataContext(
         likePost, 
         unlikePost, 
         addComment,
-        clearForumCache
+        clearForumCache,
+        getCacheInfo
     }, 
     { posts: [], loading: false } 
 ); 
