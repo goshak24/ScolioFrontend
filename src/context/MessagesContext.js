@@ -15,8 +15,8 @@ const FORCE_REFRESH_INTERVAL = 2 * 60 * 1000; // Force refresh after 2 minutes o
 
 // Number of messages to fetch per page and polling limits
 const MESSAGES_PER_PAGE = 20; // Initial load count
-const POLLING_INTERVAL = 7000; // 7 seconds between polls
-const POLLING_LIMIT = 5; // Only fetch up to 5 new messages per poll
+const POLLING_INTERVAL = 4000; // 7 seconds between polls
+const POLLING_LIMIT = 2; // Only fetch up to 5 new messages per poll
 const FORCED_SYNC_INTERVAL = 300000; // Force full sync every 5 minutes
 
 // Track last refresh time to prevent unnecessary forced refreshes

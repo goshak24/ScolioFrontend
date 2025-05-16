@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useContext, useRef } from 'react';
+import React, { useEffect, useState, useContext, useRef, useCallback } from 'react';
 import {
     View,
     Text,
@@ -29,9 +29,11 @@ const ChatScreen = ({ route, navigation }) => {
     const [messageText, setMessageText] = useState('');
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null); 
+    const [messageVersion, setMessageVersion] = useState(0); // Add a state to track message changes
     const flatListRef = useRef(null);
     const unsubscribeRef = useRef(null);
     const prevMessageCount = useRef(0);
+    const pollingIntervalRef = useRef(null);
 
     // Fetch messages and setup listener on mount
     useEffect(() => {
@@ -81,6 +83,9 @@ const ChatScreen = ({ route, navigation }) => {
                     if (typeof unsubscribe === 'function') {
                         unsubscribeRef.current = unsubscribe;
                     }
+                    
+                    // Setup a polling interval to force UI updates
+                    startMessagePolling();
                 }
             } catch (error) {
                 console.error("Error initializing chat:", error);
@@ -122,7 +127,26 @@ const ChatScreen = ({ route, navigation }) => {
                 if (typeof unsubscribe === 'function') {
                     unsubscribeRef.current = unsubscribe;
                 }
+                
+                // Restart the polling interval
+                startMessagePolling();
             }
+        };
+
+        // Start UI update polling interval
+        const startMessagePolling = () => {
+            // Clear any existing interval
+            if (pollingIntervalRef.current) {
+                clearInterval(pollingIntervalRef.current);
+            }
+            
+            // Create a new interval to check for message updates
+            pollingIntervalRef.current = setInterval(() => {
+                if (isActive) {
+                    // Force a re-render to check for new messages
+                    setMessageVersion(prev => prev + 1);
+                }
+            }, 1000); // Check every second
         };
 
         initializeChat();
@@ -134,6 +158,12 @@ const ChatScreen = ({ route, navigation }) => {
         return () => {
             isActive = false; // Mark as inactive first
             console.log("ChatScreen unmounting, cleaning up listeners");
+            
+            // Clear polling interval
+            if (pollingIntervalRef.current) {
+                clearInterval(pollingIntervalRef.current);
+                pollingIntervalRef.current = null;
+            }
             
             // First try to use the stored unsubscribe function
             if (unsubscribeRef.current && typeof unsubscribeRef.current === 'function') {
@@ -171,7 +201,7 @@ const ChatScreen = ({ route, navigation }) => {
             // Clean up timer
             return () => clearTimeout(scrollTimer);
         }
-    }, [messagesState.messages.length, loading, messagesState.loadingOlderMessages]);
+    }, [messagesState.messages.length, loading, messagesState.loadingOlderMessages, messageVersion]); // Added messageVersion to dependencies
 
     // Handle loading more messages when user scrolls to top
     const handleLoadMore = async () => {
@@ -254,6 +284,9 @@ const ChatScreen = ({ route, navigation }) => {
             // Send the message
             await sendMessage(otherUser.id, trimmedMessage, userState.user.uid);
             
+            // Force a re-render to update the UI immediately
+            setMessageVersion(prev => prev + 1);
+            
             // Firebase listener will handle the update, but we'll scroll again after a delay
             // just to ensure the new message is visible
             setTimeout(() => {
@@ -268,7 +301,7 @@ const ChatScreen = ({ route, navigation }) => {
     };
 
     // Render message item
-    const renderMessageItem = ({ item }) => {
+    const renderMessageItem = useCallback(({ item }) => {
         // Correct ownership check - check against user's UID with null safety
         const isOwnMessage = item.senderId === userState?.user?.uid;
         
@@ -307,7 +340,7 @@ const ChatScreen = ({ route, navigation }) => {
                 )}
             </View>
         );
-    };
+    }, [userState?.user?.uid]);
 
     // Render loading indicator for pagination
     const renderLoadingMoreIndicator = () => {
@@ -348,6 +381,9 @@ const ChatScreen = ({ route, navigation }) => {
             
             // Track previous count for next comparison
             prevMessageCount.current = messagesState.messages.length;
+            
+            // Force a messageVersion update to ensure UI re-renders
+            setMessageVersion(prev => prev + 1);
         }
     }, [messagesState.messages.length, messagesState.currentConversation?.id, userState?.user?.uid]);
 
@@ -412,7 +448,7 @@ const ChatScreen = ({ route, navigation }) => {
                             showsVerticalScrollIndicator={false}
                             ref={flatListRef}
                             data={messagesState.messages}
-                            extraData={messagesState.messages.map(m => m.status).join(',')}
+                            extraData={[messageVersion, messagesState.messages.map(m => m.status).join(',')]} 
                             keyExtractor={(item, index) => item.id ? String(item.id) : `msg-${index}-${Date.now()}`}
                             renderItem={renderMessageItem}
                             contentContainerStyle={styles.messagesContent}
