@@ -31,8 +31,6 @@ const FriendsScreen = ({ navigation }) => {
     } = useContext(FriendsContext);
     
     const { state: userState } = useContext(UserContext);
-
-    console.log(friendsState);
     
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState('friends'); // 'friends' or 'requests'

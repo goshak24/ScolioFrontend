@@ -46,49 +46,6 @@ const ChatScreen = ({ route, navigation }) => {
         console.log(`📊 MessagesState updated - messages: ${messagesState.messages.length}, loading: ${messagesState.loading}, error: ${messagesState.error ? 'yes' : 'no'}`);
     }, [messagesState]);
     
-    // Setup our own polling backup in case Firebase listener fails
-    useEffect(() => {
-        if (!userState?.user?.uid || !otherUser?.id) return;
-        
-        console.log("🔄 Setting up backup message polling");
-        
-        // Setup a polling interval to fetch messages regularly
-        const startPolling = () => {
-            // Clear any existing timer
-            if (pollTimerRef.current) {
-                clearInterval(pollTimerRef.current);
-            }
-            
-            // Create a new polling interval
-            pollTimerRef.current = setInterval(async () => {
-                try {
-                    // Skip if we're loading
-                    if (loading) return;
-                    
-                    console.log("📡 Polling for new messages");
-                    
-                    // Force fetch latest messages
-                    await getMessages(otherUser.id, true, 0, 30, userState.user.uid);
-                    
-                    console.log("✅ Poll complete");
-                } catch (err) {
-                    console.error("❌ Error in poll interval:", err);
-                }
-            }, 5000); // Poll every 5 seconds
-        };
-        
-        // Start polling
-        startPolling();
-        
-        // Clean up on unmount
-        return () => {
-            if (pollTimerRef.current) {
-                console.log("🧹 Cleaning up backup polling interval");
-                clearInterval(pollTimerRef.current);
-                pollTimerRef.current = null;
-            }
-        };
-    }, [userState?.user?.uid, otherUser?.id, loading]);
 
     // Fetch messages and setup listener on mount
     useEffect(() => {
@@ -107,7 +64,7 @@ const ChatScreen = ({ route, navigation }) => {
                     return;
                 }
 
-                console.log(`🔐 ChatScreen initializing with user ${userState.user.uid} and other user ${otherUser.id}`);
+                console.log(`🔐 ChatScreen initializing with user 1 and other user`);
                 
                 // Store userId in AsyncStorage for future reference
                 try {
@@ -119,7 +76,7 @@ const ChatScreen = ({ route, navigation }) => {
                 
                 // Get initial messages
                 if (isActive) {
-                    await getMessages(otherUser.id, true, 0, undefined, userState.user.uid);
+                    await getMessages(otherUser.id, true, 0, 20, userState.user.uid);
                     console.log('💬 Initial messages loaded');
                 }
                 
@@ -128,7 +85,7 @@ const ChatScreen = ({ route, navigation }) => {
                 
                 // Setup listener with explicit user IDs (if active)
                 if (isActive) {
-                    console.log(`📡 Setting up immediate listener for user ${userState.user.uid} and other user ${otherUser.id}`);
+                    console.log(`📡 Setting up immediate listener for user 1 and other user`);
                     
                     // Setup listener with explicit user IDs
                     const unsubscribe = setupMessageListener(
@@ -160,7 +117,7 @@ const ChatScreen = ({ route, navigation }) => {
             console.log("🔍 Screen focused - refreshing messages");
             if (userState?.user?.uid && otherUser?.id) {
                 // Force a refresh when returning to the screen
-                getMessages(otherUser.id, true, 0, undefined, userState.user.uid);
+                getMessages(otherUser.id, true, 0, 20, userState.user.uid);
                 
                 // Re-establish the listener
                 const conversationId = [userState.user.uid, otherUser.id].sort().join('_');
@@ -171,7 +128,7 @@ const ChatScreen = ({ route, navigation }) => {
                     unsubscribeRef.current = null;
                 }
                 
-                console.log(`🔄 Setting up fresh listener on focus for users ${userState.user.uid} and ${otherUser.id}`);
+                console.log(`🔄 Setting up fresh listener on focus for users 1 and other user`);
                 
                 // Setup fresh listener with both user IDs explicitly passed
                 const unsubscribe = setupMessageListener(

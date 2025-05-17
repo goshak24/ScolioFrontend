@@ -8,7 +8,7 @@ const FRIENDS_CACHE_KEY = 'friends_data';
 const FRIEND_IDS_CACHE_KEY = 'friend_ids_data';  // New cache key for just the IDs
 const REQUESTS_CACHE_KEY = 'friend_requests_data';
 const CACHE_EXPIRY = 24 * 60 * 60 * 1000; // 24 hours
-const CACHE_REFRESH_THRESHOLD = 8 * 60 * 60 * 1000; // 8 hours (stale-while-revalidate)
+const CACHE_REFRESH_THRESHOLD = 20 * 60 * 60 * 1000; // 20 hours (stale-while-revalidate)
 
 const friendsReducer = (state, action) => {
   switch (action.type) {
@@ -168,9 +168,9 @@ const getFriends = (dispatch) => async (forceFetch = false) => {
             // Also update user cache
             userCache.cacheUsers(friends);
             
-            // If the cache is stale (but still valid), refresh friend IDs in background
+            // Only refresh in background if cache is very close to expiry
             if (now - timestamp > CACHE_REFRESH_THRESHOLD) {
-              console.log('Friends cache is stale, refreshing IDs in background');
+              console.log('Friends cache nearing expiry, refreshing in background');
               getFriendIds(dispatch)(true);
             }
             

@@ -182,7 +182,7 @@ const Squad = () => {
       if (!UserState?.user?.uid) {
         console.warn("No user ID available in Squad screen");
       } else {
-        console.log("Loading conversations for user:", UserState.user.uid);
+        console.log("Loading conversations for user");
         
         // First check if conversations already exist in state
         const hasExistingConversations = MessagesState.conversations.length > 0;
@@ -502,12 +502,7 @@ const Squad = () => {
             </ScrollView>
           )}
           
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={handleNewThread}
-          >
-            <Ionicons name="add" size={28} color="white" />
-          </TouchableOpacity>
+          
         </>
       ) : activeTab === "Messages" ? (
         // Messages Tab Content

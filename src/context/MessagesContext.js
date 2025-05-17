@@ -233,7 +233,6 @@ const getConversations = (dispatch) => async (userId, forceFetch = false) => {
           
           // Only use cache if it's for the current user and still valid
           if (cachedUserId === userId && now - timestamp < CONVERSATIONS_TTL) {
-            console.log(`Using cached conversations for user ${userId}`);
             
             // Cache user data from conversations
             data.forEach(conversation => {
@@ -255,7 +254,7 @@ const getConversations = (dispatch) => async (userId, forceFetch = false) => {
             
             return data;
           } else {
-            console.log(`Cache expired or user changed, fetching new data for ${userId}`);
+            console.log(`Cache expired or user changed`);
           }
         } catch (e) {
           console.error("Error parsing cached conversations:", e);
@@ -266,7 +265,6 @@ const getConversations = (dispatch) => async (userId, forceFetch = false) => {
       console.log("Force refreshing conversations data");
     }
     
-    console.log(`Fetching conversations from API for user ${userId}`);
     const response = await api.get("/messages/conversations");
     const conversations = response.data.conversations || [];
     
@@ -381,7 +379,7 @@ const getMessages = (dispatch) => async (otherUserId, forceFetch = false, offset
     }
     
     // Fetch messages from API (still needed for initial state)
-    console.log(`Fetching initial messages from API for conversation with ${otherUserId}`);
+    console.log(`Fetching initial messages from API for conversation with other user`);
     const response = await api.get(`/messages/conversation/${otherUserId}?limit=${limit}&offset=${offset}`);
     const messages = response.data.messages || [];
     
@@ -611,7 +609,7 @@ const setupMessageListener = (dispatch, getState) => async (conversationId, user
     // IMPORTANT: Track this as the active conversation
     setActiveConversation(conversationId);
     
-    console.log(`🔄 Setting up message listener for conversation: ${conversationId}, userId: ${userId}`);
+    console.log(`🔄 Setting up message listener for conversation`);
     
     // Check if there's already an active listener for this conversation
     if (activeListeners[conversationId]) {
@@ -633,19 +631,18 @@ const setupMessageListener = (dispatch, getState) => async (conversationId, user
       // This avoids the Firestore permissions issues while still providing updates
       console.log(`🔄 Setting up polling-based message updates for conversation: ${conversationId}`);
       
-      // Create a polling interval that fetches messages every 3 seconds
+      // Create a polling interval that fetches messages every 7.5 seconds
       const pollingInterval = setInterval(async () => {
         try {
           // Only continue if this is still the active conversation
           if (listenerDetails.currentConversationId !== conversationId) {
-            console.log(`⚠️ Conversation ${conversationId} is no longer active, skipping poll`);
             return;
           }
           
           console.log(`📊 Polling for updates to conversation: ${conversationId}`);
           
-          // Fetch latest messages from the API
-          const response = await api.get(`/messages/conversation/${otherUserId}?limit=30&offset=0`);
+          // Fetch only the last 5 messages from the API
+          const response = await api.get(`/messages/conversation/${otherUserId}?limit=5&offset=0`);
           const fetchedMessages = response.data.messages || [];
           
           // Process messages
@@ -655,24 +652,27 @@ const setupMessageListener = (dispatch, getState) => async (conversationId, user
             status: 'sent'
           }));
           
-          // Compare with existing messages to see if we need to update
+          // Get existing messages from state
           const existingMessages = messageCache[conversationId] || [];
           const existingIds = new Set(existingMessages.map(msg => msg.id));
           
-          // Check if we have any new messages
-          const hasNewMessages = processedMessages.some(msg => !existingIds.has(msg.id));
+          // Filter out messages we already have
+          const newMessages = processedMessages.filter(msg => !existingIds.has(msg.id));
           
-          if (hasNewMessages || processedMessages.length !== existingMessages.length) {
-            console.log(`📨 Found ${processedMessages.length} messages, including new ones!`);
+          if (newMessages.length > 0) {
+            console.log(`📨 Found ${newMessages.length} new messages!`);
+            
+            // Combine new messages with existing ones
+            const combinedMessages = [...existingMessages, ...newMessages];
             
             // Update the message cache
-            messageCache[conversationId] = processedMessages;
+            messageCache[conversationId] = combinedMessages;
             
             // Update AsyncStorage cache
             try {
               const cacheKey = `${MESSAGES_CACHE_PREFIX}${otherUserId}`;
               AsyncStorage.setItem(cacheKey, JSON.stringify({
-                messages: processedMessages,
+                messages: combinedMessages,
                 timestamp: Date.now()
               }));
             } catch (e) {
@@ -680,7 +680,7 @@ const setupMessageListener = (dispatch, getState) => async (conversationId, user
             }
             
             // Update the messages in state
-            dispatch({ type: "SET_MESSAGES", payload: processedMessages });
+            dispatch({ type: "SET_MESSAGES", payload: combinedMessages });
           } else {
             console.log(`📊 No new messages found during poll`);
           }
@@ -688,7 +688,7 @@ const setupMessageListener = (dispatch, getState) => async (conversationId, user
           console.error("❌ Error during message poll:", error);
           // Don't crash the polling loop on one error
         }
-      }, 3000); // Poll every 3 seconds
+      }, 7500); // Poll every 7.5 seconds
       
       // Store the clear interval function as our "unsubscribe"
       activeListeners[conversationId] = () => {
