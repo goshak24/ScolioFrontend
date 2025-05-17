@@ -642,7 +642,7 @@ const setupMessageListener = (dispatch, getState) => async (conversationId, user
           console.log(`📊 Polling for updates to conversation: ${conversationId}`);
           
           // Fetch only the last 5 messages from the API
-          const response = await api.get(`/messages/conversation/${otherUserId}?limit=5&offset=0`);
+          const response = await api.get(`/messages/conversation/${otherUserId}?limit=3&offset=0`);
           const fetchedMessages = response.data.messages || [];
           
           // Process messages
@@ -688,7 +688,7 @@ const setupMessageListener = (dispatch, getState) => async (conversationId, user
           console.error("❌ Error during message poll:", error);
           // Don't crash the polling loop on one error
         }
-      }, 7500); // Poll every 7.5 seconds
+      }, 5000); // Poll every 5 seconds
       
       // Store the clear interval function as our "unsubscribe"
       activeListeners[conversationId] = () => {

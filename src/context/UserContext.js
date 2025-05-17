@@ -4,6 +4,7 @@ import { updateUserProfile, addPhysioWorkout } from "./UserFunctionsHelper";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Context as MessagesContext } from './MessagesContext';
 import { useContext } from 'react';
+import { Context as FriendsContext } from './FriendsContext';
 
 const userReducer = (state, action) => {
     switch (action.type) {
@@ -453,9 +454,13 @@ const signOut = (dispatch) => async () => {
     try {
         // Get the clearCache function from MessagesContext
         const { clearCache } = useContext(MessagesContext);
+        // Get the clearFriendsCache function from FriendsContext
+        const { clearFriendsCache } = useContext(FriendsContext);
         
         // Clear messages cache
         await clearCache();
+        // Clear friends cache
+        await clearFriendsCache();
         
         // Clear auth state
         await auth.signOut();

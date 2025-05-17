@@ -419,6 +419,24 @@ const removeFriend = (dispatch) => async (friendId) => {
   }
 };
 
+// Clear all friends-related cache data
+const clearFriendsCache = async () => {
+  try {
+    // Clear all friends-related cache keys
+    await AsyncStorage.multiRemove([
+      FRIENDS_CACHE_KEY,
+      FRIEND_IDS_CACHE_KEY,
+      REQUESTS_CACHE_KEY
+    ]);
+    
+    console.log('🧹 Friends cache cleared');
+    return true;
+  } catch (error) {
+    console.error('❌ Error clearing friends cache:', error);
+    return false;
+  }
+};
+
 export const { Provider, Context } = createDataContext(
   friendsReducer,
   { 
@@ -428,7 +446,8 @@ export const { Provider, Context } = createDataContext(
     sendFriendRequest, 
     respondToFriendRequest, 
     removeFriend,
-    getUserById
+    getUserById,
+    clearFriendsCache
   },
   { 
     friends: [], 

@@ -76,7 +76,6 @@ const ChatScreen = ({ route, navigation }) => {
                 
                 // Get initial messages
                 if (isActive) {
-                    await getMessages(otherUser.id, true, 0, 20, userState.user.uid);
                     console.log('💬 Initial messages loaded');
                 }
                 
