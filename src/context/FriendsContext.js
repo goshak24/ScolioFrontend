@@ -429,7 +429,6 @@ const clearFriendsCache = async () => {
       REQUESTS_CACHE_KEY
     ]);
     
-    console.log('🧹 Friends cache cleared');
     return true;
   } catch (error) {
     console.error('❌ Error clearing friends cache:', error);

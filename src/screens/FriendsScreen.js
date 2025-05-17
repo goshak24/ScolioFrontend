@@ -30,8 +30,6 @@ const FriendsScreen = ({ navigation }) => {
         removeFriend 
     } = useContext(FriendsContext);
     
-    const { state: userState } = useContext(UserContext);
-    
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState('friends'); // 'friends' or 'requests'
     const [profileModalVisible, setProfileModalVisible] = useState(false);

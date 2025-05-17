@@ -12,6 +12,7 @@ import AICompanionCard from '../components/dashboard/AICompanionCard';
 import DailyTipCard from '../components/dashboard/DailyTipCard';
 import CommunityCard from '../components/dashboard/CommunityCard';
 import SurgeryProgressCard from '../components/dashboard/SurgeryProgressCard';
+import PainTrackerSummary from '../components/dashboard/PainTrackerSummary';
 import { Context as UserContext } from '../context/UserContext';
 import { Context as AuthContext } from '../context/AuthContext';
 import Constants from 'expo-constants'
@@ -81,6 +82,7 @@ const Dashboard = () => {
             {/* Only show ProgressTracker for non-surgery accounts */}
             {!isSurgeryRelated && <ProgressTracker physioStreak={user?.streaks} />}
             
+            <PainTrackerSummary />
             <TrendingFeed />
             <AICompanionCard />
             <DailyTipCard />
