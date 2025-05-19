@@ -4,9 +4,14 @@ import { moderateScale } from 'react-native-size-matters';
 import COLORS from '../../constants/COLORS';
 import { Ionicons } from '@expo/vector-icons';
 
-const DateNavigator = ({ date, timeOfDay, onPrevious, onNext }) => {
-  // Format date to display
-  const displayDate = date; // In a real app, format the date using a library like moment.js
+const DateNavigator = ({ date, onPrevious, onNext }) => {
+  // Format date to display in a more readable format
+  const formatDate = (dateString) => {
+    const options = { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' };
+    return new Date(dateString).toLocaleDateString(undefined, options);
+  };
+  
+  const displayDate = formatDate(date);
 
   return (
     <View style={styles.container}>
@@ -16,7 +21,6 @@ const DateNavigator = ({ date, timeOfDay, onPrevious, onNext }) => {
       
       <View style={styles.dateContainer}>
         <Text style={styles.dateText}>{displayDate}</Text>
-        <Text style={styles.timeOfDayText}>{timeOfDay}</Text>
       </View>
       
       <TouchableOpacity style={styles.navButton} onPress={onNext}>

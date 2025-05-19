@@ -40,14 +40,6 @@ const PainTrackerSummary = () => {
       </View>
 
       <View style={styles.bodyContainer}>
-        <View style={styles.bodyMapContainer}>
-          <View style={styles.bodyOutlineContainer}>
-            {/* This would be replaced with an actual body outline image */}
-            <View style={styles.bodyOutline}>
-              <View style={styles.painHighlight} />
-            </View>
-          </View>
-        </View>
         
         <View style={styles.infoContainer}>
           <View style={styles.recentEntryContainer}>
@@ -170,7 +162,6 @@ const styles = StyleSheet.create({
   },
   infoContainer: {
     flex: 1,
-    marginLeft: moderateScale(15),
     justifyContent: 'center',
   },
   recentEntryContainer: {

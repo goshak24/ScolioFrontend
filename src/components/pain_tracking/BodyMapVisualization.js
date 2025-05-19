@@ -12,7 +12,7 @@ const BodyMapVisualization = ({ painAreas = [] }) => {
       <View style={styles.bodyContainer}>
         {/* In a real implementation, you would have a real SVG or PNG body outline */}
         <Image 
-          source={require('../../../assets/body-outline.png')} 
+          source={require('../../../assets/body-outline-removebg.png')} 
           style={styles.bodyOutline}
           resizeMode="contain"
         />
@@ -54,7 +54,7 @@ const styles = StyleSheet.create({
     width: '30%',
     height: '15%',
     backgroundColor: COLORS.accentOrange,
-    opacity: 0.7,
+    opacity: 0, // why its not visible 
     borderRadius: moderateScale(5),
   }
 });

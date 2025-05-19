@@ -1,5 +1,6 @@
 import { SafeAreaView, StyleSheet, Text, View, ScrollView, StatusBar, TouchableOpacity, Platform, Alert } from 'react-native';
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useContext } from 'react';
+import { Context as PainTrackingContext } from '../context/PainTrackingContext';
 import { moderateScale } from 'react-native-size-matters';
 import { Ionicons } from '@expo/vector-icons';
 import COLORS from '../constants/COLORS';
@@ -16,9 +17,12 @@ import BodyMapVisualization from '../components/pain_tracking/BodyMapVisualizati
 import PainHistoryEntry from '../components/pain_tracking/PainHistoryEntry';
 import MetricsDisplay from '../components/pain_tracking/MetricsDisplay';
 import ActivityTags from '../components/pain_tracking/ActivityTags';
-import Constants from 'expo-constants';
+import Constants from 'expo-constants'; 
 
 const PainTracker = ({ navigation }) => {
+  // Get pain tracking context
+  const { state, savePainLog, getPainLogsByDate, loadPainLogs } = useContext(PainTrackingContext);
+  
   // State for pain tracking
   const [selectedAreas, setSelectedAreas] = useState([]);
   const [painIntensity, setPainIntensity] = useState(5);
@@ -26,23 +30,58 @@ const PainTracker = ({ navigation }) => {
   const [selectedActivities, setSelectedActivities] = useState(['sitting']);
   const [sleepQuality, setSleepQuality] = useState(5);
   const [notes, setNotes] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
 
   // History state
-  const [currentHistoryDate, setCurrentHistoryDate] = useState('2023-05-19');
-  const [historyTimeOfDay, setHistoryTimeOfDay] = useState('Afternoon');
+  const [currentHistoryDate, setCurrentHistoryDate] = useState(new Date().toISOString().split('T')[0]);
+  const [historyLogs, setHistoryLogs] = useState([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
 
-  // Mock data for history view
-  const mockPainAreas = [
-    { id: 'upper_back_right', name: 'Upper Back (Right)', intensity: 3, description: 'Much better' },
-    { id: 'shoulder_right', name: 'Right Shoulder', intensity: 5, description: 'New pain after carrying backpack' },
-  ];
-
-  const mockActivities = ['School', 'Carrying heavy bag', 'Sitting'];
+  // Load all pain logs when component mounts
+  useEffect(() => {
+    loadPainLogs();
+  }, []);
   
-  const mockMetrics = [
-    { title: 'Overall Pain', value: 4, maxValue: 10, color: COLORS.accentOrange, icon: 'pulse-outline' },
-    { title: 'Sleep Quality', value: 7, maxValue: 10, color: '#4287f5', icon: 'bed-outline' },
-  ];
+  // Load pain logs for the selected date
+  useEffect(() => {
+    if (activeTab === 'history') {
+      loadPainLogsForDate(currentHistoryDate);
+    }
+  }, [activeTab, currentHistoryDate, state.painLogs]);
+
+  // Function to load pain logs for a specific date
+  const loadPainLogsForDate = (date) => {
+    setIsLoadingHistory(true);
+    try {
+      // Use the selector function with the current state
+      const getLogsByDate = getPainLogsByDate(date);
+      const logs = getLogsByDate(state);
+      setHistoryLogs(logs);
+    } catch (err) {
+      console.error('Error loading pain logs:', err);
+      Alert.alert('Error', 'Failed to load pain history');
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  };
+
+  // Navigate to previous day
+  const goToPreviousDay = () => {
+    const currentDate = new Date(currentHistoryDate);
+    currentDate.setDate(currentDate.getDate() - 1);
+    setCurrentHistoryDate(currentDate.toISOString().split('T')[0]);
+  };
+
+  // Navigate to next day
+  const goToNextDay = () => {
+    const currentDate = new Date(currentHistoryDate);
+    currentDate.setDate(currentDate.getDate() + 1);
+    const nextDate = currentDate.toISOString().split('T')[0];
+    // Don't allow selecting future dates
+    if (nextDate <= new Date().toISOString().split('T')[0]) {
+      setCurrentHistoryDate(nextDate);
+    }
+  };
 
   // Handler for area selection
   const handleSelectArea = (area) => {
@@ -66,35 +105,75 @@ const PainTracker = ({ navigation }) => {
   // Tab navigation state
   const [activeTab, setActiveTab] = useState('track');
   
-  // Function to handle saving pain data (to be connected to backend later)
-  const handleSavePainData = useCallback(() => {
-    // Create a data object with all the pain tracking information
-    const painData = {
-      bodyParts: selectedAreas,
-      painIntensity,
-      timeOfDay,
-      activities: selectedActivities,
-      sleepQuality,
-      notes,
-      // save timestamp in backend 
-    };
+  // Function to handle saving pain data using the context
+  const handleSavePainData = useCallback(async () => {
+    if (selectedAreas.length === 0) {
+      Alert.alert(
+        'Missing Information',
+        'Please select at least one body part',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
     
-    // Log the data that would be sent to the backend
-    console.log('Pain data to be saved:', painData);
+    setIsSaving(true);
     
-    // Show confirmation to the user
-    Alert.alert(
-      'Data Saved',
-      `Pain data recorded for ${selectedAreas.length} body parts with intensity ${painIntensity}/10`,
-      [{ text: 'OK' }]
-    );
-    
-    // TODO: Add your backend API call here
-    // Example:
-    // savePainDataToBackend(painData)
-    //   .then(response => console.log('Data saved successfully', response))
-    //   .catch(error => console.error('Error saving data', error));
-  }, [selectedAreas, painIntensity, timeOfDay, selectedActivities, sleepQuality, notes]);
+    try {
+      // Create a data object with all the pain tracking information
+      const painData = {
+        bodyParts: selectedAreas,
+        painIntensity,
+        timeOfDay,
+        activities: selectedActivities,
+        sleepQuality,
+        notes,
+      };
+      
+      // Log the data that would be sent to the backend
+      console.log('Pain data to be saved:', painData);
+      
+      // Use the context to save the pain log
+      const result = await savePainLog(painData);
+      
+      if (result.success) {
+        // Show confirmation to the user
+        Alert.alert(
+          'Data Saved',
+          `Pain data recorded for ${selectedAreas.length} body parts with intensity ${painIntensity}/10`,
+          [{ text: 'OK' }]
+        );
+        
+        // Reset form after successful save
+        setSelectedAreas([]);
+        setPainIntensity(5);
+        setTimeOfDay('morning');
+        setSelectedActivities(['sitting']);
+        setSleepQuality(5);
+        setNotes('');
+        
+        // Refresh the pain logs in history view if we're on that tab
+        if (activeTab === 'history') {
+          loadPainLogsForDate(currentHistoryDate);
+        }
+      } else {
+        // Show error message
+        Alert.alert(
+          'Error',
+          result.error || 'Failed to save pain log',
+          [{ text: 'OK' }]
+        );
+      }
+    } catch (err) {
+      console.error('Error saving pain log:', err);
+      Alert.alert(
+        'Error',
+        'An unexpected error occurred while saving your pain log',
+        [{ text: 'OK' }]
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  }, [selectedAreas, painIntensity, timeOfDay, selectedActivities, sleepQuality, notes, savePainLog, activeTab, currentHistoryDate]);
 
   return (
     <View style={styles.rootContainer}>
@@ -105,6 +184,7 @@ const PainTracker = ({ navigation }) => {
       />
 
       <SafeAreaView style={{ flex: 1, marginTop: Platform.OS === 'android' ? Constants.statusBarHeight : 0 }}>
+        
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity 
@@ -187,7 +267,7 @@ const PainTracker = ({ navigation }) => {
                   setNotes={setNotes}
                 />
                 
-                <SaveButton onPress={handleSavePainData} />
+                <SaveButton onPress={handleSavePainData} isLoading={isSaving || state.loading} />
               </>
             )}
 
@@ -196,30 +276,51 @@ const PainTracker = ({ navigation }) => {
               <>
                 <DateNavigator 
                   date={currentHistoryDate}
-                  timeOfDay={historyTimeOfDay}
-                  onPrevious={() => console.log('Previous day')}
-                  onNext={() => console.log('Next day')}
+                  onPrevious={goToPreviousDay}
+                  onNext={goToNextDay}
                 />
                 
-                <BodyMapVisualization painAreas={mockPainAreas.map(area => ({ id: area.id, intensity: area.intensity }))} />
-                
-                <View style={styles.sectionContainer}>
-                  <Text style={styles.sectionTitle}>Pain Areas</Text>
-                </View>
-                
-                {mockPainAreas.map((area, index) => (
-                  <View key={index} style={styles.entryContainer}>
-                    <PainHistoryEntry 
-                      area={area.name}
-                      intensity={area.intensity}
-                      description={area.description}
-                    />
+                {isLoadingHistory ? (
+                  <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="large" color={COLORS.accentOrange} />
+                    <Text style={styles.loadingText}>Loading pain history...</Text>
                   </View>
-                ))}
-                
-                <MetricsDisplay metrics={mockMetrics} />
-                
-                <ActivityTags activities={mockActivities} />
+                ) : historyLogs.length === 0 ? (
+                  <View style={styles.placeholderContainer}>
+                    <Ionicons name="document-text-outline" size={moderateScale(50)} color={COLORS.lightGray} />
+                    <Text style={styles.placeholderText}>No pain logs for this date</Text>
+                  </View>
+                ) : (
+                  <>
+                    {historyLogs.map((log, logIndex) => (
+                      <View key={logIndex} style={styles.historyLogContainer}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+                          <View style={styles.sectionContainer}>
+                            <Text style={styles.sectionTitle}>Pain Areas</Text>
+                          </View>
+                          <Text style={styles.historyTimeText}>{log.timeOfDay.charAt(0).toUpperCase() + log.timeOfDay.slice(1)}</Text>
+                        </View>
+                        
+                        {log.bodyParts.map((part, index) => (
+                          <View key={index} style={styles.entryContainer}>
+                            <PainHistoryEntry 
+                              area={part.replace('_', ' ').split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
+                              intensity={log.painIntensity}
+                              description={log.notes || 'No additional notes'}
+                            />
+                          </View>
+                        ))}
+                        
+                        <MetricsDisplay metrics={[
+                          { title: 'Overall Pain', value: log.painIntensity, maxValue: 10, color: COLORS.accentOrange, icon: 'pulse-outline' },
+                          { title: 'Sleep Quality', value: log.sleepQuality || 0, maxValue: 10, color: '#4287f5', icon: 'bed-outline' },
+                        ]} />
+                        
+                        <ActivityTags activities={log.activities || []} />
+                      </View>
+                    ))}
+                  </>
+                )}
               </>
             )}
 
@@ -242,6 +343,29 @@ const styles = StyleSheet.create({
   rootContainer: {
     flex: 1,
     backgroundColor: COLORS.backgroundPurple, 
+  },
+  loadingContainer: {
+    padding: moderateScale(20),
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingText: {
+    color: COLORS.white,
+    marginTop: moderateScale(10),
+    fontSize: moderateScale(14),
+  },
+  historyLogContainer: {
+    marginBottom: moderateScale(20),
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.darkGray,
+    paddingBottom: moderateScale(15),
+  },
+  historyTimeText: {
+    color: COLORS.white,
+    fontSize: moderateScale(16),
+    fontWeight: '600',
+    marginHorizontal: moderateScale(15),
+    marginBottom: moderateScale(10),
   },
   header: {
     flexDirection: 'row',

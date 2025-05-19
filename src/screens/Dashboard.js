@@ -82,8 +82,8 @@ const Dashboard = () => {
             {/* Only show ProgressTracker for non-surgery accounts */}
             {!isSurgeryRelated && <ProgressTracker physioStreak={user?.streaks} />}
             
-            <PainTrackerSummary />
             <TrendingFeed />
+            <PainTrackerSummary />
             <AICompanionCard />
             <DailyTipCard />
             <CommunityCard />
