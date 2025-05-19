@@ -1,5 +1,5 @@
-import { SafeAreaView, StyleSheet, Text, View, ScrollView, StatusBar, TouchableOpacity, Platform } from 'react-native';
-import React, { useState } from 'react';
+import { SafeAreaView, StyleSheet, Text, View, ScrollView, StatusBar, TouchableOpacity, Platform, Alert } from 'react-native';
+import React, { useState, useCallback } from 'react';
 import { moderateScale } from 'react-native-size-matters';
 import { Ionicons } from '@expo/vector-icons';
 import COLORS from '../constants/COLORS';
@@ -51,6 +51,7 @@ const PainTracker = ({ navigation }) => {
     } else {
       setSelectedAreas([...selectedAreas, area]);
     }
+    console.log('Selected body parts:', [...selectedAreas, area].filter(a => a !== area || !selectedAreas.includes(a)));
   };
 
   // Handler for activity selection
@@ -64,6 +65,36 @@ const PainTracker = ({ navigation }) => {
 
   // Tab navigation state
   const [activeTab, setActiveTab] = useState('track');
+  
+  // Function to handle saving pain data (to be connected to backend later)
+  const handleSavePainData = useCallback(() => {
+    // Create a data object with all the pain tracking information
+    const painData = {
+      bodyParts: selectedAreas,
+      painIntensity,
+      timeOfDay,
+      activities: selectedActivities,
+      sleepQuality,
+      notes,
+      // save timestamp in backend 
+    };
+    
+    // Log the data that would be sent to the backend
+    console.log('Pain data to be saved:', painData);
+    
+    // Show confirmation to the user
+    Alert.alert(
+      'Data Saved',
+      `Pain data recorded for ${selectedAreas.length} body parts with intensity ${painIntensity}/10`,
+      [{ text: 'OK' }]
+    );
+    
+    // TODO: Add your backend API call here
+    // Example:
+    // savePainDataToBackend(painData)
+    //   .then(response => console.log('Data saved successfully', response))
+    //   .catch(error => console.error('Error saving data', error));
+  }, [selectedAreas, painIntensity, timeOfDay, selectedActivities, sleepQuality, notes]);
 
   return (
     <View style={styles.rootContainer}>
@@ -156,7 +187,7 @@ const PainTracker = ({ navigation }) => {
                   setNotes={setNotes}
                 />
                 
-                <SaveButton onPress={() => console.log('Pain log saved')}/>
+                <SaveButton onPress={handleSavePainData} />
               </>
             )}
 
