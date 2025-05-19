@@ -1,28 +1,39 @@
-import { StyleSheet, View, Image, TouchableOpacity } from 'react-native';
-import React from 'react';
+import { StyleSheet, View, Image, Dimensions } from 'react-native';
+import React, { useState, useEffect } from 'react';
 import { moderateScale } from 'react-native-size-matters';
-import COLORS from '../../constants/COLORS';
+import BodyPartSelector from './BodyPartSelector';
 
 const BodyMapSelector = ({ selectedAreas = [], onSelectArea }) => {
-  // This component will render the body outline where users can select pain areas
+  const [screenWidth, setScreenWidth] = useState(Dimensions.get('window').width);
+  
+  // Handle screen dimension changes (e.g., rotation)
+  useEffect(() => {
+    const dimensionsHandler = ({ window }) => {
+      setScreenWidth(window.width);
+    };
+    
+    const subscription = Dimensions.addEventListener('change', dimensionsHandler);
+    return () => subscription.remove();
+  }, []);
+  
+  // Calculate container size based on screen dimensions
+  const containerWidth = screenWidth * 0.8;
+  const containerHeight = containerWidth * 2; // Maintain aspect ratio for the body image
+  
   return (
     <View style={styles.container}>
-      <View style={styles.bodyContainer}>
+      <View style={[styles.bodyContainer, { width: containerWidth, height: containerHeight }]}>
         <Image 
-          source={require('../../../assets/body-outline.png')} 
+          source={require('../../../assets/body-outline-removebg.png')} 
           style={styles.bodyOutline}
           resizeMode="contain"
         />
-        {/* You would need to add specific touchable areas on top of the image */}
-        {/* For example: */}
-        {/* <TouchableOpacity 
-          style={[
-            styles.bodyArea, 
-            styles.neck,
-            selectedAreas.includes('neck') && styles.selectedArea
-          ]}
-          onPress={() => onSelectArea('neck')}
-        /> */}
+        
+        {/* Body part selection overlay */}
+        <BodyPartSelector 
+          selectedAreas={selectedAreas}
+          onSelectArea={onSelectArea}
+        />
       </View>
     </View>
   );
@@ -32,29 +43,18 @@ export default BodyMapSelector;
 
 const styles = StyleSheet.create({
   container: {
-    width: '100%', 
+    width: '100%',
     alignItems: 'center',
     justifyContent: 'center',
-    marginVertical: moderateScale(20),
+    marginVertical: moderateScale(0)
   },
   bodyContainer: {
-    width: '80%',
-    height: moderateScale(225),
-    aspectRatio: 1,
     position: 'relative',
+    aspectRatio: 1,
   },
   bodyOutline: {
     width: '100%',
     height: '100%',
+    tintColor: 'rgba(255, 255, 255, 0.7)',
   },
-  bodyArea: {
-    position: 'absolute',
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: 'transparent',
-  },
-  selectedArea: {
-    backgroundColor: 'rgba(255, 72, 59, 0.5)',
-    borderColor: COLORS.primary,
-  }
 });

@@ -259,8 +259,7 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    borderTopLeftRadius: 15,
-    borderTopRightRadius: 15,
+    borderRadius: 15,
     backgroundColor: COLORS.cardDark,
     marginHorizontal: moderateScale(10),
     marginTop: moderateScale(15),
@@ -268,7 +267,7 @@ const styles = StyleSheet.create({
   },
   sectionContainer: {
     paddingHorizontal: moderateScale(15),
-    marginVertical: moderateScale(10),
+    marginTop: moderateScale(10)
   },
   sectionTitle: {
     fontSize: moderateScale(16),

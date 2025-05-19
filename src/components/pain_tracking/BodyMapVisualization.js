@@ -38,7 +38,7 @@ const styles = StyleSheet.create({
   },
   bodyContainer: {
     width: '60%',
-    height: moderateScale(225),
+    height: moderateScale(325),
     aspectRatio: 1,
     position: 'relative',
   },
