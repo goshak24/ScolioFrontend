@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useContext } from 'react';
 import { View, FlatList, StyleSheet, ActivityIndicator, Text, TouchableOpacity, Platform, SafeAreaView, Keyboard, StatusBar } from 'react-native';
 import { moderateScale, verticalScale } from 'react-native-size-matters';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,28 +7,41 @@ import ChatMessage from './ChatMessage';
 import ChatInput from './ChatInput';
 import Constants from 'expo-constants';
 import KeyboardAvoidingWrapper from '../reusable/KeyboardAvoidingWrapper';
+import { Context as AssistantContext } from '../../context/AssistantContext';
 
 /**
  * ChatInterface component for AI chat interactions
  * @param {function} onClose - Function to close the chat interface
  * @param {boolean} isVisible - Whether the chat interface is visible
  * @param {string} initialQuestion - Pre-filled question (optional)
+ * @param {string} conversationId - ID of an existing conversation to load (optional)
  */
-const ChatInterface = ({ onClose, isVisible, initialQuestion = null }) => {
-  const [messages, setMessages] = useState([
-    {
-      id: '1',
-      text: 'Hi there! I\'m your AI bestie. I can help you with questions about scoliosis, treatment options, and living with a brace. What would you like to know?',
-      isUser: false,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    }
-  ]);
+const ChatInterface = ({ onClose, isVisible, initialQuestion = null, conversationId = null }) => {
+  const { 
+    state: { currentConversation, loading }, 
+    sendMessage, 
+    startNewConversation,
+    loadConversation
+  } = useContext(AssistantContext);
+  
   const [inputMessage, setInputMessage] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
   const [initialQuestionSent, setInitialQuestionSent] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   
   const flatListRef = useRef(null);
+
+  // Initialize the conversation when component mounts
+  useEffect(() => {
+    if (isVisible) {
+      if (conversationId) {
+        // Load existing conversation if ID is provided
+        loadConversation(conversationId);
+      } else {
+        // Start a new conversation
+        startNewConversation();
+      }
+    }
+  }, [isVisible, conversationId]);
 
   // Handle keyboard appearance
   useEffect(() => {
@@ -49,12 +62,12 @@ const ChatInterface = ({ onClose, isVisible, initialQuestion = null }) => {
 
   // Scroll to bottom when new messages are added
   useEffect(() => {
-    if (flatListRef.current && messages.length > 0) {
+    if (flatListRef.current && currentConversation?.messages?.length > 0) {
       setTimeout(() => {
         flatListRef.current.scrollToEnd({ animated: true });
       }, 100);
     }
-  }, [messages]);
+  }, [currentConversation?.messages]);
   
   // Handle pre-filled question if provided
   useEffect(() => {
@@ -71,61 +84,15 @@ const ChatInterface = ({ onClose, isVisible, initialQuestion = null }) => {
     }
   }, [initialQuestion, initialQuestionSent, isVisible]);
 
-  // Mock function to get AI response - replace with real API call
-  const getAIResponse = async (userMessage) => {
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    // TODO: Replace with actual API call to your backend
-    return {
-      text: `I understand your question about "${userMessage}". This is where I would provide a helpful answer about scoliosis. For now, I'm just a placeholder response.`,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    };
-  };
-
   const handleSendMessage = async (manualQuestion = null) => {
     const textToSend = manualQuestion || inputMessage;
     
     if (!textToSend.trim()) return;
     
-    const userMessage = {
-      id: Date.now().toString(),
-      text: textToSend.trim(),
-      isUser: true,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    };
-    
-    setMessages(prev => [...prev, userMessage]);
     setInputMessage('');
-    setIsLoading(true);
     
-    try {
-      const aiResponse = await getAIResponse(userMessage.text);
-      
-      const aiMessage = {
-        id: (Date.now() + 1).toString(),
-        text: aiResponse.text,
-        isUser: false,
-        timestamp: aiResponse.timestamp
-      };
-      
-      setMessages(prev => [...prev, aiMessage]);
-    } catch (error) {
-      console.error('Error getting AI response:', error);
-      
-      // Add error message
-      setMessages(prev => [
-        ...prev,
-        {
-          id: (Date.now() + 1).toString(),
-          text: 'Sorry, I encountered an error processing your request. Please try again.',
-          isUser: false,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        }
-      ]);
-    } finally {
-      setIsLoading(false);
-    }
+    // Use the context function to send the message
+    await sendMessage(textToSend, currentConversation?.id);
   };
 
   if (!isVisible) return null;
@@ -155,7 +122,7 @@ const ChatInterface = ({ onClose, isVisible, initialQuestion = null }) => {
           <View style={styles.chatContainer}>
             <FlatList
               ref={flatListRef}
-              data={messages}
+              data={currentConversation?.messages || []}
               keyExtractor={item => item.id}
               renderItem={({ item }) => (
                 <ChatMessage 
@@ -174,7 +141,7 @@ const ChatInterface = ({ onClose, isVisible, initialQuestion = null }) => {
               removeClippedSubviews={false}
             />
             
-            {isLoading && (
+            {loading && (
               <View style={styles.loadingContainer}>
                 <ActivityIndicator size="small" color={COLORS.gradientPink} />
                 <Text style={styles.loadingText}>AI is thinking...</Text>
@@ -186,7 +153,7 @@ const ChatInterface = ({ onClose, isVisible, initialQuestion = null }) => {
             message={inputMessage}
             setMessage={setInputMessage}
             handleSend={() => handleSendMessage()}
-            isLoading={isLoading}
+            isLoading={loading}
           />
         </SafeAreaView>
       </KeyboardAvoidingWrapper>

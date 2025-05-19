@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useContext, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, Platform, StatusBar, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { moderateScale, verticalScale } from 'react-native-size-matters';
@@ -8,11 +8,23 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Constants from 'expo-constants'; 
 import AIChatButton from '../components/ai/AIChatButton';
 import ChatInterface from '../components/ai/ChatInterface';
+import { Context as AssistantContext } from '../context/AssistantContext';
 
 const AI = () => {
+  const { 
+    state: { conversations },
+    //loadConversations
+  } = useContext(AssistantContext);
+  
   const [showVoicePrompt, setShowVoicePrompt] = useState(false); 
   const [showChatInterface, setShowChatInterface] = useState(false);
   const [selectedQuestion, setSelectedQuestion] = useState(null);
+  const [selectedConversationId, setSelectedConversationId] = useState(null);
+  
+  // Load conversations when component mounts
+  useEffect(() => {
+    //loadConversations();
+  }, []);
 
   const suggestedQuestions = [
     { id: '1', text: 'How can I make my brace more comfortable?' },
@@ -42,8 +54,10 @@ const AI = () => {
           onClose={() => {
             setShowChatInterface(false);
             setSelectedQuestion(null);
+            setSelectedConversationId(null);
           }}
           initialQuestion={selectedQuestion}
+          conversationId={selectedConversationId}
         />
       </>
     );
@@ -101,6 +115,40 @@ const AI = () => {
             </View>
           </View>
 
+          {/* Recent Conversations */}
+          {conversations && conversations.length > 0 && (
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Ionicons name="chatbubbles-outline" size={moderateScale(18)} color={COLORS.lightPurple} />
+                <Text style={styles.sectionTitle}>Recent Conversations</Text>
+              </View>
+              <View style={styles.questionsContainer}>
+                {conversations.slice(0, 3).map((conversation) => {
+                  // Extract the first user message as the title
+                  const userMessage = conversation.userMessage || 
+                                      (conversation.messages && 
+                                       conversation.messages.find(msg => msg.isUser)?.text) || 
+                                      'Conversation';
+                  
+                  return (
+                    <TouchableOpacity 
+                      key={conversation.id}
+                      style={styles.questionButton}
+                      onPress={() => {
+                        setSelectedConversationId(conversation.id);
+                        setShowChatInterface(true);
+                      }}
+                    >
+                      <Text style={styles.questionText}>
+                        {userMessage.length > 40 ? userMessage.substring(0, 40) + '...' : userMessage}
+                      </Text> 
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+          )}
+          
           {/* About AI Assistant */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>

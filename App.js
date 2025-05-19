@@ -20,6 +20,7 @@ import { Context as ActivityContext } from './src/context/ActivityContext';
 import { Provider as ForumProvider } from "./src/context/ForumContext"; 
 import { configureServerCaching } from './src/utilities/backendApi';
 import { Provider as PainTrackingProvider } from './src/context/PainTrackingContext';
+import { Provider as AssistantProvider } from './src/context/AssistantContext';
 
 const RootStack = createStackNavigator(); 
 const AuthStack = createStackNavigator(); 
@@ -151,9 +152,11 @@ export default () => {
                 <FriendsProvider>
                   <MessagesProvider>
                     <PainTrackingProvider>
-                      <ContextConnector>
-                        <App />
-                      </ContextConnector>
+                      <AssistantProvider>
+                        <ContextConnector>
+                          <App />
+                        </ContextConnector>
+                      </AssistantProvider>
                     </PainTrackingProvider>
                   </MessagesProvider>
                 </FriendsProvider>

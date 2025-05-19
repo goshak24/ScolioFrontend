@@ -40,7 +40,8 @@ const PainTracker = ({ navigation }) => {
   // Load all pain logs when component mounts
   useEffect(() => {
     loadPainLogs();
-  }, []);
+    loadPainLogsForDate(currentHistoryDate);
+  }, []); 
   
   // Load pain logs for the selected date
   useEffect(() => {
