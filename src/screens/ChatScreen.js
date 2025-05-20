@@ -19,7 +19,7 @@ import {
     MessageList,
     LoadingState,
     formatMessageTime
-} from '../components/ai/chat';
+} from '../components/messaging/chat';
 
 const ChatScreen = ({ route, navigation }) => {
     const { otherUser } = route.params;
@@ -338,18 +338,20 @@ const ChatScreen = ({ route, navigation }) => {
                 
                 {!loading && !error && (
                     <View style={styles.messagesContainer}>
-                        <MessageList 
-                            ref={flatListRef}
-                            messages={messages}
-                            loadingMore={messagesState.loadingOlderMessages}
-                            hasMoreMessages={messagesState.hasMoreMessages}
-                            onLoadMore={handleLoadMore}
-                            formatMessageTime={formatMessageTime}
-                            userId={userState?.user?.uid}
-                            lastUpdate={lastMessageUpdate.current}
-                            onContentSizeChange={handleContentSizeChange}
-                            onLayout={handleLayout}
-                        />
+                        <View style={styles.messageListWrapper}>
+                            <MessageList 
+                                ref={flatListRef}
+                                messages={messages}
+                                loadingMore={messagesState.loadingOlderMessages}
+                                hasMoreMessages={messagesState.hasMoreMessages}
+                                onLoadMore={handleLoadMore}
+                                formatMessageTime={formatMessageTime}
+                                userId={userState?.user?.uid}
+                                lastUpdate={lastMessageUpdate.current}
+                                onContentSizeChange={handleContentSizeChange}
+                                onLayout={handleLayout}
+                            />
+                        </View>
 
                         {/* Message input */}
                         <ChatInput 
@@ -376,6 +378,10 @@ const styles = StyleSheet.create({
         flex: 1, 
         display: 'flex',
         flexDirection: 'column',
+    },
+    messageListWrapper: {
+        flex: 1,
+        backgroundColor: COLORS.darkBackground,
     }
 });
 

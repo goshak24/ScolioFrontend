@@ -1,12 +1,11 @@
 import React, { useState, useRef, useEffect, useContext } from 'react';
-import { View, FlatList, StyleSheet, ActivityIndicator, Text, TouchableOpacity, Platform, SafeAreaView, Keyboard, StatusBar } from 'react-native';
+import { View, FlatList, StyleSheet, ActivityIndicator, Text, TouchableOpacity, Platform, SafeAreaView, Keyboard, StatusBar, KeyboardAvoidingView } from 'react-native';
 import { moderateScale, verticalScale } from 'react-native-size-matters';
 import { Ionicons } from '@expo/vector-icons';
 import COLORS from '../../constants/COLORS';
 import ChatMessage from './ChatMessage';
 import ChatInput from './ChatInput';
 import Constants from 'expo-constants';
-import KeyboardAvoidingWrapper from '../reusable/KeyboardAvoidingWrapper';
 import { Context as AssistantContext } from '../../context/AssistantContext';
 
 /**
@@ -104,10 +103,11 @@ const ChatInterface = ({ onClose, isVisible, initialQuestion = null, conversatio
         backgroundColor={COLORS.cardDark}
         translucent={false}
       />
-      <KeyboardAvoidingWrapper 
-        withScrollView={false} 
+      <KeyboardAvoidingView 
         style={styles.container}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 10 : 0}
+        enabled
       >
         <SafeAreaView style={styles.container}>
           <View style={styles.header}>
@@ -156,7 +156,7 @@ const ChatInterface = ({ onClose, isVisible, initialQuestion = null, conversatio
             isLoading={loading}
           />
         </SafeAreaView>
-      </KeyboardAvoidingWrapper>
+      </KeyboardAvoidingView>
     </>
   );
 };

@@ -66,9 +66,9 @@ const MessageList = forwardRef(({
   return (
     <FlatList
       ref={ref}
-      overScrollMode="never"
+      overScrollMode="always"
       bounces={true}
-      showsVerticalScrollIndicator={false}
+      showsVerticalScrollIndicator={true}
       data={messages}
       extraData={lastUpdate}
       keyExtractor={(item, index) => 
@@ -88,6 +88,9 @@ const MessageList = forwardRef(({
       initialNumToRender={20}
       onContentSizeChange={onContentSizeChange}
       onLayout={onLayout}
+      scrollEnabled={true}
+      maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+      scrollEventThrottle={16}
     />
   );
 });
@@ -97,6 +100,7 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     paddingHorizontal: moderateScale(15),
     paddingVertical: moderateScale(10),
+    minHeight: '100%',
   },
   loadingMoreContainer: {
     paddingVertical: moderateScale(10),

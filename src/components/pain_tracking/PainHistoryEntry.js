@@ -9,10 +9,10 @@ const PainHistoryEntry = ({ area, intensity, description }) => {
       <View style={styles.headerRow}>
         <Text style={styles.areaText}>{area}</Text>
         <View style={styles.intensityBadge}>
-          <Text style={styles.intensityText}>{intensity}/10</Text>
+          {/*<Text style={styles.intensityText}>{intensity}/10</Text>*/}
         </View>
       </View>
-      {description && <Text style={styles.descriptionText}>{description}</Text>}
+      {/*{description && <Text style={styles.descriptionText}>{description}</Text>}*/}
     </View>
   );
 };

@@ -309,15 +309,23 @@ const PainTracker = ({ navigation }) => {
                               intensity={log.painIntensity}
                               description={log.notes || 'No additional notes'}
                             />
+                            
                           </View>
                         ))}
-                        
+
+                        <View style={[styles.entryContainer, { marginBottom: moderateScale(15) }]}>
+                          {log.notes && <View><Text style={styles.sectionTitle}>Description: </Text>
+                            <Text style={styles.descriptionText}>{log.notes}</Text></View>
+                          }
+                        </View>
+
                         <MetricsDisplay metrics={[
                           { title: 'Overall Pain', value: log.painIntensity, maxValue: 10, color: COLORS.accentOrange, icon: 'pulse-outline' },
                           { title: 'Sleep Quality', value: log.sleepQuality || 0, maxValue: 10, color: '#4287f5', icon: 'bed-outline' },
                         ]} />
                         
                         <ActivityTags activities={log.activities || []} />
+                        
                       </View>
                     ))}
                   </>
@@ -458,6 +466,10 @@ const styles = StyleSheet.create({
   },
   placeholderText: {
     fontSize: moderateScale(16),
+    color: COLORS.lightGray,
+  },
+  descriptionText: {
+    fontSize: moderateScale(14),
     color: COLORS.lightGray,
   },
 });
