@@ -21,7 +21,7 @@ import Constants from 'expo-constants';
 
 const PainTracker = ({ navigation }) => {
   // Get pain tracking context
-  const { state, savePainLog, getPainLogsByDate, loadPainLogs } = useContext(PainTrackingContext);
+  const { state, savePainLog, getPainLogsByDate, loadPainLogs, dbLoadPainLogsForMonth } = useContext(PainTrackingContext);
   
   // State for pain tracking
   const [selectedAreas, setSelectedAreas] = useState([]);
@@ -39,8 +39,10 @@ const PainTracker = ({ navigation }) => {
 
   // Load all pain logs when component mounts
   useEffect(() => {
+    const currentMonth = new Date().toISOString().slice(0, 7);
     loadPainLogs();
     loadPainLogsForDate(currentHistoryDate);
+    dbLoadPainLogsForMonth(currentMonth);
   }, []); 
   
   // Load pain logs for the selected date

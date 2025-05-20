@@ -29,7 +29,7 @@ const auth = initializeAuth(app, {
 
 // const API_BASE_URL = 'https://scoliobackend-455720.nw.r.appspot.com/api/'; 
 
-const API_BASE_URL = 'https://0285-86-30-169-92.ngrok-free.app/api/'; // gcloud backend not updated 
+const API_BASE_URL = 'https://03cf-86-30-169-92.ngrok-free.app/api/'; // gcloud backend not updated 
 
 const api = axios.create({
   baseURL: API_BASE_URL,

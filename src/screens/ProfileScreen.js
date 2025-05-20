@@ -3,6 +3,7 @@ import React, { useContext, useState } from 'react';
 import { Context as AuthContext } from '../context/AuthContext';
 import { Context as UserContext } from '../context/UserContext'; 
 import { Context as ActivityContext } from '../context/ActivityContext';
+import { Context as PainTrackingContext } from '../context/PainTrackingContext';
 import { navigate, goBack } from '../components/navigation/navigationRef';
 import COLORS from '../constants/COLORS';
 import { moderateScale, verticalScale } from 'react-native-size-matters';
@@ -21,6 +22,7 @@ const ProfileScreen = () => {
   const { logout, deleteUserAccount, resetPassword, state: { loading } } = useContext(AuthContext);
   const { state: { user }, resetUser, updateUser, deleteUserAccountData } = useContext(UserContext); 
   const { resetActivity } = useContext(ActivityContext);
+  const { clearPainLogs } = useContext(PainTrackingContext);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   
   // Settings states
@@ -84,7 +86,8 @@ const ProfileScreen = () => {
                       await deleteUserAccount();   // Delete from backend
                       await deleteUserAccountData();     // Reset local user state
                       await resetActivity();             // Await resetActivity
-                      await logout();              // Clear auth tokens
+                      await logout();              // Clear auth tokens 
+                      await clearPainLogs();       // Clears pain logs from AsyncStorage 
                       navigate("Auth");            // Redirect to login
                     } catch (err) {
                       console.error("Account deletion failed:", err);

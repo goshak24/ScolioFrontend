@@ -33,13 +33,13 @@ const painTrackingReducer = (state, action) => {
 // Save pain logs to AsyncStorage
 const savePainLogsToStorage = async (painLogs) => {
   try {
-    // await AsyncStorage.setItem('painLogs', JSON.stringify(painLogs));
+    await AsyncStorage.setItem('painLogs', JSON.stringify(painLogs));
   } catch (error) {
     console.error('Error saving pain logs to storage:', error);
   }
 };
 
-// Load pain logs from storage
+// Load pain logs from AsyncStorage
 const loadPainLogs = dispatch => async () => {
   try {
     dispatch({ type: 'SET_LOADING', payload: true });
@@ -56,7 +56,48 @@ const loadPainLogs = dispatch => async () => {
   }
 };
 
-// Save a new pain log
+// Load pain logs initially from Database for month
+const dbLoadPainLogsForMonth = dispatch => async (monthStr) => {
+  try {
+    dispatch({ type: 'SET_LOADING', payload: true });
+    
+    // Parse the month string which should be in format YYYY-MM
+    const [year, month] = monthStr.split('-').map(num => parseInt(num, 10));
+    
+    if (isNaN(year) || isNaN(month) || month < 1 || month > 12) {
+      throw new Error('Invalid month format. Expected YYYY-MM');
+    }
+    
+    // Create first and last day of the month
+    const firstDay = new Date(year, month - 1, 1).toISOString().split('T')[0];
+    const lastDay = new Date(year, month, 0).toISOString().split('T')[0];
+    
+    console.log('Loading pain logs from', firstDay, 'to', lastDay);
+    
+    try {
+      const response = await api.get(`/pain-track/get-logs-by-date-range?startDate=${firstDay}&endDate=${lastDay}`);
+      const painLogs = response.data.painLogs;
+
+      // Save to AsyncStorage
+      await AsyncStorage.setItem('painLogs', JSON.stringify(painLogs));
+
+      dispatch({ type: 'SET_PAIN_LOGS', payload: painLogs || [] });
+
+    } catch (apiError) {
+      console.error('API Error:', apiError);
+      // If API call fails, we still keep the local data
+      console.log('Using local data instead');
+    }
+  } catch (error) {
+    console.error('Error loading pain logs for month:', error);
+    dispatch({ type: 'SET_ERROR', payload: 'Failed to load pain logs for month' });
+  }
+};
+
+
+
+
+// Save a new pain log to Database and AsyncStorage 
 const savePainLog = dispatch => async (painLogData) => {
   try {
     dispatch({ type: 'SET_LOADING', payload: true });
@@ -109,7 +150,7 @@ const savePainLog = dispatch => async (painLogData) => {
   }
 };
 
-// Get pain logs for a specific date
+// Get pain logs for a specific date from AsyncStorage
 const getPainLogsByDate = dispatch => (date) => {
   try {
     // This function doesn't need to dispatch any actions as it's just a selector
@@ -122,7 +163,7 @@ const getPainLogsByDate = dispatch => (date) => {
   }
 };
 
-// Delete a pain log
+// Delete a pain log from AsyncStorage
 const deletePainLog = dispatch => async (logId) => {
   try {
     dispatch({ type: 'SET_LOADING', payload: true });
@@ -153,6 +194,11 @@ const clearError = dispatch => () => {
   dispatch({ type: 'SET_ERROR', payload: null });
 };
 
+const clearPainLogs = dispatch => async () => {
+  dispatch({ type: 'SET_PAIN_LOGS', payload: [] });
+  await AsyncStorage.removeItem('painLogs');
+}; 
+
 // Export the context and provider
 export const { Context, Provider } = createDataContext(
   painTrackingReducer,
@@ -161,7 +207,9 @@ export const { Context, Provider } = createDataContext(
     savePainLog,
     getPainLogsByDate,
     deletePainLog,
-    clearError
+    clearError,
+    clearPainLogs, 
+    dbLoadPainLogsForMonth 
   },
   {
     painLogs: [],
