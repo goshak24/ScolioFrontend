@@ -1,6 +1,6 @@
 import createDataContext from "./createDataContext";
 import api, { auth } from "../utilities/backendApi";
-import { updateUserProfile, addPhysioWorkout } from "./UserFunctionsHelper";
+import { updateUserProfile, addPhysioWorkout, uploadProfilePicture } from "./UserFunctionsHelper";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Context as MessagesContext } from './MessagesContext';
 import { useContext } from 'react';
@@ -19,6 +19,16 @@ const userReducer = (state, action) => {
             return { 
                 ...state, 
                 user: { ...state.user, ...action.payload },
+                loading: false,
+                error: null
+            };
+        case "UPDATE_PROFILE_PICTURE":
+            return {
+                ...state,
+                user: {
+                    ...state.user,
+                    profilePicture: action.payload
+                },
                 loading: false,
                 error: null
             };
@@ -405,37 +415,35 @@ const resetDailyBraceHours = (dispatch) => async () => {
     }
 };
 
-const addUserPhysioWorkout = (dispatch) => async (workout, date = null, dayOfWeek = null) => {
+const addUserPhysioWorkout = (dispatch) => async (workout, date, dayOfWeek, scheduledWorkouts) => {
     try {
         dispatch({ type: "SET_LOADING", payload: true });
         
-        // Get the user's token from storage
+        // Get current user's ID token
         const idToken = await AsyncStorage.getItem('idToken');
         if (!idToken) {
             dispatch({ type: "SET_ERROR", payload: "Authentication required" });
             return { success: false, error: "Authentication required" };
         }
         
-        // Call the API to add the workout
         const result = await addPhysioWorkout(idToken, workout, date, dayOfWeek);
         
         if (result.success) {
-            // Update the local state to match the server
+            // Update local state
             dispatch({ 
                 type: "ADD_PHYSIO_WORKOUT", 
-                payload: { 
+                payload: {
                     date: result.date,
-                    workout: result.workout,
-                    dayOfWeek: result.dayOfWeek,
-                    scheduledWorkouts: result.scheduledWorkouts
-                } 
+                    workout,
+                    dayOfWeek,
+                    scheduledWorkouts
+                }
             });
+            
             return { 
                 success: true, 
-                date: result.date, 
-                dayOfWeek: result.dayOfWeek,
-                workout: result.workout,
-                scheduledWorkouts: result.scheduledWorkouts
+                date: result.date,
+                achievements: result.achievements || {}
             };
         } else {
             dispatch({ type: "SET_ERROR", payload: result.error });
@@ -452,25 +460,58 @@ const addUserPhysioWorkout = (dispatch) => async (workout, date = null, dayOfWee
 
 const signOut = (dispatch) => async () => {
     try {
-        // Get the clearCache function from MessagesContext
-        const { clearCache } = useContext(MessagesContext);
-        // Get the clearFriendsCache function from FriendsContext
-        const { clearFriendsCache } = useContext(FriendsContext);
-        
-        // Clear messages cache
-        await clearCache();
-        // Clear friends cache
-        await clearFriendsCache();
-        
         // Clear auth state
+        await AsyncStorage.removeItem('idToken');
+        await AsyncStorage.removeItem('refreshToken');
+        
+        // Sign out from Firebase
         await auth.signOut();
+        
+        // Dispatch sign out action
         dispatch({ type: "SIGN_OUT" });
+        
+        return true;
     } catch (error) {
         console.error("Error signing out:", error);
         dispatch({
             type: "SET_ERROR",
             payload: error.message || "Failed to sign out"
         });
+        return false;
+    }
+};
+
+const updateProfilePicture = (dispatch) => async (imageUri) => {
+    try {
+        dispatch({ type: "SET_LOADING", payload: true });
+        
+        // Get the current user's ID token
+        const idToken = await AsyncStorage.getItem('idToken');
+        if (!idToken) {
+            dispatch({ type: "SET_ERROR", payload: "Authentication required" });
+            return { success: false, error: "Authentication required" };
+        }
+        
+        // Upload the profile picture
+        const result = await uploadProfilePicture(idToken, imageUri);
+        
+        if (result.success) {
+            // Update the user state with the new profile picture URL
+            dispatch({ type: "UPDATE_PROFILE_PICTURE", payload: result.profilePictureUrl });
+            return { success: true };
+        } else {
+            dispatch({ type: "SET_ERROR", payload: result.error });
+            return { success: false, error: result.error };
+        }
+    } catch (error) {
+        console.error('Profile picture update error:', error);
+        dispatch({ 
+            type: "SET_ERROR", 
+            payload: error.response?.data?.message || "Failed to update profile picture" 
+        });
+        return { success: false, error: "Failed to update profile picture" };
+    } finally {
+        dispatch({ type: "SET_LOADING", payload: false });
     }
 };
 
@@ -478,19 +519,20 @@ export const { Provider, Context } = createDataContext(
     userReducer,
     { 
         fetchUserData, 
-        updateProfile, 
-        addCalendarEvent, 
-        getUserCalendarEvents, 
-        deleteCalendarEvent, 
-        incrementStreak, 
-        incrementPhysio, 
-        updateBraceWornHoursUser, 
-        deleteUserAccountData, 
-        setStreak, 
-        resetDailyBraceHours,
+        updateProfile,
         resetUser,
+        addCalendarEvent,
+        getUserCalendarEvents,
+        deleteCalendarEvent,
+        incrementStreak,
+        incrementPhysio,
+        updateBraceWornHoursUser,
+        deleteUserAccountData,
+        setStreak,
+        resetDailyBraceHours,
         addUserPhysioWorkout,
-        signOut
+        signOut,
+        updateProfilePicture
     },
     { user: null, loading: false, error: null }
 );

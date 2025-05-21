@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, Image } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { moderateScale } from 'react-native-size-matters';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import COLORS from '../../constants/COLORS';
 
-const ProfileHeader = ({ user, updateUser }) => {
+const ProfileHeader = ({ user, updateUser, changeProfilePicture }) => {
   const [bio, setBio] = useState(user?.bio || "Add a bio to tell others about yourself...");
   const [isEditing, setIsEditing] = useState(false);
 
@@ -19,14 +19,26 @@ const ProfileHeader = ({ user, updateUser }) => {
   
   return (
     <View style={styles.profileSection}>
-      <LinearGradient 
-        colors={["#B15EFF", "#EA6AB5"]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.avatarContainer}
-      >
-        <Text style={styles.avatarText}>{user?.username?.[0]?.toUpperCase() || 'U'}</Text>
-      </LinearGradient>
+      <TouchableOpacity onPress={changeProfilePicture}>
+        {user?.profilePicture ? (
+          <View style={styles.avatarContainer}>
+            <Image 
+              source={{ uri: user.profilePicture }} 
+              style={styles.avatarImage} 
+              resizeMode="cover"
+            />
+          </View>
+        ) : (
+          <LinearGradient 
+            colors={["#B15EFF", "#EA6AB5"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.avatarContainer}
+          >
+            <Text style={styles.avatarText}>{user?.username?.[0]?.toUpperCase() || 'U'}</Text>
+          </LinearGradient>
+        )}
+      </TouchableOpacity>
       
       <View style={styles.profileInfo}>
         <Text style={styles.username}>{user?.username || 'User'}</Text>
@@ -91,6 +103,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: moderateScale(15),
+    overflow: 'hidden',
+  },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: moderateScale(50),
   },
   avatarText: {
     fontSize: moderateScale(40),

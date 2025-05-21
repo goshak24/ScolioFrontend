@@ -1,4 +1,7 @@
-import api from '../utilities/backendApi';
+import api, { storage } from '../utilities/backendApi';
+import { Platform } from 'react-native';
+import * as FileSystem from 'expo-file-system';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 export const extendStreak = async (idToken) => {
     try {
@@ -186,6 +189,63 @@ export const updateWalkingMinutes = async (idToken, minutes) => {
             success: false,
             error: error.response?.data?.error || 'Failed to update walking minutes'
         };
+    }
+};
+
+export const uploadProfilePicture = async (idToken, imageUri) => {
+    try {
+
+        // Create a storage reference
+        const timestamp = new Date().getTime();
+        const userId = await getUserIdFromToken(idToken);
+        const storageRef = ref(storage, `profile_pictures/${userId}_${timestamp}.jpg`);
+
+        // Convert image URI to blob
+        const fetchResponse = await fetch(imageUri);
+        const blob = await fetchResponse.blob();
+
+        // Upload the image
+        await uploadBytes(storageRef, blob);
+
+        // Get the download URL
+        const downloadURL = await getDownloadURL(storageRef);
+
+        // Update the user profile with the new profile picture URL
+        const apiResponse = await api.patch(
+            '/users/update-profile',
+            { profilePicture: downloadURL },
+            {
+                headers: {
+                    'Authorization': `Bearer ${idToken}`
+                }
+            }
+        );
+
+        return {
+            success: true,
+            profilePictureUrl: downloadURL,
+            updatedUser: apiResponse.data.user
+        };
+    } catch (error) {
+        console.error('Upload profile picture error:', error);
+        return {
+            success: false,
+            error: error.message || 'Failed to upload profile picture'
+        };
+    }
+};
+
+// Helper function to extract user ID from token
+const getUserIdFromToken = async (token) => {
+    try {
+        // Get user info from token
+        const response = await api.get('/auth/user', {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+        return response.data._id || 'user';
+    } catch (error) {
+        console.error('Error getting user ID:', error);
+        return 'user_' + new Date().getTime(); // Fallback ID if we can't get the real one
     }
 };
 

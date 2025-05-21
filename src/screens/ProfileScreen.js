@@ -12,6 +12,7 @@ import BackButton from '../components/reusable/BackButton';
 import { LinearGradient } from 'expo-linear-gradient';
 import HeightSpacer from '../components/reusable/HeightSpacer';
 import Constants from 'expo-constants';
+import * as ImagePicker from 'expo-image-picker';
 
 // Import profile components
 import ProfileHeader from '../components/profile/ProfileHeader';
@@ -20,10 +21,11 @@ import ProfileSettings from '../components/profile/ProfileSettings';
 
 const ProfileScreen = () => {
   const { logout, deleteUserAccount, resetPassword, state: { loading } } = useContext(AuthContext);
-  const { state: { user }, resetUser, updateUser, deleteUserAccountData } = useContext(UserContext); 
+  const { state: { user }, resetUser, updateUser, deleteUserAccountData, updateProfilePicture } = useContext(UserContext); 
   const { resetActivity } = useContext(ActivityContext);
   const { clearPainLogs } = useContext(PainTrackingContext);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
   
   // Settings states
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
@@ -132,8 +134,47 @@ const ProfileScreen = () => {
   const goToPrivacyPolicy = () => { 
     navigate('PrivacyPolicy')
   }
+
+  const changeProfilePicture = async () => {
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+      if (!permission.granted) {
+        Alert.alert("Permission required", "App needs access to your photo library.");
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images', 'videos'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.7,
+      });
+
+      if (!result.canceled && result.assets.length > 0) {
+        const imageUri = result.assets[0].uri;
+        console.log("Selected image URI:", imageUri);
+        
+        setUploadingImage(true);
+        
+        // Upload image to server and update user profile
+        const response = await updateProfilePicture(imageUri);
+        
+        if (response.success) {
+          Alert.alert("Success", "Profile picture updated successfully");
+        } else {
+          Alert.alert("Error", response.error || "Failed to update profile picture");
+        }
+      }
+    } catch (error) {
+      console.error("Profile picture update error:", error);
+      Alert.alert("Error", "An error occurred while updating your profile picture");
+    } finally {
+      setUploadingImage(false);
+    }
+  };
   
-  if (loading || isLoggingOut || !user) {
+  if (loading || isLoggingOut || !user || uploadingImage) {
     return (
       <View style={styles.loadingContainer}>
         <LinearGradient
@@ -141,6 +182,7 @@ const ProfileScreen = () => {
           style={styles.gradientBackground}
         >
           <ActivityIndicator size="large" color={COLORS.white} />
+          {uploadingImage && <Text style={styles.loadingText}>Updating profile picture...</Text>}
         </LinearGradient>
       </View>
     );
@@ -181,7 +223,7 @@ const ProfileScreen = () => {
           bounces={false}
         >
           {/* Profile Header with Avatar and User Info */}
-          <ProfileHeader user={user} updateUser={handleUpdateUser} />
+          <ProfileHeader user={user} updateUser={handleUpdateUser} changeProfilePicture={changeProfilePicture} />
           
           {/* User Stats */}
           <ProfileStats user={user} />
@@ -242,6 +284,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: COLORS.backgroundPurple
+  },
+  loadingText: {
+    color: COLORS.white,
+    marginTop: moderateScale(10),
+    fontSize: moderateScale(14),
   },
   header: {
     alignItems: 'center',

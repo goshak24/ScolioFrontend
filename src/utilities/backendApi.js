@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { initializeApp } from "firebase/app";
 import { initializeAuth, getReactNativePersistence } from "firebase/auth";
+import { getStorage } from "firebase/storage";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
 
@@ -25,11 +26,12 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig); 
 const auth = initializeAuth(app, {
   persistence: getReactNativePersistence(AsyncStorage),
-}); 
+});
+const storage = getStorage(app);
 
 // const API_BASE_URL = 'https://scoliobackend-455720.nw.r.appspot.com/api/'; 
 
-const API_BASE_URL = 'https://03cf-86-30-169-92.ngrok-free.app/api/'; // gcloud backend not updated 
+const API_BASE_URL = 'https://4032-86-30-169-92.ngrok-free.app/api/'; // gcloud backend not updated 
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -101,4 +103,5 @@ export const configureServerCaching = async () => {
   }
 };
 
+export { storage };
 export default api; 

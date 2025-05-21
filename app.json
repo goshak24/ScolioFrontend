@@ -4,7 +4,11 @@
     "slug": "ScolioFrontend",
     "version": "1.0.1",
     "plugins": [
-      "./expo-plugins/react-native-screens"
+      "./expo-plugins/react-native-screens", 
+      ["expo-image-picker",
+        {
+          "photosPermission": "The app accesses your photos to let you share them with your friends."
+        }]
     ],
     "orientation": "portrait",
     "icon": "./assets/icon.png",

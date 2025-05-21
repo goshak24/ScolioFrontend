@@ -31,12 +31,6 @@ const PainTrackerSummary = () => {
           <Text style={styles.title}>Pain Tracker</Text>
           <Text style={styles.subtitle}>Track and manage your discomfort</Text>
         </View>
-        <TouchableOpacity 
-          style={styles.addButton}
-          onPress={() => navigation.navigate('PainTracker')}
-        >
-          <Ionicons name="add" size={moderateScale(24)} color={COLORS.white} />
-        </TouchableOpacity>
       </View>
 
       <View style={styles.bodyContainer}>
