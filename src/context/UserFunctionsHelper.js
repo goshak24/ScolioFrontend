@@ -194,44 +194,75 @@ export const updateWalkingMinutes = async (idToken, minutes) => {
 
 export const uploadProfilePicture = async (idToken, imageUri) => {
     try {
-
-        // Create a storage reference
-        const timestamp = new Date().getTime();
-        const userId = await getUserIdFromToken(idToken);
-        const storageRef = ref(storage, `profile_pictures/${userId}_${timestamp}.jpg`);
-
-        // Convert image URI to blob
-        const fetchResponse = await fetch(imageUri);
-        const blob = await fetchResponse.blob();
-
-        // Upload the image
-        await uploadBytes(storageRef, blob);
-
-        // Get the download URL
-        const downloadURL = await getDownloadURL(storageRef);
-
-        // Update the user profile with the new profile picture URL
-        const apiResponse = await api.patch(
-            '/users/update-profile',
-            { profilePicture: downloadURL },
-            {
-                headers: {
-                    'Authorization': `Bearer ${idToken}`
-                }
+        console.log('Starting profile picture upload process...');
+        
+        try {
+            // Read the file as base64
+            const base64Image = await readImageAsBase64(imageUri);
+            console.log('Base64 image length:', base64Image.length);
+            
+            if (!base64Image) {
+                throw new Error('Failed to convert image to base64');
             }
-        );
-
-        return {
-            success: true,
-            profilePictureUrl: downloadURL,
-            updatedUser: apiResponse.data.user
-        };
+            
+            // Send the base64 image to the backend for processing
+            console.log('Sending image to backend...');
+            const apiResponse = await api.post(
+                '/users/upload-profile-picture',
+                { 
+                    image: base64Image,
+                    contentType: 'image/jpeg',
+                    filename: `profile_${Date.now()}.jpg`
+                },
+                {
+                    headers: {
+                        'Authorization': `Bearer ${idToken}`,
+                        'Content-Type': 'application/json'
+                    }
+                }
+            );
+            
+            console.log('Profile update successful');
+            return {
+                success: true,
+                profilePictureUrl: apiResponse.data.profilePictureUrl,
+                updatedUser: apiResponse.data.user
+            };
+        } catch (uploadError) {
+            console.error('Error during image processing/upload:', uploadError);
+            throw new Error(`Image upload failed: ${uploadError.message}`);
+        }
     } catch (error) {
         console.error('Upload profile picture error:', error);
         return {
             success: false,
             error: error.message || 'Failed to upload profile picture'
         };
+    }
+};
+
+// Helper function to read an image file as base64
+const readImageAsBase64 = async (uri) => {
+    try {
+        // For Expo/React Native
+        const response = await fetch(uri);
+        const blob = await response.blob();
+        
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+                // Get the base64 string (remove the prefix)
+                const base64String = reader.result.split(',')[1];
+                resolve(base64String);
+            };
+            reader.onerror = (error) => {
+                reject(error);
+            };
+            reader.readAsDataURL(blob);
+        });
+    } catch (error) {
+        console.error('Error reading image as base64:', error);
+        throw error;
     }
 };
 
