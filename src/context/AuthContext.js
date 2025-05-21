@@ -1,6 +1,7 @@
 import createDataContext from "./createDataContext";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import api from "../utilities/backendApi";
+import TokenManager from "../utilities/tokenManager";
 
 const authReducer = (state, action) => {
     switch (action.type) {
@@ -35,6 +36,10 @@ const storeAuthTokens = async (idToken, refreshToken) => {
     try {
         await AsyncStorage.setItem("idToken", idToken);
         await AsyncStorage.setItem("refreshToken", refreshToken);
+        
+        // Set token expiry time (current time + 30 minutes)
+        const expiryTime = Date.now() + 30 * 60 * 1000;
+        await AsyncStorage.setItem("tokenExpiryTime", expiryTime.toString());
     } catch (error) {
         console.error("Error storing auth tokens:", error);
     }
@@ -44,6 +49,10 @@ const removeAuthTokens = async () => {
     try {
         await AsyncStorage.removeItem("idToken");
         await AsyncStorage.removeItem("refreshToken");
+        await AsyncStorage.removeItem("tokenExpiryTime");
+        
+        // Clean up token refresh mechanism
+        await TokenManager.cleanupTokenRefresh();
     } catch (error) {
         console.error("Error removing auth tokens:", error);
     }
@@ -72,6 +81,9 @@ const signUp = (dispatch) => async (formData) => {
                 refreshToken: response.data.refreshToken
             }
         });
+        
+        // Initialize token refresh mechanism
+        await TokenManager.initializeTokenRefresh();
 
         // Return tokens for immediate use (similar to signIn)
         return { 
@@ -125,6 +137,9 @@ const signIn = (dispatch) => async ({ email, password }) => {
                 refreshToken: response.data.refreshToken
             }
         });
+        
+        // Initialize token refresh mechanism
+        await TokenManager.initializeTokenRefresh();
 
         // Return the tokens for immediate use
         return { 
@@ -156,11 +171,29 @@ const tryLocalSignIn = (dispatch) => async () => {
             dispatch({ type: "SET_LOADING", payload: false });
             return false;
         }
+        
+        // Check if token needs refreshing
+        const needsRefresh = await TokenManager.shouldRefreshToken();
+        let currentIdToken = idToken;
+        let currentRefreshToken = refreshToken;
+        
+        if (needsRefresh) {
+            try {
+                // Use TokenManager to refresh the token
+                const refreshed = await TokenManager.refreshToken();
+                if (refreshed) {
+                    currentIdToken = await AsyncStorage.getItem("idToken");
+                    currentRefreshToken = await AsyncStorage.getItem("refreshToken");
+                }
+            } catch (refreshError) {
+                console.log("Refresh token failed:", refreshError.message);
+            }
+        }
 
-        // First attempt with current ID token
+        // Verify the token (either refreshed or original)
         try {
             const verifyResponse = await api.get("/auth/verify-token", {
-                headers: { Authorization: `Bearer ${idToken}` }
+                headers: { Authorization: `Bearer ${currentIdToken}` }
             });
 
             if (verifyResponse.data.userId) {
@@ -168,36 +201,18 @@ const tryLocalSignIn = (dispatch) => async () => {
                     type: "AUTH_SUCCESS", 
                     payload: {
                         userId: verifyResponse.data.userId,
-                        idToken,
-                        refreshToken
+                        idToken: currentIdToken,
+                        refreshToken: currentRefreshToken
                     }
                 });
+                
+                // Initialize token refresh mechanism
+                await TokenManager.initializeTokenRefresh();
+                
                 return true;
             }
         } catch (verifyError) {
-            // If first attempt fails, try refreshing the token
-            try {
-                const refreshResponse = await api.post("/auth/refresh-token", { refreshToken });
-                await storeAuthTokens(refreshResponse.data.idToken, refreshResponse.data.refreshToken);
-
-                const newVerifyResponse = await api.get("/auth/verify-token", {
-                    headers: { Authorization: `Bearer ${refreshResponse.data.idToken}` }
-                });
-
-                if (newVerifyResponse.data.userId) {
-                    dispatch({ 
-                        type: "AUTH_SUCCESS", 
-                        payload: {
-                            userId: newVerifyResponse.data.userId,
-                            idToken: refreshResponse.data.idToken,
-                            refreshToken: refreshResponse.data.refreshToken
-                        }
-                    });
-                    return true;
-                }
-            } catch (refreshError) {
-                console.log("Refresh token failed:", refreshError.message);
-            }
+            console.log("Token verification failed:", verifyError.message);
         }
 
         await removeAuthTokens();

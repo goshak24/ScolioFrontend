@@ -40,14 +40,95 @@ const api = axios.create({
   },
 });
 
+// Keep track of if we're currently refreshing the token to avoid multiple refreshes
+let isRefreshingToken = false;
+let refreshPromise = null;
+
+// Queue of requests waiting for token refresh
+let refreshSubscribers = [];
+
+// Function to add requests to the queue
+const subscribeToTokenRefresh = (callback) => {
+  refreshSubscribers.push(callback);
+};
+
+// Function to notify all waiting requests that token is refreshed
+const onTokenRefreshed = (newToken) => {
+  refreshSubscribers.forEach(callback => callback(newToken));
+  refreshSubscribers = [];
+};
+
+// Function to refresh the token
+const refreshAuthToken = async () => {
+  if (isRefreshingToken) {
+    return refreshPromise;
+  }
+
+  isRefreshingToken = true;
+  refreshPromise = (async () => {
+    try {
+      const refreshToken = await AsyncStorage.getItem('refreshToken');
+      if (!refreshToken) {
+        throw new Error('No refresh token available');
+      }
+
+      const response = await axios.post(`${API_BASE_URL}auth/refresh-token`, { refreshToken });
+      
+      if (response.data && response.data.idToken) {
+        // Store the new tokens
+        await AsyncStorage.setItem('idToken', response.data.idToken);
+        
+        // If a new refresh token was provided, update it
+        if (response.data.refreshToken) {
+          await AsyncStorage.setItem('refreshToken', response.data.refreshToken);
+        }
+        
+        // Set token expiry time (current time + 30 minutes)
+        const expiryTime = Date.now() + 30 * 60 * 1000;
+        await AsyncStorage.setItem('tokenExpiryTime', expiryTime.toString());
+        
+        // Notify waiting requests
+        onTokenRefreshed(response.data.idToken);
+        return response.data.idToken;
+      } else {
+        throw new Error('Failed to refresh token');
+      }
+    } catch (error) {
+      console.error('Token refresh failed:', error);
+      onTokenRefreshed(null);
+      throw error;
+    } finally {
+      isRefreshingToken = false;
+    }
+  })();
+
+  return refreshPromise;
+};
+
+// Request interceptor
 api.interceptors.request.use(async (config) => {
   try {
-    // Try to get token from AsyncStorage first (this is what the rest of the app is using)
+    // Try to get token from AsyncStorage first
     const asyncStorageToken = await AsyncStorage.getItem('idToken');
     
     if (asyncStorageToken) {
       console.log("Using token from AsyncStorage");
       config.headers.Authorization = `Bearer ${asyncStorageToken}`;
+      
+      // Check if token is about to expire
+      const expiryTimeStr = await AsyncStorage.getItem('tokenExpiryTime');
+      if (expiryTimeStr) {
+        const expiryTime = parseInt(expiryTimeStr, 10);
+        const currentTime = Date.now();
+        
+        // If token expires in less than 5 minutes, refresh it in the background
+        // but still use the current token for this request
+        if (currentTime + 5 * 60 * 1000 >= expiryTime && !isRefreshingToken) {
+          // Don't await this - let it happen in the background
+          refreshAuthToken().catch(err => console.log('Background token refresh failed:', err));
+        }
+      }
+      
       return config;
     }
     
@@ -103,5 +184,49 @@ export const configureServerCaching = async () => {
   }
 };
 
-export { storage };
+// Response interceptor to handle token expiration
+api.interceptors.response.use(
+  (response) => {
+    return response;
+  },
+  async (error) => {
+    const originalRequest = error.config;
+    
+    // If error is 401 Unauthorized and we haven't already tried to refresh
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      // Mark this request as retried
+      originalRequest._retry = true;
+      
+      try {
+        // If we're already refreshing, wait for that to complete
+        let token;
+        if (isRefreshingToken) {
+          return new Promise((resolve, reject) => {
+            subscribeToTokenRefresh((newToken) => {
+              if (newToken) {
+                originalRequest.headers.Authorization = `Bearer ${newToken}`;
+                resolve(api(originalRequest));
+              } else {
+                reject(error);
+              }
+            });
+          });
+        } else {
+          // Otherwise, refresh the token ourselves
+          token = await refreshAuthToken();
+          originalRequest.headers.Authorization = `Bearer ${token}`;
+          return api(originalRequest);
+        }
+      } catch (refreshError) {
+        // If refresh fails, redirect to login or handle as needed
+        console.error('Token refresh failed during response interceptor:', refreshError);
+        return Promise.reject(error);
+      }
+    }
+    
+    return Promise.reject(error);
+  }
+);
+
+export { storage, refreshAuthToken };
 export default api; 
