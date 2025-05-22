@@ -1,7 +1,4 @@
-import api, { storage } from '../utilities/backendApi';
-import { Platform } from 'react-native';
-import * as FileSystem from 'expo-file-system';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import api from '../utilities/backendApi';
 
 export const extendStreak = async (idToken) => {
     try {
@@ -192,6 +189,132 @@ export const updateWalkingMinutes = async (idToken, minutes) => {
     }
 };
 
+import { getStorage, ref, getDownloadURL } from "firebase/storage";
+import { getAuth } from "firebase/auth";
+
+/**
+ * Get a download URL for a file path using Firebase Storage
+ * This respects Firebase Security Rules and requires proper authentication
+ * 
+ * @param {string} filePath - The path to the file in Firebase Storage (e.g., 'profile_pictures/user123.jpg')
+ * @param {string} [idToken] - Optional ID token for authentication with backend fallback
+ * @returns {Promise<string>} A download URL for the file
+ */
+export const getFileDownloadUrl = async (filePath, idToken) => {
+  try {
+    if (!filePath) {
+      throw new Error("File path is required");
+    }
+    
+    // Get a reference to the file
+    const storage = getStorage();
+    const fileRef = ref(storage, filePath);
+    
+    // Get the download URL
+    const downloadUrl = await getDownloadURL(fileRef);
+    return downloadUrl;
+  } catch (error) {
+    // For profile pictures, we'll handle this silently without logging the error
+    const isProfilePicture = filePath.includes('profile_pictures/');
+    
+    if (!isProfilePicture) {
+      console.error("Error getting download URL:", error);
+    }
+    
+    // If the file doesn't exist or access is denied, try to get a temporary URL from the backend
+    if (error.code === 'storage/object-not-found' || error.code === 'storage/unauthorized') {
+      try {
+        return await getTemporaryUrlFromBackend(filePath, idToken);
+      } catch (backendError) {
+        // If the backend also fails, we'll handle profile picture errors silently
+        if (!isProfilePicture) {
+          console.error("Error getting temporary URL:", backendError);
+        }
+        return null;
+      }
+    }
+    
+    // For non-profile pictures, we'll still throw the error
+    if (!isProfilePicture) {
+      throw error;
+    }
+    
+    return null;
+  }
+};
+
+/**
+ * Fallback method to get a temporary URL from the backend
+ * This is useful when the frontend can't access the file directly due to security rules
+ * 
+ * @param {string} filePath - The path to the file in Firebase Storage
+ * @param {string} [providedToken] - Optional ID token for authentication
+ * @returns {Promise<string>} A temporary signed URL for the file
+ */
+const getTemporaryUrlFromBackend = async (filePath, providedToken) => {
+  try {
+    let idToken = providedToken;
+    
+    // If no token was provided, try to get it from AsyncStorage
+    if (!idToken) {
+      const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+      idToken = await AsyncStorage.getItem('idToken');
+    }
+    
+    if (!idToken) {
+      throw new Error("User not authenticated - No token found");
+    }
+    
+    // Use the api client instead of fetch for consistency
+    const response = await api.post(
+      '/storage/get-temporary-url',
+      { filePath },
+      {
+        headers: {
+          'Authorization': `Bearer ${idToken}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+    
+    // Return the temporary URL from the response
+    return response.data.temporaryUrl;
+  } catch (error) {
+    console.error("Error getting temporary URL from backend:", error);
+    throw error;
+  }
+};
+
+/**
+ * Get a profile picture URL from a user object
+ * This handles both legacy URLs and new file paths
+ * 
+ * @param {Object} user - The user object from Firestore
+ * @param {string} [idToken] - Optional ID token for authentication
+ * @returns {Promise<string>} The profile picture URL
+ */
+export const getProfilePictureUrl = async (user, idToken) => {
+  if (!user) return null;
+  
+  // If the user has a direct profilePicture URL (legacy), use it
+  if (user.profilePicture && user.profilePicture.startsWith('http')) {
+    return user.profilePicture;
+  }
+  
+  // If the user has a profilePicturePath, get the download URL
+  if (user.profilePicturePath) {
+    try {
+      return await getFileDownloadUrl(user.profilePicturePath, idToken);
+    } catch (error) {
+      console.error("Error getting profile picture URL:", error);
+      return null;
+    }
+  }
+  
+  // Return null if no profile picture is available
+  return null;
+};
+
 export const uploadProfilePicture = async (idToken, imageUri) => {
     try {
         console.log('Starting profile picture upload process...');
@@ -225,7 +348,9 @@ export const uploadProfilePicture = async (idToken, imageUri) => {
             console.log('Profile update successful');
             return {
                 success: true,
-                profilePictureUrl: apiResponse.data.profilePictureUrl,
+                // Store both the temporary URL and the path
+                profilePictureUrl: apiResponse.data.profilePictureUrl, // Temporary URL for immediate use
+                profilePicturePath: apiResponse.data.profilePicturePath, // Path for future use with getDownloadURL
                 updatedUser: apiResponse.data.user
             };
         } catch (uploadError) {

@@ -5,7 +5,7 @@ import { moderateScale, verticalScale } from "react-native-size-matters";
 import COLORS from "../../constants/COLORS";
 import { format } from "date-fns";
 
-const CommentItem = ({ comment, onAvatarPress }) => {
+const CommentItem = ({ comment, onAvatarPress, avatarPic }) => {
   // Handle different timestamp formats
   const formatTimestamp = () => {
     try {
@@ -63,7 +63,7 @@ const CommentItem = ({ comment, onAvatarPress }) => {
       <View style={styles.commentHeader}>
         <TouchableOpacity onPress={onAvatarPress}>
           <Image 
-            source={{ uri: comment.avatar || 'https://randomuser.me/api/portraits/lego/1.jpg' }} 
+            source={{ uri: avatarPic || 'https://randomuser.me/api/portraits/lego/1.jpg' }} 
             style={styles.commentAvatar} 
           />
         </TouchableOpacity>

@@ -49,7 +49,7 @@ const Dashboard = () => {
       />
 
       <SafeAreaView style={{ flex: 1, marginTop: Platform.OS === 'android' ? Constants.statusBarHeight : 0 }}>
-        <CalendarHeader username={user.username} />
+        <CalendarHeader profilePic={user.profilePicture} username={user.username} />
 
         <ScrollView
           style={{ backgroundColor: COLORS.backgroundPurple }}

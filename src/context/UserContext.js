@@ -1,6 +1,6 @@
 import createDataContext from "./createDataContext";
 import api, { auth } from "../utilities/backendApi";
-import { updateUserProfile, addPhysioWorkout, uploadProfilePicture } from "./UserFunctionsHelper";
+import { updateUserProfile, addPhysioWorkout, uploadProfilePicture, getProfilePictureUrl } from "./UserFunctionsHelper";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Context as MessagesContext } from './MessagesContext';
 import { useContext } from 'react';
@@ -27,7 +27,8 @@ const userReducer = (state, action) => {
                 ...state,
                 user: {
                     ...state.user,
-                    profilePicture: action.payload
+                    profilePicture: action.payload.profilePictureUrl,
+                    profilePicturePath: action.payload.profilePicturePath
                 },
                 loading: false,
                 error: null
@@ -186,7 +187,26 @@ const fetchUserData = (dispatch) => async (idToken) => {
         const response = await api.get("/auth/user", {
             headers: { Authorization: `Bearer ${idToken}` }
         });
-        dispatch({ type: "SET_USER_DATA", payload: response.data });
+        
+        const userData = response.data;
+        
+        // If the user has a profilePicturePath, get the download URL
+        if (userData.profilePicturePath) {
+            try {
+                // Get the profile picture URL using the utility function and pass the idToken
+                const profilePictureUrl = await getProfilePictureUrl(userData, idToken);
+                
+                // Update the user data with the profile picture URL
+                if (profilePictureUrl) {
+                    userData.profilePicture = profilePictureUrl;
+                }
+            } catch (error) {
+                console.error("Error loading profile picture:", error);
+                // Continue with user data even if profile picture loading fails
+            }
+        }
+        
+        dispatch({ type: "SET_USER_DATA", payload: userData });
     } catch (error) {
         dispatch({ 
             type: "SET_ERROR", 
@@ -496,8 +516,14 @@ const updateProfilePicture = (dispatch) => async (imageUri) => {
         const result = await uploadProfilePicture(idToken, imageUri);
         
         if (result.success) {
-            // Update the user state with the new profile picture URL
-            dispatch({ type: "UPDATE_PROFILE_PICTURE", payload: result.profilePictureUrl });
+            // Update the user state with both the temporary URL and the path
+            dispatch({ 
+                type: "UPDATE_PROFILE_PICTURE", 
+                payload: {
+                    profilePictureUrl: result.profilePictureUrl,
+                    profilePicturePath: result.profilePicturePath
+                }
+            });
             return { success: true };
         } else {
             dispatch({ type: "SET_ERROR", payload: result.error });

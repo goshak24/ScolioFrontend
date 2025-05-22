@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image } from 'react-native';
 import { moderateScale, scale } from 'react-native-size-matters';
 import { format, eachDayOfInterval, startOfWeek, endOfWeek, isToday } from 'date-fns';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -9,7 +9,7 @@ import HeightSpacer from '../reusable/HeightSpacer';
 import { navigate } from '../navigation/navigationRef';
 import CalendarModal from '../../components/reusable/Calendar/CalendarModal';
 
-const CalendarHeader = ({ username }) => {
+const CalendarHeader = ({ profilePic, username }) => {
   const today = new Date();
   const weekStart = startOfWeek(today);
   const weekEnd = endOfWeek(today);
@@ -61,7 +61,16 @@ const CalendarHeader = ({ username }) => {
             end={{ x: 1, y: 1 }}
             style={styles.profileIcon}
           >
-            <Text style={styles.profileText}>{username[0].toUpperCase()}</Text> 
+            {profilePic ? (
+            <Image 
+              source={{ uri: profilePic }} 
+              style={styles.profileIcon}
+            />
+            ) : (
+            <Text style={styles.profileText}>
+              {username ? username[0].toUpperCase() : '?'}
+            </Text> 
+            )}
           </LinearGradient>
         </TouchableOpacity>
 
