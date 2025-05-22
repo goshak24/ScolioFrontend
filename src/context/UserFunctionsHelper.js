@@ -1,4 +1,10 @@
-import api from '../utilities/backendApi';
+import { ref, getDownloadURL } from "firebase/storage";
+import api, { auth, storage } from '../utilities/backendApi';
+import Constants from 'expo-constants';
+
+const {
+    FIREBASE_STORAGE_BUCKET,
+  } = Constants.expoConfig.extra;
 
 export const extendStreak = async (idToken) => {
     try {
@@ -189,9 +195,6 @@ export const updateWalkingMinutes = async (idToken, minutes) => {
     }
 };
 
-import { getStorage, ref, getDownloadURL } from "firebase/storage";
-import { getAuth } from "firebase/auth";
-
 /**
  * Get a download URL for a file path using Firebase Storage
  * This respects Firebase Security Rules and requires proper authentication
@@ -200,18 +203,59 @@ import { getAuth } from "firebase/auth";
  * @param {string} [idToken] - Optional ID token for authentication with backend fallback
  * @returns {Promise<string>} A download URL for the file
  */
-export const getFileDownloadUrl = async (filePath, idToken) => {
+export const getFileDownloadUrl = async (filePath, providedIdToken) => {
   try {
     if (!filePath) {
       throw new Error("File path is required");
     }
     
-    // Get a reference to the file
-    const storage = getStorage();
-    const fileRef = ref(storage, filePath);
+    // Get the ID token - either from provided param or from AsyncStorage
+    let idToken = providedIdToken;
+    if (!idToken) {
+      try {
+        const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+        idToken = await AsyncStorage.getItem('idToken');
+      } catch (error) {
+        console.error("Error getting token from AsyncStorage:", error);
+      }
+    }
     
-    // Get the download URL
-    const downloadUrl = await getDownloadURL(fileRef);
+    if (!idToken) {
+      throw new Error("Authentication token is required to access this file");
+    }
+    
+    // Instead of using the Firebase SDK, construct the URL directly and make an authenticated request
+    // The format is: https://firebasestorage.googleapis.com/v0/b/BUCKET_NAME/o/FILE_PATH
+    
+    // Get bucket name from environment config
+    const bucket = FIREBASE_STORAGE_BUCKET;
+    
+    // Encode the file path
+    const encodedFilePath = encodeURIComponent(filePath);
+    
+    // Construct the direct URL
+    const directUrl = `https://firebasestorage.googleapis.com/v0/b/${bucket}/o/${encodedFilePath}`;
+    
+    // Make an authenticated request with the ID token in the header
+    const response = await fetch(directUrl, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Firebase ${idToken}`,
+        'Accept': 'application/json'
+      }
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Failed to fetch file: ${response.status} ${response.statusText}`);
+    }
+    
+    // The response includes metadata including downloadTokens
+    const data = await response.json();
+    
+    // Construct the final download URL with the token
+    const downloadUrl = `${directUrl}?alt=media&token=${data.downloadTokens}`;
+    console.log("Successfully created direct download URL");
+    
     return downloadUrl;
   } catch (error) {
     // For profile pictures, we'll handle this silently without logging the error

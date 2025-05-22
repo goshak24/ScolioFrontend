@@ -19,7 +19,7 @@ import Constants from 'expo-constants'
 
 const Dashboard = () => {
   const { state: { user, loading } } = useContext(UserContext);
-  const { state: authState } = useContext(AuthContext);
+  const { state: authState } = useContext(AuthContext); 
 
   // Show loading indicator if user data is being fetched
   if (loading || !user) {

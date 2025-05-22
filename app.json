@@ -44,7 +44,7 @@
       "FIREBASE_API_KEY": "AIzaSyAfs2R7WHx7ejindd0HbZ5YwK3LwlJrecs",
       "FIREBASE_AUTH_DOMAIN": "scoliobackend.firebaseapp.com",
       "FIREBASE_PROJECT_ID": "scoliobackend",
-      "FIREBASE_STORAGE_BUCKET": "scoliobackend.appspot.com",
+      "FIREBASE_STORAGE_BUCKET": "scoliobackend.firebasestorage.app",
       "FIREBASE_MESSAGING_SENDER_ID": "444038954292",
       "FIREBASE_APP_ID": "1:444038954292:web:a51a59af170a5f386c3961"
     },
