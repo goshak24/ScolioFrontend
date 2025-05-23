@@ -22,10 +22,16 @@ const WorkoutInterface = ({ workouts, weeklySchedule = [], customHeader = null }
 
     // Get today's date in YYYY-MM-DD format
     const today = new Date().toISOString().split('T')[0];
-    
-    // Check if streak was already updated today from UserContext
-    const wasStreakUpdatedToday = user?.lastStreakUpdate === today;
+    const lastStreakUpdate = user?.lastStreakUpdate;
 
+    // Convert Firestore timestamp to date string
+    const lastUpdateDateString = lastStreakUpdate ? 
+    new Date(lastStreakUpdate._seconds * 1000 + lastStreakUpdate._nanoseconds / 1000000)
+        .toISOString().split('T')[0] : null;
+
+    // Check if streak was already updated today from UserContext
+    const wasStreakUpdatedToday = lastUpdateDateString === today; 
+    
     const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
     // Get recent history data from user's physio sessions
@@ -240,7 +246,7 @@ const WorkoutInterface = ({ workouts, weeklySchedule = [], customHeader = null }
                 )}
 
                 {showSuccess && (
-                    <Text style={styles.successText}>Streak extended! 🔥</Text>
+                    <Text style={styles.successText}>{wasStreakUpdatedToday ? 'Physio session completed! 💪' : 'Streak extended! 🔥'}</Text>
                 )}
 
                 <ScrollView>
