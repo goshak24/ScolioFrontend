@@ -93,7 +93,17 @@ const userReducer = (state, action) => {
                 ...state,
                 user: {
                     ...state.user,
-                    physioSessions: (state.user?.physioSessions || 0) + 1
+                    physioSessions: (state.user?.physioSessions || 0) + 1,
+                    treatmentData: {
+                        ...state.user.treatmentData,
+                        physio: {
+                            ...state.user.treatmentData.physio,
+                            physioHistory: {
+                                ...state.user.treatmentData.physio?.physioHistory,
+                                [action.payload.date]: (state.user.treatmentData.physio?.physioHistory?.[action.payload.date] || 0) + 1
+                            }
+                        }
+                    }
                 }
             };
         case "SET_LOADING":
@@ -376,8 +386,9 @@ const incrementStreak = (dispatch) => () => {
      });
 };
 
-const incrementPhysio = (dispatch) => () => {
-    dispatch({ type: "INCREMENT_PHYSIO" });
+const incrementPhysio = (dispatch) => (specificDate = null) => {
+    const date = specificDate || new Date().toISOString().split('T')[0];
+    dispatch({ type: "INCREMENT_PHYSIO", payload: { date } });
 };
 
 const updateBraceWornHoursUser = (dispatch) => (hours) => {

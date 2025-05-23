@@ -29,7 +29,7 @@ const auth = initializeAuth(app, {
 });
 const storage = getStorage(app);
 
-const API_BASE_URL = 'https://a23d-86-30-169-92.ngrok-free.app/api/'; 
+const API_BASE_URL = 'https://db4d-86-30-169-92.ngrok-free.app/api/'; 
 
 const api = axios.create({
   baseURL: API_BASE_URL,

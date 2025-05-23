@@ -6,6 +6,7 @@ import COLORS from '../../constants/COLORS';
 import HeightSpacer from '../../components/reusable/HeightSpacer';
 import { Context as UserContext } from '../../context/UserContext'; 
 import { Context as ActivityContext } from '../../context/ActivityContext';
+import StreakExtensionAnimation from '../StreakExtensionAnimation';
 
 const WorkoutInterface = ({ workouts, weeklySchedule = [], customHeader = null }) => {
     const { updateStreak, logPhysio } = useContext(ActivityContext);
@@ -15,6 +16,7 @@ const WorkoutInterface = ({ workouts, weeklySchedule = [], customHeader = null }
     const [remainingTime, setRemainingTime] = useState(0);
     const [isRunning, setIsRunning] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
+    const [showStreakAnimation, setShowStreakAnimation] = useState(false);
     const [streakExtended, setStreakExtended] = useState(false);
     const streakUpdatedToday = useRef(false);
 
@@ -154,7 +156,7 @@ const WorkoutInterface = ({ workouts, weeklySchedule = [], customHeader = null }
     // Handle streak extension when the timer completes
     useEffect(() => {
         if (streakExtended) {
-            handleActivityCompletion();
+            handleActivityCompletion(today);
             setStreakExtended(false);
         }
     }, [streakExtended]);
@@ -168,7 +170,7 @@ const WorkoutInterface = ({ workouts, weeklySchedule = [], customHeader = null }
 
             if (physioResult.success) {
                 // Always increment the local state counter
-                incrementPhysio();
+                incrementPhysio(specificDate);
                 
                 // Show success feedback
                 setShowSuccess(true);
@@ -181,6 +183,7 @@ const WorkoutInterface = ({ workouts, weeklySchedule = [], customHeader = null }
                     
                     if (streakResult.success) {
                         streakUpdatedToday.current = true;
+                        setShowStreakAnimation(true);
                     }
                 }
             } else {
@@ -196,6 +199,12 @@ const WorkoutInterface = ({ workouts, weeklySchedule = [], customHeader = null }
 
     return (
         <View style={styles.container}>
+            {/* Streak Extension Animation */}
+            <StreakExtensionAnimation 
+                visible={showStreakAnimation} 
+                message="Streak Extended!" 
+                onAnimationComplete={() => setShowStreakAnimation(false)}
+            />
 
             <View style={styles.card}>
                 {/* Render custom header or default title */}
