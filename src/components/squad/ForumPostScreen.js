@@ -41,7 +41,7 @@ const ForumPostScreen = ({ route, navigation }) => {
   
   // Safely extract post data with defaults
   const safePost = {
-    id: currentPost?.id || "1",
+    id: currentPost?.userId || "1",
     username: currentPost?.username || "Anonymous",
     avatar: currentPost?.avatar || "https://randomuser.me/api/portraits/women/44.jpg",
     content: currentPost?.content || "No content available",

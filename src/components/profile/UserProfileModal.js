@@ -20,6 +20,8 @@ import { Context as UserContext } from '../../context/UserContext';
 import { Context as FriendsContext } from '../../context/FriendsContext';
 import DirectMessageProfileButton from '../messaging/DirectMessageProfileButton';
 import HeightSpacer from '../reusable/HeightSpacer';
+import api from '../../utilities/backendApi'; 
+import { getFileDownloadUrl } from '../../context/UserFunctionsHelper';
 
 const UserProfileModal = ({ visible, onClose, userId }) => {
   const [userProfile, setUserProfile] = useState(null);
@@ -28,6 +30,9 @@ const UserProfileModal = ({ visible, onClose, userId }) => {
   const [requestSending, setRequestSending] = useState(false);
   const [isFriend, setIsFriend] = useState(false);
   const [requestSent, setRequestSent] = useState(false);
+  const [imageError, setImageError] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState(null);
+  const [avatarLoading, setAvatarLoading] = useState(false);
   
   const { state: userState } = useContext(UserContext);
   const { 
@@ -60,33 +65,93 @@ const UserProfileModal = ({ visible, onClose, userId }) => {
     }
   }, [visible, userId, friendsState.friends, friendsState.friendRequests]);
 
+  // Load avatar URL when userProfile changes
   useEffect(() => {
-    // Mock fetch user profile data
-    // In a real implementation, you would fetch this from your backend
-    if (visible && userId) {
-      setLoading(true);
-      
-      // Simulate API call
-      setTimeout(() => {
-        // This is mock data - replace with actual API call
-        const mockUserData = {
-          id: userId,
-          username: 'ScolioUser' + userId.substring(0, 4),
-          avatar: `https://randomuser.me/api/portraits/${Math.random() > 0.5 ? 'women' : 'men'}/${Math.floor(Math.random() * 100)}.jpg`,
-          joinDate: new Date().toISOString(),
-          bio: 'Hi there! I\'m using the Scolio app to track my progress.',
-          treatmentStage: Math.random() > 0.5 ? 'Pre-surgery' : 'Post-surgery',
-          stats: {
-            posts: Math.floor(Math.random() * 50),
-            comments: Math.floor(Math.random() * 100),
-            streaks: Math.floor(Math.random() * 30)
-          }
-        };
+    const loadAvatarUrl = async () => {
+      if (!userProfile?.avatar) {
+        setAvatarUrl(null);
+        return;
+      }
+
+      try {
+        setAvatarLoading(true);
+        setImageError(false);
         
-        setUserProfile(mockUserData);
+        console.log('Loading avatar for path:', userProfile.avatar);
+        const url = await getFileDownloadUrl(userProfile.avatar);
+        
+        if (url) {
+          console.log('Avatar URL loaded successfully:', url);
+          setAvatarUrl(url);
+        } else {
+          console.log('No avatar URL returned, using default');
+          setAvatarUrl(null);
+          setImageError(true);
+        }
+      } catch (error) {
+        console.log('Error loading avatar URL:', error);
+        setAvatarUrl(null);
+        setImageError(true);
+      } finally {
+        setAvatarLoading(false);
+      }
+    };
+
+    loadAvatarUrl();
+  }, [userProfile?.avatar]);
+
+  // Fetch user profile data from API
+  useEffect(() => {
+    const fetchUserProfile = async () => {
+      if (!visible || !userId) {
+        return;
+      }
+
+      setLoading(true);
+      setError(null);
+      setImageError(false);
+      setAvatarUrl(null); // Reset avatar state
+
+      try {
+        console.log(`Fetching profile for user: ${userId}`);
+        const response = await api.get(`/forum/profile/${userId}`);
+
+        console.log(response.data)
+        
+        if (response.data) {
+          console.log('User profile fetched successfully:', response.data);
+          setUserProfile(response.data);
+        } else {
+          throw new Error('No profile data received');
+        }
+      } catch (err) {
+        console.error('Error fetching user profile:', err);
+        
+        // Handle different types of errors
+        if (err.response) {
+          const status = err.response.status;
+          const message = err.response.data?.error || 'Unknown error';
+          
+          if (status === 404) {
+            setError('User not found');
+          } else if (status === 401) {
+            setError('Authentication required');
+          } else if (status === 403) {
+            setError('Access denied');
+          } else {
+            setError(`Error: ${message}`);
+          }
+        } else if (err.request) {
+          setError('Network error - please check your connection');
+        } else {
+          setError('Failed to load profile');
+        }
+      } finally {
         setLoading(false);
-      }, 1000);
-    }
+      }
+    };
+
+    fetchUserProfile();
   }, [visible, userId]);
   
   const formatDate = (dateString) => {
@@ -145,6 +210,44 @@ const UserProfileModal = ({ visible, onClose, userId }) => {
     }
   };
 
+  const handleImageError = () => {
+    console.log('Image failed to load, showing fallback');
+    setImageError(true);
+  };
+
+  const renderProfileImage = () => {
+    // Show loading spinner while avatar is being loaded
+    if (avatarLoading) {
+      return (
+        <View style={[styles.profileAvatar, styles.defaultAvatarContainer]}>
+          <ActivityIndicator size="small" color={COLORS.gradientPink} />
+        </View>
+      );
+    }
+
+    // Show default avatar if no image URL, if image failed to load, or if we couldn't get the URL
+    if (!avatarUrl || imageError) {
+      return (
+        <View style={[styles.profileAvatar, styles.defaultAvatarContainer]}>
+          <Ionicons 
+            name="person" 
+            size={moderateScale(50)} 
+            color={COLORS.lightGray} 
+          />
+        </View>
+      );
+    }
+
+    return (
+      <Image 
+        source={{ uri: avatarUrl }} 
+        style={styles.profileAvatar}
+        onError={handleImageError}
+        onLoadStart={() => setImageError(false)}
+      />
+    );
+  };
+
   if (!visible) return null;
 
   return (
@@ -182,6 +285,7 @@ const UserProfileModal = ({ visible, onClose, userId }) => {
                 <Ionicons name="alert-circle" size={moderateScale(40)} color={COLORS.gradientPink} />
                 <HeightSpacer height={10} />
                 <Text style={styles.errorText}>Failed to load profile</Text>
+                <Text style={styles.errorText}>{error}</Text>
               </View>
             ) : (
               <ScrollView 
@@ -193,10 +297,7 @@ const UserProfileModal = ({ visible, onClose, userId }) => {
               >
                 {/* Profile Header Section */}
                 <View style={styles.profileHeader}>
-                  <Image 
-                    source={{ uri: userProfile.avatar }} 
-                    style={styles.profileAvatar} 
-                  />
+                  {renderProfileImage()}
                   <Text style={styles.username}>{userProfile.username}</Text>
                   <Text style={styles.joinDate}>Joined {formatDate(userProfile.joinDate)}</Text>
                   
@@ -338,6 +439,7 @@ const styles = StyleSheet.create({
     color: COLORS.gradientPink,
     fontSize: moderateScale(16),
     textAlign: 'center',
+    marginTop: verticalScale(5),
   },
   scrollView: {
     flex: 1,
@@ -355,6 +457,11 @@ const styles = StyleSheet.create({
     borderRadius: moderateScale(50),
     borderWidth: 3,
     borderColor: COLORS.gradientPurple,
+  },
+  defaultAvatarContainer: {
+    backgroundColor: COLORS.cardDark,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   username: {
     fontSize: moderateScale(22),
@@ -438,4 +545,4 @@ const styles = StyleSheet.create({
   }
 });
 
-export default UserProfileModal; 
+export default UserProfileModal;
