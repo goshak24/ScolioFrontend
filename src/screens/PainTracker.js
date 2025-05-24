@@ -39,11 +39,28 @@ const PainTracker = ({ navigation }) => {
 
   // Load all pain logs when component mounts
   useEffect(() => {
-    const currentMonth = new Date().toISOString().slice(0, 7);
-    loadPainLogs();
-    loadPainLogsForDate(currentHistoryDate);
-    dbLoadPainLogsForMonth(currentMonth);
-  }, []); 
+    const initializePainLogs = async () => {
+      try {
+        const currentMonth = new Date().toISOString().slice(0, 7);
+        
+        // Load from local storage first
+        await loadPainLogs();
+        
+        // Then load from database for the current month
+        await dbLoadPainLogsForMonth(currentMonth);
+        
+        console.log("Pain logs initialized");
+      } catch (error) {
+        console.error("Error initializing pain logs:", error);
+      }
+    };
+    
+    initializePainLogs();
+  }, []);
+
+  useEffect(() => { 
+    setHistoryLogs(state.painLogs);
+  }, [state.painLogs]);
   
   // Load pain logs for the selected date
   useEffect(() => {

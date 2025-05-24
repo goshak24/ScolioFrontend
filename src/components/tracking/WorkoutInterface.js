@@ -7,6 +7,7 @@ import HeightSpacer from '../../components/reusable/HeightSpacer';
 import { Context as UserContext } from '../../context/UserContext'; 
 import { Context as ActivityContext } from '../../context/ActivityContext';
 import StreakExtensionAnimation from '../StreakExtensionAnimation';
+import { getFormattedDate, getDateStringFromFirestoreTimestamp } from '../timeZoneHelpers'; 
 
 const WorkoutInterface = ({ workouts, weeklySchedule = [], customHeader = null }) => {
     const { updateStreak, logPhysio } = useContext(ActivityContext);
@@ -20,14 +21,10 @@ const WorkoutInterface = ({ workouts, weeklySchedule = [], customHeader = null }
     const [streakExtended, setStreakExtended] = useState(false);
     const streakUpdatedToday = useRef(false);
 
-    // Get today's date in YYYY-MM-DD format
-    const today = new Date().toISOString().split('T')[0];
+    const today = getFormattedDate();
     const lastStreakUpdate = user?.lastStreakUpdate;
 
-    // Convert Firestore timestamp to date string
-    const lastUpdateDateString = lastStreakUpdate ? 
-    new Date(lastStreakUpdate._seconds * 1000 + lastStreakUpdate._nanoseconds / 1000000)
-        .toISOString().split('T')[0] : null;
+    const lastUpdateDateString = getDateStringFromFirestoreTimestamp(lastStreakUpdate);
 
     // Check if streak was already updated today from UserContext
     const wasStreakUpdatedToday = lastUpdateDateString === today; 
