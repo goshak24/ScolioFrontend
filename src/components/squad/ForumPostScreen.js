@@ -41,7 +41,8 @@ const ForumPostScreen = ({ route, navigation }) => {
   
   // Safely extract post data with defaults
   const safePost = {
-    id: currentPost?.userId || "1",
+    postId: currentPost?.id || "1",
+    userId: currentPost?.userId || "1",
     username: currentPost?.username || "Anonymous",
     avatar: currentPost?.avatar || "https://randomuser.me/api/portraits/women/44.jpg",
     content: currentPost?.content || "No content available",
@@ -49,7 +50,7 @@ const ForumPostScreen = ({ route, navigation }) => {
     likes: currentPost?.likes || [],
     tags: currentPost?.tags || [],
     comments: currentPost?.comments || [] // Comments should always be an array
-  };
+  }; 
 
   const [comment, setComment] = useState("");
   const [isLiked, setIsLiked] = useState(false);
@@ -92,7 +93,7 @@ const ForumPostScreen = ({ route, navigation }) => {
     const userId = getUserId();
     const username = UserState.user?.username || "Anonymous";
     
-    console.log("Handling comment!", safePost.id, userId, username, comment); 
+    console.log("Handling comment!", safePost.postId, userId, username, comment); 
     
     if (!userId) {
       Alert.alert(
@@ -104,7 +105,7 @@ const ForumPostScreen = ({ route, navigation }) => {
     }
     
     try {
-      await addComment(safePost.id, userId, username, comment);
+      await addComment(safePost.postId, userId, username, comment);
       setComment(""); 
     } catch (err) {
       console.error("Error adding comment:", err);
@@ -126,9 +127,9 @@ const ForumPostScreen = ({ route, navigation }) => {
     
     try {
       if (isLiked) {
-        await unlikePost(safePost.id, userId);
+        await unlikePost(safePost.postId, userId);
       } else {
-        await likePost(safePost.id, userId);
+        await likePost(safePost.postId, userId);
       }
     } catch (err) {
       console.error("Error updating like status:", err);
@@ -136,7 +137,7 @@ const ForumPostScreen = ({ route, navigation }) => {
   };
 
   const openUserProfile = (userId) => {
-    setSelectedUserId(userId || safePost.id); // Use post ID as fallback if no user ID
+    setSelectedUserId(userId || safePost.userId); // Use post ID as fallback if no user ID
     setProfileModalVisible(true);
   };
 
