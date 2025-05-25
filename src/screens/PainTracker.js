@@ -1,4 +1,4 @@
-import { SafeAreaView, StyleSheet, Text, View, ScrollView, StatusBar, TouchableOpacity, Platform, Alert } from 'react-native';
+import { SafeAreaView, StyleSheet, Text, View, ScrollView, StatusBar, TouchableOpacity, Platform, Alert, ActivityIndicator } from 'react-native';
 import React, { useState, useCallback, useEffect, useContext } from 'react';
 import { Context as PainTrackingContext } from '../context/PainTrackingContext';
 import { moderateScale } from 'react-native-size-matters';
@@ -36,11 +36,16 @@ const PainTracker = ({ navigation }) => {
   const [currentHistoryDate, setCurrentHistoryDate] = useState(new Date().toISOString().split('T')[0]);
   const [historyLogs, setHistoryLogs] = useState([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [dataInitialized, setDataInitialized] = useState(false);
+
+  // Tab navigation state
+  const [activeTab, setActiveTab] = useState('track');
 
   // Load all pain logs when component mounts
   useEffect(() => {
     const initializePainLogs = async () => {
       try {
+        setIsLoadingHistory(true);
         const currentMonth = new Date().toISOString().slice(0, 7);
         
         // Load from local storage first
@@ -49,39 +54,37 @@ const PainTracker = ({ navigation }) => {
         // Then load from database for the current month
         await dbLoadPainLogsForMonth(currentMonth);
         
+        setDataInitialized(true);
         console.log("Pain logs initialized");
       } catch (error) {
         console.error("Error initializing pain logs:", error);
+        setDataInitialized(true); // Set to true even on error to prevent infinite loading
+      } finally {
+        setIsLoadingHistory(false);
       }
     };
     
     initializePainLogs();
   }, []);
 
-  useEffect(() => { 
-    setHistoryLogs(state.painLogs);
-  }, [state.painLogs]);
-  
-  // Load pain logs for the selected date
+  // Load pain logs for the selected date when data is ready or date changes
   useEffect(() => {
-    if (activeTab === 'history') {
+    if (dataInitialized && activeTab === 'history') {
       loadPainLogsForDate(currentHistoryDate);
     }
-  }, [activeTab, currentHistoryDate, state.painLogs]);
+  }, [dataInitialized, activeTab, currentHistoryDate, state.painLogs]);
 
   // Function to load pain logs for a specific date
   const loadPainLogsForDate = (date) => {
-    setIsLoadingHistory(true);
     try {
       // Use the selector function with the current state
       const getLogsByDate = getPainLogsByDate(date);
       const logs = getLogsByDate(state);
       setHistoryLogs(logs);
+      console.log(`Loaded ${logs.length} logs for date: ${date}`);
     } catch (err) {
       console.error('Error loading pain logs:', err);
       Alert.alert('Error', 'Failed to load pain history');
-    } finally {
-      setIsLoadingHistory(false);
     }
   };
 
@@ -122,9 +125,6 @@ const PainTracker = ({ navigation }) => {
     }
   };
 
-  // Tab navigation state
-  const [activeTab, setActiveTab] = useState('track');
-  
   // Function to handle saving pain data using the context
   const handleSavePainData = useCallback(async () => {
     if (selectedAreas.length === 0) {
@@ -300,7 +300,7 @@ const PainTracker = ({ navigation }) => {
                   onNext={goToNextDay}
                 />
                 
-                {isLoadingHistory ? (
+                {(isLoadingHistory || !dataInitialized) ? (
                   <View style={styles.loadingContainer}>
                     <ActivityIndicator size="large" color={COLORS.accentOrange} />
                     <Text style={styles.loadingText}>Loading pain history...</Text>

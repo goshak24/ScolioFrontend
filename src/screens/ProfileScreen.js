@@ -4,6 +4,7 @@ import { Context as AuthContext } from '../context/AuthContext';
 import { Context as UserContext } from '../context/UserContext'; 
 import { Context as ActivityContext } from '../context/ActivityContext';
 import { Context as PainTrackingContext } from '../context/PainTrackingContext';
+import { Context as FriendsContext } from '../context/FriendsContext';
 import { navigate, goBack } from '../components/navigation/navigationRef';
 import COLORS from '../constants/COLORS';
 import { moderateScale, verticalScale } from 'react-native-size-matters';
@@ -12,7 +13,7 @@ import BackButton from '../components/reusable/BackButton';
 import { LinearGradient } from 'expo-linear-gradient';
 import HeightSpacer from '../components/reusable/HeightSpacer';
 import Constants from 'expo-constants';
-import * as ImagePicker from 'expo-image-picker';
+import * as ImagePicker from 'expo-image-picker'; 
 
 // Import profile components
 import ProfileHeader from '../components/profile/ProfileHeader';
@@ -24,6 +25,7 @@ const ProfileScreen = () => {
   const { state: { user }, resetUser, updateUser, deleteUserAccountData, updateProfilePicture } = useContext(UserContext); 
   const { resetActivity } = useContext(ActivityContext);
   const { clearPainLogs } = useContext(PainTrackingContext);
+  const { clearFriendsCache } = useContext(FriendsContext);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   
@@ -90,6 +92,7 @@ const ProfileScreen = () => {
                       await resetActivity();             // Await resetActivity
                       await logout();              // Clear auth tokens 
                       await clearPainLogs();       // Clears pain logs from AsyncStorage 
+                      await clearFriendsCache(); 
                       navigate("Auth");            // Redirect to login
                     } catch (err) {
                       console.error("Account deletion failed:", err);
