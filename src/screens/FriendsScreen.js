@@ -36,6 +36,20 @@ const FriendsScreen = ({ navigation }) => {
     const [activeTab, setActiveTab] = useState('friends'); // 'friends' or 'requests'
     const [profileModalVisible, setProfileModalVisible] = useState(false);
     const [selectedUserId, setSelectedUserId] = useState(null);
+    
+    // Local state to handle optimistic updates
+    const [localFriends, setLocalFriends] = useState([]);
+    const [localRequests, setLocalRequests] = useState([]);
+    const [processingRequests, setProcessingRequests] = useState(new Set());
+
+    // Update local state when context state changes
+    useEffect(() => {
+        setLocalFriends(friendsState.friends || []);
+    }, [friendsState.friends]);
+
+    useEffect(() => {
+        setLocalRequests(friendsState.friendRequests || []);
+    }, [friendsState.friendRequests]);
 
     // Fetch friends and requests on mount - Fixed dependency array
     useEffect(() => {
@@ -80,67 +94,122 @@ const FriendsScreen = ({ navigation }) => {
     }, [getFriends, getFriendRequests]);
 
     // Filter friend requests to show only received ones for the requests tab
-    const incomingRequests = friendsState.friendRequests.filter(
-        request => request.type === 'received'
+    const incomingRequests = localRequests.filter(
+        request => request.type === 'received' && !processingRequests.has(request.id)
     );
 
-    // Handle accepting a friend request
+    // Handle accepting a friend request with optimistic updates
     const handleAcceptRequest = async (requestId) => {
+        // Find the request being accepted
+        const request = localRequests.find(r => r.id === requestId);
+        if (!request) return;
+
+        // Add to processing set to hide from UI immediately
+        setProcessingRequests(prev => new Set([...prev, requestId]));
+
+        // Optimistically add to friends list
+        const newFriend = {
+            id: request.user.id,
+            username: request.user.username,
+            avatar: request.user.avatar,
+            treatmentStage: request.user.treatmentStage,
+            ...request.user
+        };
+        
+        setLocalFriends(prev => [...prev, newFriend]);
+
         try {
             const result = await respondToFriendRequest(requestId, 'accept');
             
-            if (typeof result === 'function') {
-                // Handle the case where result is a function (legacy support)
-                const actualResult = result(friendsState);
-                if (actualResult.success) {
-                    Alert.alert("Success", "Friend request accepted!");
-                } else {
-                    Alert.alert("Error", actualResult.error || "Failed to accept request");
-                }
-            } else if (result.success) {
-                Alert.alert(
-                    "Success", 
-                    result.message || "Friend request accepted!",
-                    [{ text: "OK" }]
-                );
-            } else {
-                Alert.alert("Error", result.error || "Failed to accept request");
-            }
-        } catch (error) {
-            console.error('Error accepting friend request:', error);
-            Alert.alert("Error", "An unexpected error occurred");
-        }
-    };
-
-    // Handle rejecting a friend request
-    const handleRejectRequest = async (requestId) => {
-        try {
-            const result = await respondToFriendRequest(requestId, 'reject');
+            let success = false;
+            let message = '';
             
             if (typeof result === 'function') {
                 // Handle the case where result is a function (legacy support)
                 const actualResult = result(friendsState);
-                if (actualResult.success) {
-                    Alert.alert("Success", "Friend request rejected");
-                } else {
-                    Alert.alert("Error", actualResult.error || "Failed to reject request");
-                }
-            } else if (result.success) {
-                Alert.alert(
-                    "Success", 
-                    result.message || "Friend request rejected",
-                    [{ text: "OK" }]
-                );
+                success = actualResult.success;
+                message = actualResult.message || actualResult.error;
             } else {
-                Alert.alert("Error", result.error || "Failed to reject request");
+                success = result.success;
+                message = result.message || result.error;
+            }
+
+            if (success) {
+                // Success - the optimistic update should be reflected in the context state soon
+                Alert.alert("Success", message || "Friend request accepted!");
+                
+                // Force refresh to ensure we have the latest data
+                setTimeout(() => {
+                    getFriends(true);
+                    getFriendRequests(true);
+                }, 500);
+                
+            } else {
+                // Failure - revert optimistic updates
+                setLocalFriends(prev => prev.filter(f => f.id !== request.user.id));
+                Alert.alert("Error", message || "Failed to accept request");
+            }
+        } catch (error) {
+            console.error('Error accepting friend request:', error);
+            // Revert optimistic updates on error
+            setLocalFriends(prev => prev.filter(f => f.id !== request.user.id));
+            Alert.alert("Error", "An unexpected error occurred");
+        } finally {
+            // Remove from processing set
+            setProcessingRequests(prev => {
+                const newSet = new Set(prev);
+                newSet.delete(requestId);
+                return newSet;
+            });
+        }
+    };
+
+    // Handle rejecting a friend request with optimistic updates
+    const handleRejectRequest = async (requestId) => {
+        // Add to processing set to hide from UI immediately
+        setProcessingRequests(prev => new Set([...prev, requestId]));
+
+        try {
+            const result = await respondToFriendRequest(requestId, 'reject');
+            
+            let success = false;
+            let message = '';
+            
+            if (typeof result === 'function') {
+                // Handle the case where result is a function (legacy support)
+                const actualResult = result(friendsState);
+                success = actualResult.success;
+                message = actualResult.message || actualResult.error;
+            } else {
+                success = result.success;
+                message = result.message || result.error;
+            }
+
+            if (success) {
+                Alert.alert("Success", message || "Friend request rejected");
+                
+                // Force refresh to ensure we have the latest data
+                setTimeout(() => {
+                    getFriendRequests(true);
+                }, 500);
+                
+            } else {
+                Alert.alert("Error", message || "Failed to reject request");
             }
         } catch (error) {
             console.error('Error rejecting friend request:', error);
             Alert.alert("Error", "An unexpected error occurred");
+        } finally {
+            // Remove from processing set (this will make it reappear if there was an error)
+            setProcessingRequests(prev => {
+                const newSet = new Set(prev);
+                newSet.delete(requestId);
+                return newSet;
+            });
         }
     };
 
-    // Handle removing a friend
+    // Handle removing a friend with optimistic updates
     const handleRemoveFriend = (friendId, friendName) => {
         Alert.alert(
             "Remove Friend",
@@ -154,6 +223,10 @@ const FriendsScreen = ({ navigation }) => {
                     text: "Remove",
                     style: "destructive",
                     onPress: async () => {
+                        // Optimistically remove from local state
+                        const originalFriends = [...localFriends];
+                        setLocalFriends(prev => prev.filter(f => f.id !== friendId));
+
                         try {
                             const result = await removeFriend(friendId);
                             if (result.success) {
@@ -162,11 +235,21 @@ const FriendsScreen = ({ navigation }) => {
                                     result.message || "Friend removed",
                                     [{ text: "OK" }]
                                 );
+                                
+                                // Force refresh to ensure consistency
+                                setTimeout(() => {
+                                    getFriends(true);
+                                }, 500);
+                                
                             } else {
+                                // Revert optimistic update on failure
+                                setLocalFriends(originalFriends);
                                 Alert.alert("Error", result.error || "Failed to remove friend");
                             }
                         } catch (error) {
                             console.error('Error removing friend:', error);
+                            // Revert optimistic update on error
+                            setLocalFriends(originalFriends);
                             Alert.alert("Error", "An unexpected error occurred");
                         }
                     }
@@ -212,19 +295,29 @@ const FriendsScreen = ({ navigation }) => {
                     <TouchableOpacity 
                         style={[styles.requestActionButton, styles.acceptButton]}
                         onPress={() => handleAcceptRequest(request.id)}
+                        disabled={processingRequests.has(request.id)}
                     >
-                        <Ionicons name="checkmark" size={moderateScale(18)} color={COLORS.white} />
+                        {processingRequests.has(request.id) ? (
+                            <ActivityIndicator size="small" color={COLORS.white} />
+                        ) : (
+                            <Ionicons name="checkmark" size={moderateScale(18)} color={COLORS.white} />
+                        )}
                     </TouchableOpacity>
                     <TouchableOpacity 
                         style={[styles.requestActionButton, styles.rejectButton]}
                         onPress={() => handleRejectRequest(request.id)}
+                        disabled={processingRequests.has(request.id)}
                     >
-                        <Ionicons name="close" size={moderateScale(18)} color={COLORS.white} />
+                        {processingRequests.has(request.id) ? (
+                            <ActivityIndicator size="small" color={COLORS.white} />
+                        ) : (
+                            <Ionicons name="close" size={moderateScale(18)} color={COLORS.white} />
+                        )}
                     </TouchableOpacity>
                 </View>
             </View>
         );
-    }, [openUserProfile, handleAcceptRequest, handleRejectRequest]);
+    }, [openUserProfile, handleAcceptRequest, handleRejectRequest, processingRequests]);
 
     // Render a friend item
     const renderFriendItem = useCallback((friend) => {
@@ -287,7 +380,7 @@ const FriendsScreen = ({ navigation }) => {
                     onPress={() => setActiveTab('friends')}
                 >
                     <Text style={[styles.tabText, activeTab === 'friends' && styles.activeTabText]}>
-                        My Friends
+                        My Friends ({localFriends.length})
                     </Text>
                 </TouchableOpacity>
                 <TouchableOpacity 
@@ -319,7 +412,7 @@ const FriendsScreen = ({ navigation }) => {
                         />
                     }
                 >
-                    {friendsState.friends.length === 0 ? (
+                    {localFriends.length === 0 ? (
                         <View style={styles.emptyContainer}>
                             <Ionicons name="people" size={moderateScale(50)} color={COLORS.lightGray} />
                             <HeightSpacer height={10} />
@@ -328,7 +421,7 @@ const FriendsScreen = ({ navigation }) => {
                             <Text style={styles.emptySubtext}>Connect with others in the community!</Text>
                         </View>
                     ) : (
-                        friendsState.friends.map(renderFriendItem)
+                        localFriends.map(renderFriendItem)
                     )}
                 </ScrollView>
             ) : (
