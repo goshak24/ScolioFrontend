@@ -53,7 +53,7 @@ const Squad = () => {
   const initialDataLoaded = useRef({
     Forums: false,
     Messages: false
-  });
+  }); 
   
   // Track when the screen was last focused and the last time we fetched forum posts
   const lastFocusTime = useRef(new Date().getTime());

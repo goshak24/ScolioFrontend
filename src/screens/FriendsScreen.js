@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useContext } from 'react';
+import React, { useEffect, useState, useContext, useCallback } from 'react';
 import { 
     View, 
     Text, 
@@ -9,7 +9,8 @@ import {
     ActivityIndicator,
     Alert,
     SafeAreaView, 
-    Platform
+    Platform,
+    RefreshControl
 } from 'react-native';
 import { moderateScale, verticalScale } from 'react-native-size-matters';
 import { Ionicons } from '@expo/vector-icons';
@@ -31,23 +32,52 @@ const FriendsScreen = ({ navigation }) => {
     } = useContext(FriendsContext);
     
     const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
     const [activeTab, setActiveTab] = useState('friends'); // 'friends' or 'requests'
     const [profileModalVisible, setProfileModalVisible] = useState(false);
     const [selectedUserId, setSelectedUserId] = useState(null);
 
-    // Fetch friends and requests on mount
+    // Fetch friends and requests on mount - Fixed dependency array
     useEffect(() => {
-        const fetchData = async () => {
-            setLoading(true);
-            await Promise.all([
-                getFriends(),
-                getFriendRequests()
-            ]);
-            setLoading(false);
+        const loadInitialData = async () => {
+            try {
+                setLoading(true);
+                
+                // Fetch both friends and requests in parallel
+                await Promise.all([
+                    getFriends(false),
+                    getFriendRequests(false)
+                ]);
+                
+            } catch (error) {
+                console.error('Error loading friends data:', error);
+                Alert.alert("Error", "Failed to load friends data");
+            } finally {
+                setLoading(false);
+            }
         };
 
-        fetchData();
-    }, []);
+        loadInitialData();
+    }, []); // Empty dependency array - only run on mount
+
+    // Separate function for refresh
+    const handleRefresh = useCallback(async () => {
+        try {
+            setRefreshing(true);
+            
+            // Force refresh both friends and requests
+            await Promise.all([
+                getFriends(true),
+                getFriendRequests(true)
+            ]);
+            
+        } catch (error) {
+            console.error('Error refreshing friends data:', error);
+            Alert.alert("Error", "Failed to refresh friends data");
+        } finally {
+            setRefreshing(false);
+        }
+    }, [getFriends, getFriendRequests]);
 
     // Filter friend requests to show only received ones for the requests tab
     const incomingRequests = friendsState.friendRequests.filter(
@@ -58,12 +88,26 @@ const FriendsScreen = ({ navigation }) => {
     const handleAcceptRequest = async (requestId) => {
         try {
             const result = await respondToFriendRequest(requestId, 'accept');
-            if (result.success) {
-                Alert.alert("Success", "Friend request accepted!");
+            
+            if (typeof result === 'function') {
+                // Handle the case where result is a function (legacy support)
+                const actualResult = result(friendsState);
+                if (actualResult.success) {
+                    Alert.alert("Success", "Friend request accepted!");
+                } else {
+                    Alert.alert("Error", actualResult.error || "Failed to accept request");
+                }
+            } else if (result.success) {
+                Alert.alert(
+                    "Success", 
+                    result.message || "Friend request accepted!",
+                    [{ text: "OK" }]
+                );
             } else {
                 Alert.alert("Error", result.error || "Failed to accept request");
             }
         } catch (error) {
+            console.error('Error accepting friend request:', error);
             Alert.alert("Error", "An unexpected error occurred");
         }
     };
@@ -72,12 +116,26 @@ const FriendsScreen = ({ navigation }) => {
     const handleRejectRequest = async (requestId) => {
         try {
             const result = await respondToFriendRequest(requestId, 'reject');
-            if (result.success) {
-                Alert.alert("Success", "Friend request rejected");
+            
+            if (typeof result === 'function') {
+                // Handle the case where result is a function (legacy support)
+                const actualResult = result(friendsState);
+                if (actualResult.success) {
+                    Alert.alert("Success", "Friend request rejected");
+                } else {
+                    Alert.alert("Error", actualResult.error || "Failed to reject request");
+                }
+            } else if (result.success) {
+                Alert.alert(
+                    "Success", 
+                    result.message || "Friend request rejected",
+                    [{ text: "OK" }]
+                );
             } else {
                 Alert.alert("Error", result.error || "Failed to reject request");
             }
         } catch (error) {
+            console.error('Error rejecting friend request:', error);
             Alert.alert("Error", "An unexpected error occurred");
         }
     };
@@ -99,11 +157,16 @@ const FriendsScreen = ({ navigation }) => {
                         try {
                             const result = await removeFriend(friendId);
                             if (result.success) {
-                                Alert.alert("Success", "Friend removed");
+                                Alert.alert(
+                                    "Success", 
+                                    result.message || "Friend removed",
+                                    [{ text: "OK" }]
+                                );
                             } else {
                                 Alert.alert("Error", result.error || "Failed to remove friend");
                             }
                         } catch (error) {
+                            console.error('Error removing friend:', error);
                             Alert.alert("Error", "An unexpected error occurred");
                         }
                     }
@@ -112,13 +175,13 @@ const FriendsScreen = ({ navigation }) => {
         );
     };
 
-    const openUserProfile = (userId) => {
+    const openUserProfile = useCallback((userId) => {
         setSelectedUserId(userId);
         setProfileModalVisible(true);
-    };
+    }, []); 
 
     // Render a friend request item
-    const renderRequestItem = (request) => {
+    const renderRequestItem = useCallback((request) => {
         return (
             <View key={request.id} style={styles.requestCard}>
                 <TouchableOpacity 
@@ -126,13 +189,24 @@ const FriendsScreen = ({ navigation }) => {
                     onPress={() => openUserProfile(request.user.id)}
                 >
                     <Image 
-                        source={{ uri: request.user.avatar || 'https://randomuser.me/api/portraits/lego/1.jpg' }} 
+                        source={{ 
+                            uri: request.user.avatar || 'https://randomuser.me/api/portraits/lego/1.jpg' 
+                        }} 
                         style={styles.requestAvatar} 
                     />
                 </TouchableOpacity>
                 <View style={styles.requestInfo}>
-                    <Text style={styles.requestUsername}>{request.user.username || 'Unknown User'}</Text>
+                    <Text style={styles.requestUsername}>
+                        {request.user.username || 'Unknown User'}
+                    </Text>
                     <Text style={styles.requestTime}>Wants to be your friend</Text>
+                    {request.user.treatmentStage && (
+                        <View style={styles.treatmentBadgeSmall}>
+                            <Text style={styles.treatmentTextSmall}>
+                                {request.user.treatmentStage}
+                            </Text>
+                        </View>
+                    )}
                 </View>
                 <View style={styles.requestActions}>
                     <TouchableOpacity 
@@ -150,10 +224,10 @@ const FriendsScreen = ({ navigation }) => {
                 </View>
             </View>
         );
-    };
+    }, [openUserProfile, handleAcceptRequest, handleRejectRequest]);
 
     // Render a friend item
-    const renderFriendItem = (friend) => {
+    const renderFriendItem = useCallback((friend) => {
         return (
             <TouchableOpacity 
                 key={friend.id} 
@@ -161,11 +235,15 @@ const FriendsScreen = ({ navigation }) => {
                 onPress={() => openUserProfile(friend.id)}
             >
                 <Image 
-                    source={{ uri: friend.avatar || 'https://randomuser.me/api/portraits/lego/1.jpg' }} 
+                    source={{ 
+                        uri: friend.avatar || 'https://randomuser.me/api/portraits/lego/1.jpg' 
+                    }} 
                     style={styles.friendAvatar} 
                 />
                 <View style={styles.friendInfo}>
-                    <Text style={styles.friendUsername}>{friend.username || 'Unknown User'}</Text>
+                    <Text style={styles.friendUsername}>
+                        {friend.username || 'Unknown User'}
+                    </Text>
                     {friend.treatmentStage && (
                         <View style={styles.treatmentBadge}>
                             <Text style={styles.treatmentText}>{friend.treatmentStage}</Text>
@@ -176,6 +254,7 @@ const FriendsScreen = ({ navigation }) => {
                     <DirectMessageButton 
                         user={friend} 
                         iconSize={16}
+                        style={styles.messageButton}
                     />
                     <TouchableOpacity 
                         style={styles.friendMoreButton}
@@ -186,7 +265,7 @@ const FriendsScreen = ({ navigation }) => {
                 </View>
             </TouchableOpacity>
         );
-    };
+    }, [openUserProfile, handleRemoveFriend]);
 
     return (
         <SafeAreaView style={styles.container}>
@@ -231,6 +310,14 @@ const FriendsScreen = ({ navigation }) => {
                     style={styles.content}
                     contentContainerStyle={styles.contentContainer}
                     showsVerticalScrollIndicator={false}
+                    refreshControl={
+                        <RefreshControl
+                            refreshing={refreshing}
+                            onRefresh={handleRefresh}
+                            tintColor={COLORS.gradientPink}
+                            colors={[COLORS.gradientPink]}
+                        />
+                    }
                 >
                     {friendsState.friends.length === 0 ? (
                         <View style={styles.emptyContainer}>
@@ -249,6 +336,14 @@ const FriendsScreen = ({ navigation }) => {
                     style={styles.content}
                     contentContainerStyle={styles.contentContainer}
                     showsVerticalScrollIndicator={false}
+                    refreshControl={
+                        <RefreshControl
+                            refreshing={refreshing}
+                            onRefresh={handleRefresh}
+                            tintColor={COLORS.gradientPink}
+                            colors={[COLORS.gradientPink]}
+                        />
+                    }
                 >
                     {incomingRequests.length === 0 ? (
                         <View style={styles.emptyContainer}>
@@ -422,9 +517,21 @@ const styles = StyleSheet.create({
         borderRadius: moderateScale(4),
         alignSelf: 'flex-start',
     },
+    treatmentBadgeSmall: {
+        backgroundColor: COLORS.badgeBackground,
+        paddingHorizontal: moderateScale(6),
+        paddingVertical: moderateScale(2),
+        borderRadius: moderateScale(3),
+        alignSelf: 'flex-start',
+        marginTop: moderateScale(4),
+    },
     treatmentText: {
         color: COLORS.white,
         fontSize: moderateScale(10),
+    },
+    treatmentTextSmall: {
+        color: COLORS.white,
+        fontSize: moderateScale(9),
     },
     friendActions: {
         flexDirection: 'row',
@@ -436,7 +543,11 @@ const styles = StyleSheet.create({
         borderRadius: moderateScale(18),
         justifyContent: 'center',
         alignItems: 'center',
+        marginLeft: moderateScale(8),
+    },
+    messageButton: {
+        marginRight: moderateScale(5),
     },
 });
 
-export default FriendsScreen; 
+export default FriendsScreen;

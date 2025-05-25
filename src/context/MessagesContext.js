@@ -613,15 +613,15 @@ const setupMessageListener = (dispatch, getState) => async (conversationId, user
     
     // Check if there's already an active listener for this conversation
     if (activeListeners[conversationId]) {
-      console.log(`♻️ Reusing existing listener for conversation ${conversationId}`);
+      console.log(`♻️ Reusing existing listener for conversation`);
       
       // Return a cleanup function that will properly clear this listener
       return () => {
-        console.log(`❌ Stopping listener for conversation ${conversationId}`);
+        console.log(`❌ Stopping listener for conversation`);
         if (activeListeners[conversationId]) {
           activeListeners[conversationId]();
           delete activeListeners[conversationId];
-          console.log(`✅ Listener removed for ${conversationId}`);
+          console.log(`✅ Listener removed`);
         }
       };
     }
@@ -629,7 +629,7 @@ const setupMessageListener = (dispatch, getState) => async (conversationId, user
     try {
       // Instead of using the firestore listener directly, use REST API calls on an interval
       // This avoids the Firestore permissions issues while still providing updates
-      console.log(`🔄 Setting up polling-based message updates for conversation: ${conversationId}`);
+      console.log(`🔄 Setting up polling-based message updates for conversation`);
       
       // Create a polling interval that fetches messages every 7.5 seconds
       const pollingInterval = setInterval(async () => {
@@ -639,7 +639,7 @@ const setupMessageListener = (dispatch, getState) => async (conversationId, user
             return;
           }
           
-          console.log(`📊 Polling for updates to conversation: ${conversationId}`);
+          console.log(`📊 Polling for updates to conversation`);
           
           // Fetch only the last 5 messages from the API
           const response = await api.get(`/messages/conversation/${otherUserId}?limit=3&offset=0`);
@@ -692,17 +692,17 @@ const setupMessageListener = (dispatch, getState) => async (conversationId, user
       
       // Store the clear interval function as our "unsubscribe"
       activeListeners[conversationId] = () => {
-        console.log(`⏹️ Stopping polling for conversation ${conversationId}`);
+        console.log(`⏹️ Stopping polling for conversation`);
         clearInterval(pollingInterval);
       };
       
       // Return the cleanup function
       return () => {
-        console.log(`❌ Stopping polling for conversation ${conversationId}`);
+        console.log(`❌ Stopping polling for conversation`);
         if (activeListeners[conversationId]) {
           activeListeners[conversationId]();
           delete activeListeners[conversationId];
-          console.log(`✅ Polling stopped for ${conversationId}`);
+          console.log(`✅ Polling stopped`);
         }
       };
       

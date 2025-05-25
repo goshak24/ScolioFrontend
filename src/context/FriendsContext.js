@@ -3,35 +3,75 @@ import api from "../utilities/backendApi";
 import userCache from "../utilities/userCache";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Cache keys
-const FRIENDS_CACHE_KEY = 'friends_data';
-const FRIEND_IDS_CACHE_KEY = 'friend_ids_data';  // New cache key for just the IDs
-const REQUESTS_CACHE_KEY = 'friend_requests_data';
+// Cache keys with versioning support
+const FRIENDS_CACHE_KEY = 'friends_data_v2';
+const FRIEND_IDS_CACHE_KEY = 'friend_ids_data_v2';
+const REQUESTS_CACHE_KEY = 'friend_requests_data_v2';
 const CACHE_EXPIRY = 24 * 60 * 60 * 1000; // 24 hours
 const CACHE_REFRESH_THRESHOLD = 20 * 60 * 60 * 1000; // 20 hours (stale-while-revalidate)
 
+// Enhanced reducer to handle username data
 const friendsReducer = (state, action) => {
   switch (action.type) {
     case "SET_FRIENDS":
       return { 
         ...state, 
-        friends: action.payload, 
+        friends: action.payload.friends || action.payload, 
+        friendsVersion: action.payload.version || state.friendsVersion,
         loading: false,
         error: null 
       };
     case "SET_FRIEND_IDS":
       return {
         ...state,
-        friendIds: action.payload,
+        friendIds: action.payload.friendIds || action.payload,
+        friendIdsVersion: action.payload.version || state.friendIdsVersion,
         loading: false,
         error: null
       }; 
     case "SET_FRIEND_REQUESTS":
       return { 
         ...state, 
-        friendRequests: action.payload, 
+        friendRequests: action.payload.requests || action.payload,
+        requestsVersion: action.payload.version || state.requestsVersion,
         loading: false,
         error: null 
+      };
+    case "UPDATE_FRIENDS_DELTA":
+      // Handle delta updates for friends
+      if (action.payload.unchanged) {
+        return {
+          ...state,
+          friendsVersion: action.payload.version,
+          loading: false
+        };
+      }
+      return {
+        ...state,
+        friends: action.payload.deltaUpdate ? 
+          [...state.friends, ...action.payload.friends] : 
+          action.payload.friends,
+        friendsVersion: action.payload.version,
+        loading: false,
+        error: null
+      };
+    case "UPDATE_REQUESTS_DELTA":
+      // Handle delta updates for requests
+      if (action.payload.unchanged) {
+        return {
+          ...state,
+          requestsVersion: action.payload.version,
+          loading: false
+        };
+      }
+      return {
+        ...state,
+        friendRequests: action.payload.deltaUpdate ? 
+          [...state.friendRequests, ...action.payload.requests] : 
+          action.payload.requests,
+        requestsVersion: action.payload.version,
+        loading: false,
+        error: null
       };
     case "ADD_SENT_REQUEST":
       return {
@@ -40,7 +80,12 @@ const friendsReducer = (state, action) => {
           ...state.friendRequests,
           {
             ...action.payload,
-            type: "sent"
+            type: "sent",
+            // Ensure we have username data
+            user: {
+              ...action.payload.user,
+              username: action.payload.user?.username || action.payload.receiverUsername || 'Unknown User'
+            }
           }
         ],
         loading: false,
@@ -80,29 +125,31 @@ const friendsReducer = (state, action) => {
   }
 };
 
-// Get only friend IDs (for optimized fetching)
+// Get only friend IDs (for optimized fetching with delta updates)
 const getFriendIds = (dispatch) => async (forceFetch = false) => {
   try {
     dispatch({ type: "SET_LOADING", payload: true });
+    
+    let storedVersion = null;
     
     // Try to use cached data first if not forcing refresh
     if (!forceFetch) {
       const cachedData = await AsyncStorage.getItem(FRIEND_IDS_CACHE_KEY);
       if (cachedData) {
         try {
-          const { friendIds, timestamp } = JSON.parse(cachedData);
+          const { friendIds, timestamp, version } = JSON.parse(cachedData);
           const now = Date.now();
+          storedVersion = version;
           
           // Use cache if it's less than expiry time
           if (now - timestamp < CACHE_EXPIRY) {
             console.log('Using cached friend IDs data');
-            dispatch({ type: "SET_FRIEND_IDS", payload: friendIds });
+            dispatch({ type: "SET_FRIEND_IDS", payload: { friendIds, version } });
             
-            // If the cache is stale (but still valid), refresh in background
+            // If the cache is stale (but still valid), refresh in background with delta
             if (now - timestamp > CACHE_REFRESH_THRESHOLD) {
-              console.log('Friend IDs cache is stale, refreshing in background');
-              // We'll continue to fetch fresh data but won't wait for it
-              fetchFreshFriendIds(dispatch);
+              console.log('Friend IDs cache is stale, checking for updates');
+              fetchFreshFriendIds(dispatch, version);
             }
             
             return friendIds;
@@ -113,7 +160,7 @@ const getFriendIds = (dispatch) => async (forceFetch = false) => {
       }
     }
     
-    return await fetchFreshFriendIds(dispatch);
+    return await fetchFreshFriendIds(dispatch, storedVersion);
   } catch (error) {
     console.error("Error fetching friend IDs:", error);
     dispatch({ 
@@ -126,20 +173,44 @@ const getFriendIds = (dispatch) => async (forceFetch = false) => {
   }
 };
 
-// Helper function to fetch fresh friend IDs
-const fetchFreshFriendIds = async (dispatch) => {
+// Helper function to fetch fresh friend IDs with delta support
+const fetchFreshFriendIds = async (dispatch, sinceVersion = null) => {
   try {
-    // Add a custom parameter to tell the backend we only want IDs
-    const response = await api.get("/friends?idsOnly=true");
-    const friendIds = response.data.friendIds || [];
+    // Build query params for delta updates
+    const params = new URLSearchParams({ idsOnly: 'true' });
+    if (sinceVersion) {
+      params.append('sinceVersion', sinceVersion.toString());
+    }
     
-    // Cache the friend IDs
+    const response = await api.get(`/friends?${params}`);
+    const data = response.data;
+    
+    // Handle delta response
+    if (data.unchanged) {
+      console.log('Friend IDs unchanged since last fetch');
+      return null; // No update needed
+    }
+    
+    const friendIds = data.friendIds || [];
+    const version = data.version;
+    
+    // Cache the friend IDs with version
     await AsyncStorage.setItem(FRIEND_IDS_CACHE_KEY, JSON.stringify({
       friendIds,
+      version,
       timestamp: Date.now()
     }));
     
-    dispatch({ type: "SET_FRIEND_IDS", payload: friendIds });
+    // Dispatch appropriate action based on delta or full update
+    if (data.deltaUpdate && sinceVersion) {
+      dispatch({ 
+        type: "UPDATE_FRIENDS_DELTA", 
+        payload: { friendIds, version, deltaUpdate: true } 
+      });
+    } else {
+      dispatch({ type: "SET_FRIEND_IDS", payload: { friendIds, version } });
+    }
+    
     return friendIds;
   } catch (error) {
     console.error("Error fetching fresh friend IDs:", error);
@@ -147,31 +218,34 @@ const fetchFreshFriendIds = async (dispatch) => {
   }
 };
 
-// Get friends list - optimized to use IDs first and lazy load full user data
+// Get friends list with delta updates support
 const getFriends = (dispatch) => async (forceFetch = false) => {
   try {
     dispatch({ type: "SET_LOADING", payload: true });
+    
+    let storedVersion = null;
     
     // Try to use cached data first if not forcing refresh
     if (!forceFetch) {
       const cachedData = await AsyncStorage.getItem(FRIENDS_CACHE_KEY);
       if (cachedData) {
         try {
-          const { friends, timestamp } = JSON.parse(cachedData);
+          const { friends, timestamp, version } = JSON.parse(cachedData);
           const now = Date.now();
+          storedVersion = version;
           
           // Use cache if it's less than expiry time
           if (now - timestamp < CACHE_EXPIRY) {
             console.log('Using cached friends data');
-            dispatch({ type: "SET_FRIENDS", payload: friends });
+            dispatch({ type: "SET_FRIENDS", payload: { friends, version } });
             
             // Also update user cache
             userCache.cacheUsers(friends);
             
-            // Only refresh in background if cache is very close to expiry
+            // Check for updates in background if cache is stale
             if (now - timestamp > CACHE_REFRESH_THRESHOLD) {
-              console.log('Friends cache nearing expiry, refreshing in background');
-              getFriendIds(dispatch)(true);
+              console.log('Friends cache is stale, checking for updates');
+              fetchFreshFriends(dispatch, version);
             }
             
             return friends;
@@ -182,31 +256,7 @@ const getFriends = (dispatch) => async (forceFetch = false) => {
       }
     }
     
-    // First get just the friend IDs (optimized read)
-    const friendIds = await getFriendIds(dispatch)(forceFetch);
-    
-    if (!friendIds || friendIds.length === 0) {
-      // No friends, return empty array
-      dispatch({ type: "SET_FRIENDS", payload: [] });
-      return [];
-    }
-    
-    // Then construct minimal friend objects with data from cache where possible
-    const friends = friendIds.map(id => {
-      const cachedUser = userCache.getCachedUser(id);
-      return cachedUser || { id, username: "Loading...", avatar: null };
-    });
-    
-    // Update state with what we have so far
-    dispatch({ type: "SET_FRIENDS", payload: friends });
-    
-    // Cache the friends data with what we have
-    await AsyncStorage.setItem(FRIENDS_CACHE_KEY, JSON.stringify({
-      friends,
-      timestamp: Date.now()
-    }));
-    
-    return friends;
+    return await fetchFreshFriends(dispatch, storedVersion);
   } catch (error) {
     console.error("Error fetching friends:", error);
     dispatch({ 
@@ -219,9 +269,56 @@ const getFriends = (dispatch) => async (forceFetch = false) => {
   }
 };
 
+// Helper function to fetch fresh friends data with delta support
+const fetchFreshFriends = async (dispatch, sinceVersion = null) => {
+  try {
+    // Build query params for delta updates
+    const params = new URLSearchParams();
+    if (sinceVersion) {
+      params.append('sinceVersion', sinceVersion.toString());
+    }
+    
+    const response = await api.get(`/friends?${params}`);
+    const data = response.data;
+    
+    // Handle delta response
+    if (data.unchanged) {
+      console.log('Friends unchanged since last fetch');
+      return null; // No update needed
+    }
+    
+    const friends = data.friends || [];
+    const version = data.version;
+    
+    // Cache user data from friends (they now come with full data from backend)
+    userCache.cacheUsers(friends);
+    
+    // Cache the friends data with version
+    await AsyncStorage.setItem(FRIENDS_CACHE_KEY, JSON.stringify({
+      friends,
+      version,
+      timestamp: Date.now()
+    }));
+    
+    // Dispatch appropriate action based on delta or full update
+    if (data.deltaUpdate && sinceVersion) {
+      dispatch({ 
+        type: "UPDATE_FRIENDS_DELTA", 
+        payload: { friends, version, deltaUpdate: true } 
+      });
+    } else {
+      dispatch({ type: "SET_FRIENDS", payload: { friends, version } });
+    }
+    
+    return friends;
+  } catch (error) {
+    console.error("Error fetching fresh friends:", error);
+    throw error;
+  }
+};
+
 // Get user info by ID - doesn't trigger a load if user not found (for optimized lookups)
 const getUserById = (dispatch) => (userId) => {
-  // First check local state
   return (state) => {
     // Check friends list
     const friend = state.friends.find(f => f.id === userId);
@@ -236,23 +333,27 @@ const getUserById = (dispatch) => (userId) => {
   };
 };
 
-// Get friend requests
-const getFriendRequests = (dispatch) => async (forceFetch = false) => {
+// Get friend requests with delta updates support
+const getFriendRequests = (dispatch) => async (forceFetch = false, type = null) => {
   try {
     dispatch({ type: "SET_LOADING", payload: true });
     
+    let storedVersion = null;
+    const cacheKey = type ? `${REQUESTS_CACHE_KEY}_${type}` : REQUESTS_CACHE_KEY;
+    
     // Try to use cached data first if not forcing refresh
     if (!forceFetch) {
-      const cachedData = await AsyncStorage.getItem(REQUESTS_CACHE_KEY);
+      const cachedData = await AsyncStorage.getItem(cacheKey);
       if (cachedData) {
         try {
-          const { requests, timestamp } = JSON.parse(cachedData);
+          const { requests, timestamp, version } = JSON.parse(cachedData);
           const now = Date.now();
+          storedVersion = version;
           
           // Use cache if it's less than expiry time
           if (now - timestamp < CACHE_EXPIRY) {
             console.log('Using cached friend requests data');
-            dispatch({ type: "SET_FRIEND_REQUESTS", payload: requests });
+            dispatch({ type: "SET_FRIEND_REQUESTS", payload: { requests, version } });
             
             // Also cache user data
             requests.forEach(request => {
@@ -263,9 +364,8 @@ const getFriendRequests = (dispatch) => async (forceFetch = false) => {
             
             // If the cache is stale (but still valid), refresh in background
             if (now - timestamp > CACHE_REFRESH_THRESHOLD) {
-              console.log('Friend requests cache is stale, refreshing in background');
-              // We'll continue with the stale data but fetch fresh data in background
-              fetchFreshRequests(dispatch);
+              console.log('Friend requests cache is stale, checking for updates');
+              fetchFreshRequests(dispatch, type, version, cacheKey);
             }
             
             return requests;
@@ -276,7 +376,7 @@ const getFriendRequests = (dispatch) => async (forceFetch = false) => {
       }
     }
     
-    return await fetchFreshRequests(dispatch);
+    return await fetchFreshRequests(dispatch, type, storedVersion, cacheKey);
   } catch (error) {
     console.error("Error fetching friend requests:", error);
     dispatch({ 
@@ -289,48 +389,114 @@ const getFriendRequests = (dispatch) => async (forceFetch = false) => {
   }
 };
 
-// Helper function to fetch fresh friend requests
-const fetchFreshRequests = async (dispatch) => {
-  const response = await api.get("/friends/requests");
-  const requests = response.data.requests || [];
-  
-  // Cache user data from requests
-  requests.forEach(request => {
-    if (request.user) {
-      userCache.cacheUser(request.user);
+// Helper function to fetch fresh friend requests with delta support
+const fetchFreshRequests = async (dispatch, type = null, sinceVersion = null, cacheKey) => {
+  try {
+    // Build query params for delta updates and filtering
+    const params = new URLSearchParams();
+    if (type) {
+      params.append('type', type);
     }
-  });
-  
-  // Cache the requests data
-  await AsyncStorage.setItem(REQUESTS_CACHE_KEY, JSON.stringify({
-    requests,
-    timestamp: Date.now()
-  }));
-  
-  dispatch({ type: "SET_FRIEND_REQUESTS", payload: requests });
-  return requests;
+    if (sinceVersion) {
+      params.append('sinceVersion', sinceVersion.toString());
+    }
+    
+    const response = await api.get(`/friends/requests?${params}`);
+    const data = response.data;
+    
+    // Handle delta response
+    if (data.unchanged) {
+      console.log('Friend requests unchanged since last fetch');
+      return null; // No update needed
+    }
+    
+    const requests = data.requests || [];
+    const version = data.version;
+    
+    // Cache user data from requests (they now come with full user data from backend)
+    requests.forEach(request => {
+      if (request.user) {
+        userCache.cacheUser(request.user);
+      }
+    });
+    
+    // Cache the requests data with version
+    await AsyncStorage.setItem(cacheKey, JSON.stringify({
+      requests,
+      version,
+      timestamp: Date.now()
+    }));
+    
+    // Dispatch appropriate action based on delta or full update
+    if (data.deltaUpdate && sinceVersion) {
+      dispatch({ 
+        type: "UPDATE_REQUESTS_DELTA", 
+        payload: { requests, version, deltaUpdate: true } 
+      });
+    } else {
+      dispatch({ type: "SET_FRIEND_REQUESTS", payload: { requests, version } });
+    }
+    
+    return requests;
+  } catch (error) {
+    console.error("Error fetching fresh friend requests:", error);
+    throw error;
+  }
 };
 
-// Send a friend request
-const sendFriendRequest = (dispatch) => async (receiverId) => {
+// Send a friend request (updated to work with new backend that includes user data)
+const sendFriendRequest = (dispatch) => async (receiverId, receiverData = null) => {
   try {
     dispatch({ type: "SET_LOADING", payload: true });
-    const response = await api.post("/friends/request", { receiverId });
+    
+    // The backend now handles fetching both sender and receiver data including usernames
+    const requestBody = { receiverId };
+    
+    const response = await api.post("/friends/request", requestBody);
     
     if (response.data.success) {
-      // Add to sent requests
+      // Backend now returns enhanced data with usernames
+      const { requestId, senderUsername, receiverUsername } = response.data;
+      
+      // Create the request object for local state with the username data from backend
+      const requestUser = receiverData || userCache.getCachedUser(receiverId) || { 
+        id: receiverId, 
+        username: receiverUsername || 'Unknown User' // Use backend-provided username
+      };
+      
+      // Add to sent requests in local state with enhanced data
       dispatch({ 
         type: "ADD_SENT_REQUEST", 
         payload: { 
-          id: response.data.requestId,
-          user: userCache.getCachedUser(receiverId) || { id: receiverId }
+          id: requestId,
+          user: requestUser,
+          status: 'pending',
+          createdAt: new Date().toISOString(),
+          senderUsername, // Include sender username from backend
+          receiverUsername, // Include receiver username from backend
+          type: 'sent' // Explicitly mark as sent request
         } 
       });
+      
+      // Also cache the user data if we have it
+      if (receiverUsername) {
+        userCache.cacheUser({
+          id: receiverId,
+          username: receiverUsername,
+          ...receiverData
+        });
+      }
+      
+      // Clear cache to force refresh on next fetch
+      await AsyncStorage.removeItem(REQUESTS_CACHE_KEY);
     }
     
     return {
       success: response.data.success,
       requestId: response.data.requestId,
+      message: response.data.message,
+      senderUsername: response.data.senderUsername,
+      receiverUsername: response.data.receiverUsername,
       error: null
     };
   } catch (error) {
@@ -346,32 +512,36 @@ const sendFriendRequest = (dispatch) => async (receiverId) => {
   }
 };
 
-// Respond to a friend request
+// Respond to a friend request (updated to work with new backend response format)
 const respondToFriendRequest = (dispatch) => async (requestId, action) => {
   try {
     dispatch({ type: "SET_LOADING", payload: true });
     const response = await api.post("/friends/respond", { requestId, action });
     
     if (response.data.success) {
-      // First find the request to get the user
-      dispatch({ type: "SET_LOADING", payload: false });
-      return (state) => {
-        const request = state.friendRequests.find(r => r.id === requestId);
+      // Remove the request from local state
+      dispatch({ type: "REMOVE_FRIEND_REQUEST", payload: requestId });
+      
+      // If accepting, the backend now returns the new friend data
+      if (action === 'accept' && response.data.newFriend) {
+        dispatch({ type: "ADD_FRIEND", payload: response.data.newFriend });
         
-        if (request && action === 'accept') {
-          // If accepting, add to friends
-          if (request.user) {
-            dispatch({ type: "ADD_FRIEND", payload: request.user });
-          }
-        }
-        
-        // Remove the request
-        dispatch({ type: "REMOVE_FRIEND_REQUEST", payload: requestId });
-        
-        return {
-          success: true,
-          error: null
-        };
+        // Cache the new friend data
+        userCache.cacheUser(response.data.newFriend);
+      }
+      
+      // Clear relevant caches to force refresh
+      await AsyncStorage.multiRemove([
+        REQUESTS_CACHE_KEY,
+        FRIENDS_CACHE_KEY,
+        FRIEND_IDS_CACHE_KEY
+      ]);
+      
+      return {
+        success: true,
+        message: response.data.message,
+        newFriend: response.data.newFriend,
+        error: null
       };
     } else {
       return {
@@ -392,7 +562,7 @@ const respondToFriendRequest = (dispatch) => async (requestId, action) => {
   }
 };
 
-// Remove a friend
+// Remove a friend (updated to work with new backend)
 const removeFriend = (dispatch) => async (friendId) => {
   try {
     dispatch({ type: "SET_LOADING", payload: true });
@@ -400,10 +570,17 @@ const removeFriend = (dispatch) => async (friendId) => {
     
     if (response.data.success) {
       dispatch({ type: "REMOVE_FRIEND", payload: friendId });
+      
+      // Clear relevant caches to force refresh
+      await AsyncStorage.multiRemove([
+        FRIENDS_CACHE_KEY,
+        FRIEND_IDS_CACHE_KEY
+      ]);
     }
     
     return {
       success: response.data.success,
+      message: response.data.message,
       error: null
     };
   } catch (error) {
@@ -419,14 +596,16 @@ const removeFriend = (dispatch) => async (friendId) => {
   }
 };
 
-// Clear all friends-related cache data
+// Clear all friends-related cache data (updated with new cache keys)
 const clearFriendsCache = async () => {
   try {
-    // Clear all friends-related cache keys
+    // Clear all friends-related cache keys including versioned ones
     await AsyncStorage.multiRemove([
       FRIENDS_CACHE_KEY,
       FRIEND_IDS_CACHE_KEY,
-      REQUESTS_CACHE_KEY
+      REQUESTS_CACHE_KEY,
+      `${REQUESTS_CACHE_KEY}_sent`,
+      `${REQUESTS_CACHE_KEY}_received`
     ]);
     
     return true;
@@ -434,6 +613,18 @@ const clearFriendsCache = async () => {
     console.error('❌ Error clearing friends cache:', error);
     return false;
   }
+};
+
+// Initialize with version tracking
+const initialState = {
+  friends: [], 
+  friendIds: [],
+  friendRequests: [], 
+  friendsVersion: null,
+  friendIdsVersion: null,
+  requestsVersion: null,
+  loading: false, 
+  error: null
 };
 
 export const { Provider, Context } = createDataContext(
@@ -448,11 +639,5 @@ export const { Provider, Context } = createDataContext(
     getUserById,
     clearFriendsCache
   },
-  { 
-    friends: [], 
-    friendIds: [],
-    friendRequests: [], 
-    loading: false, 
-    error: null
-  }
-); 
+  initialState
+);
