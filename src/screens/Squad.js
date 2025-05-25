@@ -306,24 +306,14 @@ const Squad = () => {
     }
   };
 
-  // Enhanced function to get complete user data
+  // Enhanced function to get complete user data using friends context
   const getCompleteUserData = (user) => {
     if (!user || !user.id) return user;
     
     // Already has all the data we need
     if (user.username && user.avatar) return user;
     
-    // First check user cache
-    const cachedUser = userCache.getCachedUser(user.id);
-    if (cachedUser && (cachedUser.username || cachedUser.avatar)) {
-      return {
-        ...user,
-        username: user.username || cachedUser.username,
-        avatar: user.avatar || cachedUser.avatar
-      };
-    }
-    
-    // Check friends list
+    // First check the friends state directly
     const friendMatch = FriendsState.friends.find(friend => friend.id === user.id);
     if (friendMatch) {
       const enhancedUser = {
@@ -337,13 +327,54 @@ const Squad = () => {
       return enhancedUser;
     }
     
+    // Check friend requests for user data
+    const requestMatch = FriendsState.friendRequests.find(request => 
+      request.user?.id === user.id || request.senderId === user.id || request.receiverId === user.id
+    );
+    if (requestMatch?.user) {
+      const enhancedUser = {
+        ...user,
+        username: user.username || requestMatch.user.username || requestMatch.user.displayName,
+        avatar: user.avatar || requestMatch.user.avatar
+      };
+      
+      // Cache for future use
+      userCache.cacheUser(enhancedUser);
+      return enhancedUser;
+    }
+    
+    // Check user cache as fallback
+    const cachedUser = userCache.getCachedUser(user.id);
+    if (cachedUser && (cachedUser.username || cachedUser.avatar)) {
+      return {
+        ...user,
+        username: user.username || cachedUser.username,
+        avatar: user.avatar || cachedUser.avatar
+      };
+    }
+    
+    // If we still don't have username, try using the getUserById function from FriendsContext
+    // This function returns a selector that we need to call with the current state
+    const userSelector = getUserById(user.id);
+    const foundUser = userSelector(FriendsState);
+    if (foundUser && foundUser.username) {
+      const enhancedUser = {
+        ...user,
+        username: user.username || foundUser.username || foundUser.displayName,
+        avatar: user.avatar || foundUser.avatar
+      };
+      
+      // Cache for future use
+      userCache.cacheUser(enhancedUser);
+      return enhancedUser;
+    }
     // Return original if nothing found
     return user;
   };
 
   // Navigate to conversation screen with enhanced user data
   const navigateToConversation = (otherUser) => {
-    // Get complete user data
+    // Get complete user data using friends context
     const enhancedUser = getCompleteUserData(otherUser);
     
     // Navigate to chat screen with enhanced user data
@@ -352,36 +383,44 @@ const Squad = () => {
 
   // Render conversation item with enhanced user data
   const renderConversationItem = ({ item }) => {
-    // Enhance user data with cached/friends data
-    item.user = getCompleteUserData(item.user);
+    // Enhance user data with friends context data
+    const enhancedUser = getCompleteUserData(item.user);
+    
+    // Update the item with enhanced user data
+    const enhancedItem = {
+      ...item,
+      user: enhancedUser
+    };
 
     return (
       <TouchableOpacity 
         style={styles.conversationItem}
-        onPress={() => navigateToConversation(item.user)}
+        onPress={() => navigateToConversation(enhancedUser)}
       >
         <View style={styles.avatarContainer}>
           <Image 
-            source={{ uri: item.user.avatar || 'https://randomuser.me/api/portraits/lego/1.jpg' }} 
+            source={{ uri: enhancedUser.avatar || 'https://randomuser.me/api/portraits/lego/1.jpg' }} 
             style={styles.avatar} 
           />
           {/* Online indicator - will need to be implemented with real data */}
-          {item.user.isOnline && (
+          {enhancedUser.isOnline && (
             <View style={styles.onlineIndicator} />
           )}
         </View>
         <View style={styles.conversationInfo}>
           <View style={styles.conversationHeader}>
-            <Text style={styles.username}>{item.user.username || 'Unknown User'}</Text>
-            <Text style={styles.timestamp}>{formatTimestamp(item.lastMessageTime)}</Text>
+            <Text style={styles.username}>
+              {enhancedUser.username || enhancedUser.displayName || 'Unknown User'}
+            </Text>
+            <Text style={styles.timestamp}>{formatTimestamp(enhancedItem.lastMessageTime)}</Text>
           </View>
           <View style={styles.messagePreviewContainer}>
             <Text style={styles.messagePreview} numberOfLines={1}>
-              {item.lastMessage || 'No messages yet'}
+              {enhancedItem.lastMessage || 'No messages yet'}
             </Text>
-            {item.unreadCount > 0 && (
+            {enhancedItem.unreadCount > 0 && (
               <View style={styles.unreadBadge}>
-                <Text style={styles.unreadCount}>{item.unreadCount}</Text>
+                <Text style={styles.unreadCount}>{enhancedItem.unreadCount}</Text>
               </View>
             )}
           </View>
