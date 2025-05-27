@@ -250,7 +250,8 @@ const Squad = () => {
       UserState.user.username || "TestUser", 
       postData.content, 
       postData.tags,
-      postData.title
+      postData.title,
+      UserState.user?.profilePicturePath,
     );
     setShowCreatePostModal(false);
   };

@@ -2,7 +2,7 @@
   "expo": {
     "name": "ScolioFrontend",
     "slug": "ScolioFrontend",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "plugins": [
       "./expo-plugins/react-native-screens", 
       ["expo-image-picker",

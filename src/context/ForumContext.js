@@ -211,7 +211,7 @@ const updateCacheForPostAction = async (actionType, payload) => {
 };
 
 // Create a new post
-const createPost = dispatch => async (userId, username, content, tags, title, callback) => {
+const createPost = dispatch => async (userId, username, content, tags, title, profilePicturePath, callback) => {
     const idToken = await AsyncStorage.getItem("idToken"); 
     try {
         const response = await api.post('/forum/create', { 
@@ -219,7 +219,8 @@ const createPost = dispatch => async (userId, username, content, tags, title, ca
             username,
             title,
             content,
-            tags
+            tags,
+            profilePicturePath
         }, {
             headers: {
                 'Authorization': `Bearer ${idToken}`
@@ -240,6 +241,7 @@ const createPost = dispatch => async (userId, username, content, tags, title, ca
             title, 
             content, 
             tags, 
+            profilePicturePath,
             likes: [], 
             comments: [], 
             createdAt

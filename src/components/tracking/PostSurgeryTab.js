@@ -23,7 +23,7 @@ const PostSurgeryTab = ({ workouts = [], weeklySchedule = [], recoveryTasks, wal
   const [scheduledEvents, setScheduledEvents] = useState({});
   const [localWorkouts, setLocalWorkouts] = useState([]);
   const [localWeeklySchedule, setLocalWeeklySchedule] = useState([]);
-  const { state: { user }, addUserPhysioWorkout } = useContext(UserContext);
+  const { state: { user }, addUserPhysioWorkout, fetchUserData, idToken } = useContext(UserContext);
 
   // Initialize local workouts with props
   useEffect(() => {
@@ -142,6 +142,9 @@ const PostSurgeryTab = ({ workouts = [], weeklySchedule = [], recoveryTasks, wal
         if (!localWeeklySchedule.includes(dayAbbr)) {
           setLocalWeeklySchedule(prev => [...prev, dayAbbr]);
         }
+
+        await fetchUserData(idToken); 
+        
       } else {
         console.error('Failed to add workout:', result.error);
       }

@@ -93,7 +93,7 @@ const ForumPostScreen = ({ route, navigation }) => {
     const userId = getUserId();
     const username = UserState.user?.username || "Anonymous";
     
-    console.log("Handling comment!", safePost.postId, userId, username, comment); 
+    console.log("Handling comment!"); 
     
     if (!userId) {
       Alert.alert(
@@ -159,8 +159,6 @@ const ForumPostScreen = ({ route, navigation }) => {
               {(() => {
                 try {
                   if (!safePost.createdAt) return "Unknown time";
-                  
-                  console.log("Formatting timestamp:", JSON.stringify(safePost.createdAt));
                   
                   let timestamp;
                   
