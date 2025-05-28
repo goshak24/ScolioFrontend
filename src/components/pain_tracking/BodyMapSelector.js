@@ -5,9 +5,9 @@ import BodyPartSelector from './BodyPartSelector';
 import { bodyParts } from './BodyPartSelector';
 import COLORS from '../../constants/COLORS';
 
-const BodyMapSelector = ({ selectedAreas = [], onSelectArea }) => {
+const BodyMapSelector = ({ selectedAreas = [], onSelectArea, showBack = false }) => {
   const [screenWidth, setScreenWidth] = useState(Dimensions.get('window').width);
-  
+
   // Handle screen dimension changes (e.g., rotation)
   useEffect(() => {
     const dimensionsHandler = ({ window }) => {
@@ -34,7 +34,11 @@ const BodyMapSelector = ({ selectedAreas = [], onSelectArea }) => {
     <View style={styles.container}>
       <View style={[styles.bodyContainer, { width: containerWidth, height: containerHeight }]}>
         <Image 
-          source={require('../../../assets/body-outline-removebg.png')} 
+          source={
+            showBack 
+              ? require('../../../assets/body-outline-back2.png') 
+              : require('../../../assets/body-outline-removebg.png')
+          } 
           style={styles.bodyOutline}
           resizeMode="contain"
         />
@@ -43,6 +47,7 @@ const BodyMapSelector = ({ selectedAreas = [], onSelectArea }) => {
         <BodyPartSelector 
           selectedAreas={selectedAreas}
           onSelectArea={onSelectArea}
+          showBack={showBack}
         />
       </View>
       

@@ -4,35 +4,63 @@ import { moderateScale } from 'react-native-size-matters';
 import COLORS from '../../constants/COLORS';
 import { LinearGradient } from 'expo-linear-gradient';
 
-// Define body parts data
+// Define body parts data - Front and Back
 export const bodyParts = [
-  { id: 'head', label: 'Head' },
-  { id: 'neck', label: 'Neck' },
-  { id: 'left_shoulder', label: 'Left Shoulder' },
-  { id: 'right_shoulder', label: 'Right Shoulder' },
-  { id: 'left_arm', label: 'Left Arm' },
-  { id: 'right_arm', label: 'Right Arm' },
-  { id: 'left_elbow', label: 'Left Elbow' },
-  { id: 'right_elbow', label: 'Right Elbow' },
-  { id: 'left_hand', label: 'Left Hand' },
-  { id: 'right_hand', label: 'Right Hand' },
-  { id: 'chest', label: 'Chest' },
-  { id: 'abdomen', label: 'Abdomen' },
-  { id: 'pelvis', label: 'Pelvis' },
-  { id: 'left_hip', label: 'Left Hip' },
-  { id: 'right_hip', label: 'Right Hip' },
-  { id: 'left_thigh', label: 'Left Thigh' },
-  { id: 'right_thigh', label: 'Right Thigh' },
-  { id: 'left_knee', label: 'Left Knee' },
-  { id: 'right_knee', label: 'Right Knee' },
-  { id: 'left_calf', label: 'Left Calf' },
-  { id: 'right_calf', label: 'Right Calf' },
-  { id: 'left_foot', label: 'Left Foot' },
-  { id: 'right_foot', label: 'Right Foot' },
+  // Front body parts
+  { id: 'head', label: 'Head', side: 'front' },
+  { id: 'neck', label: 'Neck', side: 'front' },
+  { id: 'left_shoulder', label: 'Left Shoulder', side: 'front' },
+  { id: 'right_shoulder', label: 'Right Shoulder', side: 'front' },
+  { id: 'left_arm', label: 'Left Arm', side: 'front' },
+  { id: 'right_arm', label: 'Right Arm', side: 'front' },
+  { id: 'left_elbow', label: 'Left Elbow', side: 'front' },
+  { id: 'right_elbow', label: 'Right Elbow', side: 'front' },
+  { id: 'left_hand', label: 'Left Hand', side: 'front' },
+  { id: 'right_hand', label: 'Right Hand', side: 'front' },
+  { id: 'chest', label: 'Chest', side: 'front' },
+  { id: 'abdomen', label: 'Abdomen', side: 'front' },
+  { id: 'pelvis', label: 'Pelvis', side: 'front' },
+  { id: 'left_hip', label: 'Left Hip', side: 'front' },
+  { id: 'right_hip', label: 'Right Hip', side: 'front' },
+  { id: 'left_thigh', label: 'Left Thigh', side: 'front' },
+  { id: 'right_thigh', label: 'Right Thigh', side: 'front' },
+  { id: 'left_knee', label: 'Left Knee', side: 'front' },
+  { id: 'right_knee', label: 'Right Knee', side: 'front' },
+  { id: 'left_calf', label: 'Left Calf', side: 'front' },
+  { id: 'right_calf', label: 'Right Calf', side: 'front' },
+  { id: 'left_foot', label: 'Left Foot', side: 'front' },
+  { id: 'right_foot', label: 'Right Foot', side: 'front' },
+  
+  // Back body parts
+  { id: 'back_head', label: 'Back of Head', side: 'back' },
+  { id: 'back_neck', label: 'Back of Neck', side: 'back' },
+  { id: 'left_shoulder_back', label: 'Left Shoulder', side: 'back' },
+  { id: 'right_shoulder_back', label: 'Right Shoulder', side: 'back' },
+  { id: 'left_shoulder_blade', label: 'Left Shoulder Blade', side: 'back' },
+  { id: 'right_shoulder_blade', label: 'Right Shoulder Blade', side: 'back' },
+  { id: 'upper_spine', label: 'Upper Spine', side: 'back' },
+  { id: 'left_upper_back', label: 'Left Upper Back', side: 'back' },
+  { id: 'right_upper_back', label: 'Right Upper Back', side: 'back' },
+  { id: 'mid_spine', label: 'Mid Spine', side: 'back' },
+  { id: 'left_mid_back', label: 'Left Mid Back', side: 'back' },
+  { id: 'right_mid_back', label: 'Right Mid Back', side: 'back' },
+  { id: 'lower_spine', label: 'Lower Spine', side: 'back' },
+  { id: 'left_lower_back', label: 'Left Lower Back', side: 'back' },
+  { id: 'right_lower_back', label: 'Right Lower Back', side: 'back' },
+  { id: 'left_glute', label: 'Left Glute', side: 'back' },
+  { id: 'right_glute', label: 'Right Glute', side: 'back' },
+  { id: 'left_back_thigh', label: 'Left Back Thigh', side: 'back' },
+  { id: 'right_back_thigh', label: 'Right Back Thigh', side: 'back' },
+  { id: 'left_back_knee', label: 'Left Back Knee', side: 'back' },
+  { id: 'right_back_knee', label: 'Right Back Knee', side: 'back' },
+  { id: 'left_back_calf', label: 'Left Back Calf', side: 'back' },
+  { id: 'right_back_calf', label: 'Right Back Calf', side: 'back' },
+  { id: 'left_achilles', label: 'Left Achilles', side: 'back' },
+  { id: 'right_achilles', label: 'Right Achilles', side: 'back' },
 ];
 
-const BodyPartSelector = ({ selectedAreas = [], onSelectArea }) => {
-  const [screenWidth, setScreenWidth] = useState(Dimensions.get('window').width);
+const BodyPartSelector = ({ selectedAreas = [], onSelectArea, showBack = false }) => {
+  const [screenWidth, setScreenWidth] = useState(Dimensions.get('window').width); 
   
   // Handle screen dimension changes (e.g., rotation)
   useEffect(() => {
@@ -44,327 +72,99 @@ const BodyPartSelector = ({ selectedAreas = [], onSelectArea }) => {
     return () => subscription.remove();
   }, []);
 
+  // Get the style mapping for each body part ID
+  const getStyleForBodyPart = (id) => {
+    const styleMap = {
+      // Front body parts
+      'head': styles.head,
+      'neck': styles.neck,
+      'left_shoulder': styles.leftShoulder,
+      'right_shoulder': styles.rightShoulder,
+      'left_arm': styles.leftArm,
+      'right_arm': styles.rightArm,
+      'left_elbow': styles.leftElbow,
+      'right_elbow': styles.rightElbow,
+      'left_hand': styles.leftHand,
+      'right_hand': styles.rightHand,
+      'chest': styles.chest,
+      'abdomen': styles.abdomen,
+      'pelvis': styles.pelvis,
+      'left_hip': styles.leftHip,
+      'right_hip': styles.rightHip,
+      'left_thigh': styles.leftThigh,
+      'right_thigh': styles.rightThigh,
+      'left_knee': styles.leftKnee,
+      'right_knee': styles.rightKnee,
+      'left_calf': styles.leftCalf,
+      'right_calf': styles.rightCalf,
+      'left_foot': styles.leftFoot,
+      'right_foot': styles.rightFoot,
+      
+      // Back body parts
+      'back_head': styles.backHead,
+      'back_neck': styles.backNeck,
+      'left_shoulder_back': styles.leftShoulderBack,
+      'right_shoulder_back': styles.rightShoulderBack,
+      'left_shoulder_blade': styles.leftShoulderBlade,
+      'right_shoulder_blade': styles.rightShoulderBlade,
+      'upper_spine': styles.upperSpine,
+      'left_upper_back': styles.leftUpperBack,
+      'right_upper_back': styles.rightUpperBack,
+      'mid_spine': styles.midSpine,
+      'left_mid_back': styles.leftMidBack,
+      'right_mid_back': styles.rightMidBack,
+      'lower_spine': styles.lowerSpine,
+      'left_lower_back': styles.leftLowerBack,
+      'right_lower_back': styles.rightLowerBack,
+      'left_glute': styles.leftButtock,
+      'right_glute': styles.rightButtock,
+      'left_back_thigh': styles.leftBackThigh,
+      'right_back_thigh': styles.rightBackThigh, 
+    };
+    
+    return styleMap[id] || {};
+  };
+
+  const renderBodyPart = (bodyPart) => {
+    const { id, label } = bodyPart;
+    const isSelected = selectedAreas.includes(id);
+    const style = getStyleForBodyPart(id);
+    
+    return (
+      <TouchableOpacity 
+        key={id}
+        style={[
+          styles.bodyArea, 
+          style,
+          !isSelected && styles.dottedOutline // Add dotted outline when not selected
+        ]}
+        onPress={() => onSelectArea(id)}
+        activeOpacity={0.7}
+      >
+        {isSelected && (
+          <View style={styles.indicatorContainer}>
+            <LinearGradient
+              colors={['#FF9500', '#FF5E3A']}
+              style={styles.indicator}
+            />
+            <Text style={styles.indicatorLabel}>{label}</Text>
+          </View>
+        )}
+      </TouchableOpacity>
+    );
+  };
+
+  // Filter body parts based on showBack prop
+  const filteredBodyParts = bodyParts.filter(bodyPart => 
+    showBack ? bodyPart.side === 'back' : bodyPart.side === 'front'
+  );
+
   return (
     <View style={styles.overlayContainer}>
-      {/* Head */}
-      <TouchableOpacity 
-        style={[styles.bodyArea, styles.head]}
-        onPress={() => onSelectArea('head')}
-      >
-        {selectedAreas.includes('head') && (
-          <View style={styles.indicatorContainer}>
-            <LinearGradient
-              colors={['#FF9500', '#FF5E3A']}
-              style={styles.indicator}
-            />
-            <Text style={styles.indicatorLabel}>Head</Text>
-          </View>
-        )}
-      </TouchableOpacity>
+      {filteredBodyParts.map(bodyPart => {
+        return renderBodyPart(bodyPart);
+      })}
       
-      {/* Neck */}
-      <TouchableOpacity 
-        style={[styles.bodyArea, styles.neck]}
-        onPress={() => onSelectArea('neck')}
-      >
-        {selectedAreas.includes('neck') && (
-          <View style={styles.indicatorContainer}>
-            <LinearGradient
-              colors={['#FF9500', '#FF5E3A']}
-              style={styles.indicator}
-            />
-            <Text style={styles.indicatorLabel}>Neck</Text>
-          </View>
-        )}
-      </TouchableOpacity>
-      
-      {/* Left Shoulder */}
-      <TouchableOpacity 
-        style={[styles.bodyArea, styles.leftShoulder]}
-        onPress={() => onSelectArea('left_shoulder')}
-      >
-        {selectedAreas.includes('left_shoulder') && (
-          <View style={styles.indicatorContainer}>
-            <LinearGradient
-              colors={['#FF9500', '#FF5E3A']}
-              style={styles.indicator}
-            />
-            <Text style={styles.indicatorLabel}>L Shoulder</Text>
-          </View>
-        )}
-      </TouchableOpacity>
-      
-      {/* Right Shoulder */}
-      <TouchableOpacity 
-        style={[styles.bodyArea, styles.rightShoulder]}
-        onPress={() => onSelectArea('right_shoulder')}
-      >
-        {selectedAreas.includes('right_shoulder') && (
-          <View style={styles.indicatorContainer}>
-            <LinearGradient
-              colors={['#FF9500', '#FF5E3A']}
-              style={styles.indicator}
-            />
-            <Text style={styles.indicatorLabel}>R Shoulder</Text>
-          </View>
-        )}
-      </TouchableOpacity>
-      
-      {/* Left Arm */}
-      <TouchableOpacity 
-        style={[styles.bodyArea, styles.leftArm]}
-        onPress={() => onSelectArea('left_arm')}
-      >
-        {selectedAreas.includes('left_arm') && (
-          <View style={styles.indicatorContainer}>
-            <LinearGradient
-              colors={['#FF9500', '#FF5E3A']}
-              style={styles.indicator}
-            />
-            <Text style={styles.indicatorLabel}>L Arm</Text>
-          </View>
-        )}
-      </TouchableOpacity>
-      
-      {/* Right Arm */}
-      <TouchableOpacity 
-        style={[styles.bodyArea, styles.rightArm]}
-        onPress={() => onSelectArea('right_arm')}
-      >
-        {selectedAreas.includes('right_arm') && (
-          <View style={styles.indicatorContainer}>
-            <LinearGradient
-              colors={['#FF9500', '#FF5E3A']}
-              style={styles.indicator}
-            />
-            <Text style={styles.indicatorLabel}>R Arm</Text>
-          </View>
-        )}
-      </TouchableOpacity>
-      
-      {/* Left Hand */}
-      <TouchableOpacity 
-        style={[styles.bodyArea, styles.leftHand]}
-        onPress={() => onSelectArea('left_hand')}
-      >
-        {selectedAreas.includes('left_hand') && (
-          <View style={styles.indicatorContainer}>
-            <LinearGradient
-              colors={['#FF9500', '#FF5E3A']}
-              style={styles.indicator}
-            />
-            <Text style={styles.indicatorLabel}>L Hand</Text>
-          </View>
-        )}
-      </TouchableOpacity>
-      
-      {/* Right Hand */}
-      <TouchableOpacity 
-        style={[styles.bodyArea, styles.rightHand]}
-        onPress={() => onSelectArea('right_hand')}
-      >
-        {selectedAreas.includes('right_hand') && (
-          <View style={styles.indicatorContainer}>
-            <LinearGradient
-              colors={['#FF9500', '#FF5E3A']}
-              style={styles.indicator}
-            />
-            <Text style={styles.indicatorLabel}>R Hand</Text>
-          </View>
-        )}
-      </TouchableOpacity>
-      
-      {/* Chest */}
-      <TouchableOpacity 
-        style={[styles.bodyArea, styles.chest]}
-        onPress={() => onSelectArea('chest')}
-      >
-        {selectedAreas.includes('chest') && (
-          <View style={styles.indicatorContainer}>
-            <LinearGradient
-              colors={['#FF9500', '#FF5E3A']}
-              style={styles.indicator}
-            />
-            <Text style={styles.indicatorLabel}>Chest</Text>
-          </View>
-        )}
-      </TouchableOpacity>
-      
-      {/* Abdomen */}
-      <TouchableOpacity 
-        style={[styles.bodyArea, styles.abdomen]}
-        onPress={() => onSelectArea('abdomen')}
-      >
-        {selectedAreas.includes('abdomen') && (
-          <View style={styles.indicatorContainer}>
-            <LinearGradient
-              colors={['#FF9500', '#FF5E3A']}
-              style={styles.indicator}
-            />
-            <Text style={styles.indicatorLabel}>Abdomen</Text>
-          </View>
-        )}
-      </TouchableOpacity>
-      
-      {/* Left Hip */}
-      <TouchableOpacity 
-        style={[styles.bodyArea, styles.leftHip]}
-        onPress={() => onSelectArea('left_hip')}
-      >
-        {selectedAreas.includes('left_hip') && (
-          <View style={styles.indicatorContainer}>
-            <LinearGradient
-              colors={['#FF9500', '#FF5E3A']}
-              style={styles.indicator}
-            />
-            <Text style={styles.indicatorLabel}>L Hip</Text>
-          </View>
-        )}
-      </TouchableOpacity>
-      
-      {/* Right Hip */}
-      <TouchableOpacity 
-        style={[styles.bodyArea, styles.rightHip]}
-        onPress={() => onSelectArea('right_hip')}
-      >
-        {selectedAreas.includes('right_hip') && (
-          <View style={styles.indicatorContainer}>
-            <LinearGradient
-              colors={['#FF9500', '#FF5E3A']}
-              style={styles.indicator}
-            />
-            <Text style={styles.indicatorLabel}>R Hip</Text>
-          </View>
-        )}
-      </TouchableOpacity>
-      
-      {/* Left Thigh */}
-      <TouchableOpacity 
-        style={[styles.bodyArea, styles.leftThigh]}
-        onPress={() => onSelectArea('left_thigh')}
-      >
-        {selectedAreas.includes('left_thigh') && (
-          <View style={styles.indicatorContainer}>
-            <LinearGradient
-              colors={['#FF9500', '#FF5E3A']}
-              style={styles.indicator}
-            />
-            <Text style={styles.indicatorLabel}>L Thigh</Text>
-          </View>
-        )}
-      </TouchableOpacity>
-      
-      {/* Right Thigh */}
-      <TouchableOpacity 
-        style={[styles.bodyArea, styles.rightThigh]}
-        onPress={() => onSelectArea('right_thigh')}
-      >
-        {selectedAreas.includes('right_thigh') && (
-          <View style={styles.indicatorContainer}>
-            <LinearGradient
-              colors={['#FF9500', '#FF5E3A']}
-              style={styles.indicator}
-            />
-            <Text style={styles.indicatorLabel}>R Thigh</Text>
-          </View>
-        )}
-      </TouchableOpacity>
-      
-      {/* Left Knee */}
-      <TouchableOpacity 
-        style={[styles.bodyArea, styles.leftKnee]}
-        onPress={() => onSelectArea('left_knee')}
-      >
-        {selectedAreas.includes('left_knee') && (
-          <View style={styles.indicatorContainer}>
-            <LinearGradient
-              colors={['#FF9500', '#FF5E3A']}
-              style={styles.indicator}
-            />
-            <Text style={styles.indicatorLabel}>L Knee</Text>
-          </View>
-        )}
-      </TouchableOpacity>
-      
-      {/* Right Knee */}
-      <TouchableOpacity 
-        style={[styles.bodyArea, styles.rightKnee]}
-        onPress={() => onSelectArea('right_knee')}
-      >
-        {selectedAreas.includes('right_knee') && (
-          <View style={styles.indicatorContainer}>
-            <LinearGradient
-              colors={['#FF9500', '#FF5E3A']}
-              style={styles.indicator}
-            />
-            <Text style={styles.indicatorLabel}>R Knee</Text>
-          </View>
-        )}
-      </TouchableOpacity>
-      
-      {/* Left Calf */}
-      <TouchableOpacity 
-        style={[styles.bodyArea, styles.leftCalf]}
-        onPress={() => onSelectArea('left_calf')}
-      >
-        {selectedAreas.includes('left_calf') && (
-          <View style={styles.indicatorContainer}>
-            <LinearGradient
-              colors={['#FF9500', '#FF5E3A']}
-              style={styles.indicator}
-            />
-            <Text style={styles.indicatorLabel}>L Calf</Text>
-          </View>
-        )}
-      </TouchableOpacity>
-      
-      {/* Right Calf */}
-      <TouchableOpacity 
-        style={[styles.bodyArea, styles.rightCalf]}
-        onPress={() => onSelectArea('right_calf')}
-      >
-        {selectedAreas.includes('right_calf') && (
-          <View style={styles.indicatorContainer}>
-            <LinearGradient
-              colors={['#FF9500', '#FF5E3A']}
-              style={styles.indicator}
-            />
-            <Text style={styles.indicatorLabel}>R Calf</Text>
-          </View>
-        )}
-      </TouchableOpacity>
-      
-      {/* Left Foot */}
-      <TouchableOpacity 
-        style={[styles.bodyArea, styles.leftFoot]}
-        onPress={() => onSelectArea('left_foot')}
-      >
-        {selectedAreas.includes('left_foot') && (
-          <View style={styles.indicatorContainer}>
-            <LinearGradient
-              colors={['#FF9500', '#FF5E3A']}
-              style={styles.indicator}
-            />
-            <Text style={styles.indicatorLabel}>L Foot</Text>
-          </View>
-        )}
-      </TouchableOpacity>
-      
-      {/* Right Foot */}
-      <TouchableOpacity 
-        style={[styles.bodyArea, styles.rightFoot]}
-        onPress={() => onSelectArea('right_foot')}
-      >
-        {selectedAreas.includes('right_foot') && (
-          <View style={styles.indicatorContainer}>
-            <LinearGradient
-              colors={['#FF9500', '#FF5E3A']}
-              style={styles.indicator}
-            />
-            <Text style={styles.indicatorLabel}>R Foot</Text>
-          </View>
-        )}
-      </TouchableOpacity>
     </View>
   );
 };
@@ -387,6 +187,14 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
     justifyContent: 'center',
     alignItems: 'center',
+    minWidth: moderateScale(30),
+    minHeight: moderateScale(30),
+  },
+  dottedOutline: {
+    borderWidth: 1,
+    borderColor: 'rgba(255, 149, 0, 0.6)',
+    borderStyle: 'dashed',
+    borderRadius: moderateScale(4),
   },
   indicatorContainer: {
     alignItems: 'center',
@@ -395,108 +203,119 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   indicator: {
-    width: moderateScale(20),
-    height: moderateScale(20),
-    borderRadius: moderateScale(10),
+    width: moderateScale(18),
+    height: moderateScale(18),
+    borderRadius: moderateScale(9),
     marginBottom: moderateScale(2),
   },
   indicatorLabel: {
     color: '#fff',
-    fontSize: moderateScale(10),
+    fontSize: moderateScale(9),
     fontWeight: 'bold',
-    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowColor: 'rgba(0, 0, 0, 0.8)',
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 2,
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
-    paddingHorizontal: moderateScale(4),
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    paddingHorizontal: moderateScale(3),
     paddingVertical: moderateScale(1),
-    borderRadius: moderateScale(4),
+    borderRadius: moderateScale(3),
+    textAlign: 'center',
   },
   
-  // Head - adjusted for the specific image
+  // ===== FRONT BODY PARTS =====
+  
+  // Head
   head: {
     top: '3%',
-    left: '35%',
-    width: '30%',
-    height: '9%',
+    left: '37%',
+    width: '26%',
+    height: '8%',
     borderRadius: moderateScale(20),
   },
   
   // Neck
   neck: {
-    top: '15%',
-    left: '40%',
-    width: '20%',
-    height: '3%',
+    top: '12%',
+    left: '42%',
+    width: '16%',
+    height: '4%',
   },
   
   // Shoulders
   leftShoulder: {
-    top: '20%',
-    left: '30%',
-    width: '20%',
-    height: '5%',
+    top: '18%',
+    left: '32%',
+    width: '16%',
+    height: '6%',
   },
   rightShoulder: {
-    top: '20%',
-    right: '30%',
-    width: '20%',
-    height: '5%',
+    top: '18%',
+    right: '32%',
+    width: '16%',
+    height: '6%',
   },
   
   // Arms
   leftArm: {
-    top: '25%',
-    left: '27.5%',
-    width: '15%',
-    height: '20%',
+    top: '26%',
+    left: '30%',
+    width: '8%',
+    height: '16%',
   },
   rightArm: {
-    top: '25%',
-    right: '27.5%',
-    width: '15%',
-    height: '20%',
+    top: '26%',
+    right: '30%',
+    width: '8%',
+    height: '16%',
   },
   
   // Hands
   leftHand: {
-    top: '40%',
-    left: '8%',
-    width: '10%',
-    height: '5%',
+    top: '50%',
+    left: '22.5%',
+    width: '12%',
+    height: '8%',
+    borderRadius: moderateScale(8),
   },
   rightHand: {
-    top: '40%',
-    right: '8%',
-    width: '10%',
-    height: '5%',
+    top: '50%',
+    right: '22.5%',
+    width: '12%',
+    height: '8%',
+    borderRadius: moderateScale(8),
   },
   
   // Torso
   chest: {
-    top: '22.5%',
-    left: '35%',
-    width: '26.5%',
+    top: '22%',
+    left: '38%',
+    width: '24%',
     height: '8%',
   },
   abdomen: {
-    top: '30%',
-    left: '35%',
-    width: '26.5%',
-    height: '12%',
+    top: '32%',
+    left: '38%',
+    width: '24%',
+    height: '8%',
+  },
+  pelvis: {
+    top: '42%',
+    left: '38%',
+    width: '24%',
+    height: '8%',
   },
   
   // Hips
   leftHip: {
     top: '42.5%',
-    left: '32%',
-    width: '17%',
+    left: '34%',
+    width: '12%',
     height: '7%',
   },
   rightHip: {
     top: '42.5%',
-    right: '32%',
-    width: '17%',
+    right: '34%',
+    width: '12%',
     height: '7%',
   },
   
@@ -556,5 +375,138 @@ const styles = StyleSheet.create({
     right: '35%',
     width: '15%',
     height: '7%',
+  },
+
+  // ===== BACK BODY PARTS =====
+  
+  // Back head and neck
+  backHead: {
+    top: '3%',
+    left: '38%',
+    width: '24%',
+    height: '14%',
+    borderRadius: moderateScale(20),
+  },
+  backNeck: {
+    top: '18%',
+    left: '42%',
+    width: '16%',
+    height: '8%',
+  },
+
+  // Back shoulders
+  leftShoulderBack: {
+    top: '26%',
+    left: '30%',
+    width: '16%',
+    height: '6%',
+  },
+  rightShoulderBack: {
+    top: '26%',
+    right: '30%',
+    width: '16%',
+    height: '6%',
+  },
+
+  // Shoulder blades
+  leftShoulderBlade: {
+    top: '39%',
+    left: '33%',
+    width: '14%',
+    height: '4%',
+  },
+  rightShoulderBlade: {
+    top: '39%',
+    right: '33%',
+    width: '14%',
+    height: '4%',
+  },
+
+  // Upper spine and back
+  upperSpine: {
+    top: '31%',
+    left: '47%',
+    width: '6%',
+    height: '12%',
+  },
+  leftUpperBack: {
+    top: '32%',
+    left: '30.5%',
+    width: '15%',
+    height: '6%',
+  },
+  rightUpperBack: {
+    top: '32%',
+    right: '30.5%',
+    width: '15%',
+    height: '6%',
+  },
+
+  // Mid spine and back
+  midSpine: {
+    top: '45%',
+    left: '47%',
+    width: '6%',
+    height: '10%',
+  },
+  leftMidBack: {
+    top: '45%',
+    left: '34%',
+    width: '12%',
+    height: '10%',
+  },
+  rightMidBack: {
+    top: '45%',
+    right: '34%',
+    width: '12%',
+    height: '10%',
+  },
+
+  // Lower spine and back
+  lowerSpine: {
+    top: '58%',
+    left: '47%',
+    width: '6%',
+    height: '10%',
+  },
+  leftLowerBack: {
+    top: '58%',
+    left: '34%',
+    width: '12%',
+    height: '8%',
+  },
+  rightLowerBack: {
+    top: '58%',
+    right: '34%',
+    width: '12%',
+    height: '8%',
+  },
+  
+  // Buttocks
+  leftButtock: {
+    top: '70%',
+    left: '35%',
+    width: '14%',
+    height: '12%',
+  },
+  rightButtock: {
+    top: '70%',
+    right: '35%',
+    width: '14%',
+    height: '12%',
+  },
+  
+  // Back thighs
+  leftBackThigh: {
+    top: '85%',
+    left: '34%',
+    width: '14%',
+    height: '12%',
+  },
+  rightBackThigh: {
+    top: '85%',
+    right: '34%',
+    width: '14%',
+    height: '12%',
   },
 });

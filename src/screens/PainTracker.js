@@ -41,6 +41,9 @@ const PainTracker = ({ navigation }) => {
   // Tab navigation state
   const [activeTab, setActiveTab] = useState('track');
 
+  // Pain tracker showing back or front image state 
+  const [showBack, setShowBack] = useState(true);
+
   // Load all pain logs when component mounts
   useEffect(() => {
     const initializePainLogs = async () => {
@@ -254,11 +257,20 @@ const PainTracker = ({ navigation }) => {
             {/* Track Pain Content */}
             {activeTab === 'track' && (
               <>
-                <View style={styles.sectionContainer}>
-                  <Text style={styles.sectionTitle}>Select Pain Areas</Text>
+                <View style={styles.sectionContainer}> 
+                  <View style={styles.sectionTitleContainer}>
+                    <Text style={styles.sectionTitle}>Select Pain Areas</Text>
+                    <TouchableOpacity 
+                      style={styles.backButton}
+                      onPress={() => setShowBack(!showBack)}
+                    >
+                      <Ionicons name="sync-outline" size={moderateScale(24)} color="white" />
+                    </TouchableOpacity>
+                  </View>
                   <BodyMapSelector 
                     selectedAreas={selectedAreas}
                     onSelectArea={handleSelectArea}
+                    showBack={showBack}
                   />
                 </View>
                 
@@ -403,6 +415,10 @@ const styles = StyleSheet.create({
   },
   backButton: {
     marginRight: moderateScale(10),
+    backgroundColor: COLORS.backgroundPurple,
+    padding: moderateScale(5),
+    borderRadius: moderateScale(10),
+    marginBottom: moderateScale(5),
   },
   headerTextContainer: {
     flex: 1, 
@@ -451,6 +467,12 @@ const styles = StyleSheet.create({
   sectionContainer: {
     paddingHorizontal: moderateScale(15),
     marginTop: moderateScale(10)
+  },
+  sectionTitleContainer: { 
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: moderateScale(5),
+    justifyContent: 'space-between',
   },
   sectionTitle: {
     fontSize: moderateScale(16),
