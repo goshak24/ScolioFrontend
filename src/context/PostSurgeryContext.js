@@ -5,18 +5,20 @@ import { incrementWalkingMinutes as incrementWalkingMinutesApi, updateWalkingMin
 
 // Default recovery tasks
 const defaultRecoveryTasks = [
-  { id: 1, label: 'Take pain medication', frequency: 'Every 6 hours', completed: false },
-  { id: 2, label: 'Change dressing', frequency: 'Daily', completed: false },
-  { id: 3, label: 'Walk around the house', frequency: '3-4 times daily', completed: false },
-  { id: 4, label: 'Do breathing exercises', frequency: 'Every 2 hours', completed: false },
-  { id: 5, label: 'Check incision for signs of infection', frequency: 'Daily', completed: false },
+  { id: 1, label: 'Take pain medication', frequency: 'Every 6 hours', completed: false, isDefault: true },
+  { id: 2, label: 'Change dressing', frequency: 'Daily', completed: false, isDefault: true },
+  { id: 3, label: 'Walk around the house', frequency: '3-4 times daily', completed: false, isDefault: true },
+  { id: 4, label: 'Do breathing exercises', frequency: 'Every 2 hours', completed: false, isDefault: true },
+  { id: 5, label: 'Check incision for signs of infection', frequency: 'Daily', completed: false, isDefault: true },
 ];
 
 // Storage keys
 const TASKS_STORAGE_KEY = 'recoveryTasks';
+const CUSTOM_TASKS_STORAGE_KEY = 'customRecoveryTasks';
 const LAST_RESET_DATE_KEY = 'lastRecoveryTasksResetDate';
 const LAST_WALKING_RESET_DATE_KEY = 'lastWalkingResetDate';
 const SURGERY_DATE_KEY = 'surgeryDate';
+const TASK_ID_COUNTER_KEY = 'taskIdCounter';
 
 const postSurgeryReducer = (state, action) => {
   switch (action.type) {
@@ -54,6 +56,20 @@ const postSurgeryReducer = (state, action) => {
       return { ...state, error: action.payload, loading: false };
     default:
       return state;
+  }
+};
+
+// Helper function to get next task ID
+const getNextTaskId = async () => {
+  try {
+    const counterStr = await AsyncStorage.getItem(TASK_ID_COUNTER_KEY);
+    const counter = counterStr ? parseInt(counterStr, 10) : 1000; // Start custom IDs from 1000
+    const nextId = counter + 1;
+    await AsyncStorage.setItem(TASK_ID_COUNTER_KEY, nextId.toString());
+    return nextId;
+  } catch (error) {
+    console.error('Error getting next task ID:', error);
+    return Date.now(); // Fallback to timestamp
   }
 };
 
@@ -209,17 +225,36 @@ const loadRecoveryData = (dispatch) => async () => {
 
     // --- Recovery task reset logic ---
     const lastResetDate = await AsyncStorage.getItem(LAST_RESET_DATE_KEY);
-    let recoveryTasks = defaultRecoveryTasks;
+    let recoveryTasks = [];
+    
     if (lastResetDate !== today) {
-      // Reset tasks to default (uncompleted)
-      await AsyncStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(defaultRecoveryTasks));
+      // New day - reset all task completion status
+      console.log('New day detected, resetting all task completion status');
+      
+      // Load custom tasks
+      const customTasksJSON = await AsyncStorage.getItem(CUSTOM_TASKS_STORAGE_KEY);
+      const customTasks = customTasksJSON ? JSON.parse(customTasksJSON) : [];
+      
+      // Reset all tasks to uncompleted
+      const resetDefaultTasks = defaultRecoveryTasks.map(task => ({ ...task, completed: false }));
+      const resetCustomTasks = customTasks.map(task => ({ ...task, completed: false }));
+      recoveryTasks = [...resetDefaultTasks, ...resetCustomTasks];
+      
+      // Save reset tasks
+      await AsyncStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(recoveryTasks));
       await AsyncStorage.setItem(LAST_RESET_DATE_KEY, today);
-      recoveryTasks = defaultRecoveryTasks;
     } else {
-      // Load saved tasks if it's the same day
+      // Same day - load saved tasks with current completion status
       const savedTasksJSON = await AsyncStorage.getItem(TASKS_STORAGE_KEY);
+      const customTasksJSON = await AsyncStorage.getItem(CUSTOM_TASKS_STORAGE_KEY);
+      
       if (savedTasksJSON) {
+        // Load from saved tasks (includes completion status)
         recoveryTasks = JSON.parse(savedTasksJSON);
+      } else {
+        // Fallback: merge default and custom tasks
+        const customTasks = customTasksJSON ? JSON.parse(customTasksJSON) : [];
+        recoveryTasks = [...defaultRecoveryTasks, ...customTasks];
       }
     }
 
@@ -251,7 +286,7 @@ const updateRecoveryTasks = (dispatch) => async (taskId) => {
     
     // Get current tasks
     const savedTasksJSON = await AsyncStorage.getItem(TASKS_STORAGE_KEY);
-    const currentTasks = savedTasksJSON ? JSON.parse(savedTasksJSON) : defaultRecoveryTasks;
+    const currentTasks = savedTasksJSON ? JSON.parse(savedTasksJSON) : [];
     
     // Toggle the completed status of the task
     const updatedTasks = currentTasks.map(task => 
@@ -272,6 +307,133 @@ const updateRecoveryTasks = (dispatch) => async (taskId) => {
       payload: error.message || "Failed to update recovery tasks" 
     });
     return false;
+  }
+};
+
+const addCustomTask = (dispatch) => async (taskData) => {
+  try {
+    dispatch({ type: "SET_LOADING", payload: true });
+    
+    // Get next task ID
+    const taskId = await getNextTaskId();
+    
+    // Create new task
+    const newTask = {
+      id: taskId,
+      label: taskData.label,
+      frequency: taskData.frequency,
+      completed: false,
+      isDefault: false
+    };
+    
+    // Get current custom tasks
+    const customTasksJSON = await AsyncStorage.getItem(CUSTOM_TASKS_STORAGE_KEY);
+    const customTasks = customTasksJSON ? JSON.parse(customTasksJSON) : [];
+    
+    // Add new task to custom tasks
+    const updatedCustomTasks = [...customTasks, newTask];
+    await AsyncStorage.setItem(CUSTOM_TASKS_STORAGE_KEY, JSON.stringify(updatedCustomTasks));
+    
+    // Get current all tasks and add the new one
+    const savedTasksJSON = await AsyncStorage.getItem(TASKS_STORAGE_KEY);
+    const currentTasks = savedTasksJSON ? JSON.parse(savedTasksJSON) : [];
+    const updatedAllTasks = [...currentTasks, newTask];
+    
+    // Save updated all tasks
+    await AsyncStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(updatedAllTasks));
+    
+    // Update state
+    dispatch({ type: "UPDATE_RECOVERY_TASKS", payload: updatedAllTasks });
+    
+    return { success: true, task: newTask };
+  } catch (error) {
+    console.error('Error adding custom task:', error);
+    dispatch({ 
+      type: "SET_ERROR", 
+      payload: error.message || "Failed to add custom task" 
+    });
+    return { success: false, error: error.message };
+  }
+};
+
+const deleteCustomTask = (dispatch) => async (taskId) => {
+  try {
+    dispatch({ type: "SET_LOADING", payload: true });
+    
+    // Don't allow deletion of default tasks (IDs 1-5)
+    if (taskId <= 5) {
+      dispatch({ 
+        type: "SET_ERROR", 
+        payload: "Cannot delete default recovery tasks" 
+      });
+      return { success: false, error: "Cannot delete default recovery tasks" };
+    }
+    
+    // Get current custom tasks and remove the task
+    const customTasksJSON = await AsyncStorage.getItem(CUSTOM_TASKS_STORAGE_KEY);
+    const customTasks = customTasksJSON ? JSON.parse(customTasksJSON) : [];
+    const updatedCustomTasks = customTasks.filter(task => task.id !== taskId);
+    
+    // Save updated custom tasks
+    await AsyncStorage.setItem(CUSTOM_TASKS_STORAGE_KEY, JSON.stringify(updatedCustomTasks));
+    
+    // Get current all tasks and remove the task
+    const savedTasksJSON = await AsyncStorage.getItem(TASKS_STORAGE_KEY);
+    const currentTasks = savedTasksJSON ? JSON.parse(savedTasksJSON) : [];
+    const updatedAllTasks = currentTasks.filter(task => task.id !== taskId);
+    
+    // Save updated all tasks
+    await AsyncStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(updatedAllTasks));
+    
+    // Update state
+    dispatch({ type: "UPDATE_RECOVERY_TASKS", payload: updatedAllTasks });
+    
+    return { success: true };
+  } catch (error) {
+    console.error('Error deleting custom task:', error);
+    dispatch({ 
+      type: "SET_ERROR", 
+      payload: error.message || "Failed to delete custom task" 
+    });
+    return { success: false, error: error.message };
+  }
+};
+
+const editCustomTask = (dispatch) => async (taskId, taskData) => {
+  try {
+    dispatch({ type: "SET_LOADING", payload: true });
+    
+    // Get current custom tasks
+    const customTasksJSON = await AsyncStorage.getItem(CUSTOM_TASKS_STORAGE_KEY);
+    const customTasks = customTasksJSON ? JSON.parse(customTasksJSON) : [];
+    
+    // Update custom tasks if it's a custom task
+    const updatedCustomTasks = customTasks.map(task => 
+      task.id === taskId ? { ...task, label: taskData.label, frequency: taskData.frequency } : task
+    );
+    await AsyncStorage.setItem(CUSTOM_TASKS_STORAGE_KEY, JSON.stringify(updatedCustomTasks));
+    
+    // Get current all tasks and update the task
+    const savedTasksJSON = await AsyncStorage.getItem(TASKS_STORAGE_KEY);
+    const currentTasks = savedTasksJSON ? JSON.parse(savedTasksJSON) : [];
+    const updatedAllTasks = currentTasks.map(task => 
+      task.id === taskId ? { ...task, label: taskData.label, frequency: taskData.frequency } : task
+    );
+    
+    // Save updated all tasks
+    await AsyncStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(updatedAllTasks));
+    
+    // Update state
+    dispatch({ type: "UPDATE_RECOVERY_TASKS", payload: updatedAllTasks });
+    
+    return { success: true };
+  } catch (error) {
+    console.error('Error editing custom task:', error);
+    dispatch({ 
+      type: "SET_ERROR", 
+      payload: error.message || "Failed to edit custom task" 
+    });
+    return { success: false, error: error.message };
   }
 };
 
@@ -319,7 +481,10 @@ export const { Provider, Context } = createDataContext(
     loadRecoveryData,
     updateRecoveryTasks,
     incrementWalkingMinutes,
-    fetchWalkingData
+    fetchWalkingData,
+    addCustomTask,
+    deleteCustomTask,
+    editCustomTask
   },
   { 
     recoveryTasks: defaultRecoveryTasks,
@@ -328,4 +493,4 @@ export const { Provider, Context } = createDataContext(
     loading: false,
     error: null
   }
-); 
+);
