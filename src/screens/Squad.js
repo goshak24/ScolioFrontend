@@ -337,7 +337,7 @@ const Squad = () => {
       
       // Cache for future use
       userCache.cacheUser(enhancedUser);
-      console.log("💾 Cached enhanced user:", enhancedUser);
+      console.log("💾 Cached enhanced user:");
       return enhancedUser;
     }
     
@@ -360,7 +360,7 @@ const Squad = () => {
       
       // Cache for future use
       userCache.cacheUser(enhancedUser);
-      console.log("💾 Cached enhanced user from requests:", enhancedUser);
+      console.log("💾 Cached enhanced user from requests");
       return enhancedUser;
     }
     
@@ -368,14 +368,14 @@ const Squad = () => {
     console.log("🗃️ Checking user cache");
     const cachedUser = userCache.getCachedUser(user.id);
     if (cachedUser && (cachedUser.username || cachedUser.displayName)) {
-      console.log("✅ Found user in cache:", cachedUser);
+      console.log("✅ Found user in cache");
       const enhancedUser = {
         ...user,
         username: user.username || cachedUser.username || cachedUser.displayName,
         avatar: user.avatar || cachedUser.avatar,
         displayName: user.displayName || cachedUser.displayName
       };
-      console.log("📤 Returning cached user data:", enhancedUser);
+      console.log("📤 Returning cached user data");
       return enhancedUser;
     }
     
@@ -395,7 +395,7 @@ const Squad = () => {
         
         // Cache for future use
         userCache.cacheUser(enhancedUser);
-        console.log("💾 Cached user from getUserById:", enhancedUser);
+        console.log("💾 Cached user from getUserById:");
         return enhancedUser;
       }
     } catch (error) {

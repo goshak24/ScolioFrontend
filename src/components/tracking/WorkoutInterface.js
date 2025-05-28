@@ -9,7 +9,7 @@ import { Context as ActivityContext } from '../../context/ActivityContext';
 import StreakExtensionAnimation from '../StreakExtensionAnimation';
 import { getFormattedDate, getDateStringFromFirestoreTimestamp } from '../timeZoneHelpers'; 
 
-const WorkoutInterface = ({ workouts, weeklySchedule = [], customHeader = null }) => {
+const WorkoutInterface = ({ workouts = [], weeklySchedule = [], customHeader = null }) => {
     const { updateStreak, logPhysio } = useContext(ActivityContext);
     const { state: { user }, incrementPhysio } = useContext(UserContext);
     
@@ -19,7 +19,10 @@ const WorkoutInterface = ({ workouts, weeklySchedule = [], customHeader = null }
     const [showSuccess, setShowSuccess] = useState(false);
     const [showStreakAnimation, setShowStreakAnimation] = useState(false);
     const [streakExtended, setStreakExtended] = useState(false);
+    const [showOtherDays, setShowOtherDays] = useState(false);
     const streakUpdatedToday = useRef(false);
+
+    console.log('user', user.treatmentData?.physio?.scheduledWorkouts);
 
     const today = getFormattedDate();
     const lastStreakUpdate = user?.lastStreakUpdate;
@@ -30,6 +33,37 @@ const WorkoutInterface = ({ workouts, weeklySchedule = [], customHeader = null }
     const wasStreakUpdatedToday = lastUpdateDateString === today; 
     
     const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+    // Get current day name
+    const getCurrentDayName = () => {
+        const currentDate = new Date();
+        const dayIndex = currentDate.getDay(); // 0 = Sunday, 1 = Monday, etc.
+        const adjustedIndex = dayIndex === 0 ? 6 : dayIndex - 1; // Adjust so Monday = 0
+        return dayNames[adjustedIndex];
+    };
+
+    const currentDayName = getCurrentDayName();
+
+    // Get workouts organized by day
+    const getOrganizedWorkouts = () => {
+        const scheduledWorkouts = user?.treatmentData?.physio?.scheduledWorkouts || {};
+        
+        // Get today's workouts
+        const todaysWorkouts = scheduledWorkouts[currentDayName] || [];
+        
+        // Get other days' workouts
+        const otherDaysWorkouts = {};
+        dayNames.forEach(day => {
+            if (day !== currentDayName && scheduledWorkouts[day] && scheduledWorkouts[day].length > 0) {
+                otherDaysWorkouts[day] = scheduledWorkouts[day];
+            }
+        });
+
+        return { todaysWorkouts, otherDaysWorkouts };
+    };
+
+    const { todaysWorkouts, otherDaysWorkouts } = getOrganizedWorkouts();
 
     // Get recent history data from user's physio sessions
     const getRecentHistory = () => {
@@ -87,19 +121,57 @@ const WorkoutInterface = ({ workouts, weeklySchedule = [], customHeader = null }
         return `${minutes}:${seconds.toString().padStart(2, '0')}`;
     };
 
-    // Toggle workout selection
-    const toggleWorkoutSelection = (index) => {
-        setSelectedWorkouts(prev => {
-            const newSelection = prev.includes(index)
-                ? prev.filter(i => i !== index)
-                : [index];
+    // Create a combined workout list with day indicators
+    const createCombinedWorkoutList = () => {
+        const combined = [];
+        let workoutIndex = 0;
 
-            // Calculate total time in seconds
+        // Add today's workouts first
+        todaysWorkouts.forEach((workout, index) => {
+            combined.push({
+                ...workout,
+                originalIndex: workoutIndex,
+                day: currentDayName,
+                isToday: true,
+                dayIndex: index
+            });
+            workoutIndex++;
+        });
+
+        // Add other days' workouts if expanded
+        if (showOtherDays) {
+            Object.entries(otherDaysWorkouts).forEach(([day, dayWorkouts]) => {
+                dayWorkouts.forEach((workout, index) => {
+                    combined.push({
+                        ...workout,
+                        originalIndex: workoutIndex,
+                        day: day,
+                        isToday: false,
+                        dayIndex: index
+                    });
+                    workoutIndex++;
+                });
+            });
+        }
+
+        return combined;
+    };
+
+    const combinedWorkouts = createCombinedWorkoutList();
+
+    // Toggle workout selection
+    const toggleWorkoutSelection = (originalIndex) => {
+        setSelectedWorkouts(prev => {
+            const newSelection = prev.includes(originalIndex)
+                ? prev.filter(i => i !== originalIndex)
+                : [originalIndex];
+
+            // Calculate total time in seconds using combined workout list
             const newTotalTime = newSelection.reduce((sum, i) => {
-                const timeString = workouts[i]?.time;
-                if (!timeString || typeof timeString !== 'string' || !timeString.includes(":")) return sum;
+                const workout = combinedWorkouts.find(w => w.originalIndex === i);
+                if (!workout?.time || typeof workout.time !== 'string' || !workout.time.includes(":")) return sum;
             
-                const [minutes, seconds] = timeString.split(":").map(Number);
+                const [minutes, seconds] = workout.time.split(":").map(Number);
                 return sum + (minutes * 60 + seconds);
             }, 0);
 
@@ -124,11 +196,11 @@ const WorkoutInterface = ({ workouts, weeklySchedule = [], customHeader = null }
         setIsRunning(false);
         setRemainingTime(
             selectedWorkouts.reduce((sum, i) => {
-              const timeString = workouts[i]?.time;
-              if (!timeString || typeof timeString !== 'string' || !timeString.includes(":")) return sum;
+                const workout = combinedWorkouts.find(w => w.originalIndex === i);
+                if (!workout?.time || typeof workout.time !== 'string' || !workout.time.includes(":")) return sum;
           
-              const [minutes, seconds] = timeString.split(":").map(Number);
-              return sum + (minutes * 60 + seconds);
+                const [minutes, seconds] = workout.time.split(":").map(Number);
+                return sum + (minutes * 60 + seconds);
             }, 0)
         ); 
     };
@@ -200,6 +272,38 @@ const WorkoutInterface = ({ workouts, weeklySchedule = [], customHeader = null }
     // Get the recent history data
     const recentHistory = getRecentHistory();
 
+    // Render workout section
+    const renderWorkoutSection = (workouts, sectionTitle, isExpanded = true) => {
+        if (workouts.length === 0) return null;
+
+        return (
+            <View style={styles.workoutSection}>
+                <Text style={styles.sectionTitle}>{sectionTitle}</Text>
+                {workouts.map((exercise, index) => (
+                    <TouchableOpacity
+                        key={`${exercise.day}-${index}`}
+                        style={[
+                            styles.exerciseRow,
+                            selectedWorkouts.includes(exercise.originalIndex) && styles.selectedWorkout,
+                        ]}
+                        onPress={() => toggleWorkoutSelection(exercise.originalIndex)}
+                    >
+                        {exercise.icon && (
+                            <Image source={exercise.icon} style={styles.exerciseIcon} />
+                        )}
+                        <View style={styles.exerciseInfo}>
+                            <Text style={styles.exerciseName}>{exercise.title}</Text>
+                            <Text style={styles.exerciseTime}>{exercise.time}</Text>
+                            {!exercise.isToday && (
+                                <Text style={styles.exerciseDay}>({exercise.day})</Text>
+                            )}
+                        </View>
+                    </TouchableOpacity>
+                ))}
+            </View>
+        );
+    };
+
     return (
         <View style={styles.container}>
             {/* Streak Extension Animation */}
@@ -247,24 +351,73 @@ const WorkoutInterface = ({ workouts, weeklySchedule = [], customHeader = null }
                 )}
 
                 <ScrollView>
-                    {workouts.map((exercise, index) => (
-                        <TouchableOpacity
-                            key={index}
-                            style={[
-                                styles.exerciseRow,
-                                selectedWorkouts.includes(index) && styles.selectedWorkout,
-                            ]}
-                            onPress={() => toggleWorkoutSelection(index)}
-                        >
-                            {exercise.icon && (
-                                <Image source={exercise.icon} style={styles.exerciseIcon} />
+                    {/* Today's Workouts Section */}
+                    {todaysWorkouts.length > 0 ? (
+                        renderWorkoutSection(
+                            todaysWorkouts.map((workout, index) => ({
+                                ...workout,
+                                originalIndex: index,
+                                day: currentDayName,
+                                isToday: true
+                            })),
+                            `Today's Workouts (${currentDayName})`
+                        )
+                    ) : (
+                        <View style={styles.noWorkoutsContainer}>
+                            <Text style={styles.noWorkoutsText}>No workouts scheduled for today ({currentDayName})</Text>
+                        </View>
+                    )}
+
+                    {/* Other Days Expandable Section */}
+                    {Object.keys(otherDaysWorkouts).length > 0 && (
+                        <View style={styles.expandableSection}>
+                            <TouchableOpacity 
+                                style={styles.expandableHeader}
+                                onPress={() => setShowOtherDays(!showOtherDays)}
+                            >
+                                <Text style={styles.expandableHeaderText}>Other Days</Text>
+                                <Text style={styles.expandableArrow}>
+                                    {showOtherDays ? '▲' : '▼'}
+                                </Text>
+                            </TouchableOpacity>
+                            
+                            {showOtherDays && (
+                                <View style={styles.expandableContent}>
+                                    {Object.entries(otherDaysWorkouts).map(([day, dayWorkouts]) => (
+                                        <View key={day} style={styles.daySection}>
+                                            <Text style={styles.daySectionTitle}>{day}</Text>
+                                            {dayWorkouts.map((exercise, index) => {
+                                                const originalIndex = todaysWorkouts.length + 
+                                                    Object.entries(otherDaysWorkouts)
+                                                        .slice(0, Object.keys(otherDaysWorkouts).indexOf(day))
+                                                        .reduce((sum, [_, workouts]) => sum + workouts.length, 0) + index;
+                                                
+                                                return (
+                                                    <TouchableOpacity
+                                                        key={`${day}-${index}`}
+                                                        style={[
+                                                            styles.exerciseRow,
+                                                            styles.otherDayExercise,
+                                                            selectedWorkouts.includes(originalIndex) && styles.selectedWorkout,
+                                                        ]}
+                                                        onPress={() => toggleWorkoutSelection(originalIndex)}
+                                                    >
+                                                        {exercise.icon && (
+                                                            <Image source={exercise.icon} style={styles.exerciseIcon} />
+                                                        )}
+                                                        <View style={styles.exerciseInfo}>
+                                                            <Text style={styles.exerciseName}>{exercise.title}</Text>
+                                                            <Text style={styles.exerciseTime}>{exercise.time}</Text>
+                                                        </View>
+                                                    </TouchableOpacity>
+                                                );
+                                            })}
+                                        </View>
+                                    ))}
+                                </View>
                             )}
-                            <View>
-                                <Text style={styles.exerciseName}>{exercise.title}</Text>
-                                <Text style={styles.exerciseTime}>{exercise.time}</Text> 
-                            </View>
-                        </TouchableOpacity>
-                    ))}
+                        </View>
+                    )}
                 </ScrollView>
 
                 {/* Start Workout Button */}
@@ -410,13 +563,83 @@ const styles = StyleSheet.create({
       fontSize: moderateScale(16),
       fontWeight: 'bold',
   },
+  
+  // New workout section styles
+  workoutSection: {
+      marginBottom: moderateScale(10),
+  },
+  sectionTitle: {
+      color: COLORS.accentGreen,
+      fontSize: moderateScale(16),
+      fontWeight: 'bold',
+      marginBottom: moderateScale(8),
+      paddingLeft: moderateScale(4),
+  },
+  noWorkoutsContainer: {
+      backgroundColor: COLORS.workoutOption,
+      padding: moderateScale(15),
+      borderRadius: moderateScale(10),
+      marginBottom: moderateScale(10),
+      alignItems: 'center',
+  },
+  noWorkoutsText: {
+      color: COLORS.lightGray,
+      fontSize: moderateScale(14),
+      textAlign: 'center',
+      fontStyle: 'italic',
+  },
+  
+  // Expandable section styles
+  expandableSection: {
+      marginTop: moderateScale(15),
+      borderTopWidth: 1,
+      borderTopColor: COLORS.lightGray + '30',
+      paddingTop: moderateScale(10),
+  },
+  expandableHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      backgroundColor: COLORS.workoutOption,
+      padding: moderateScale(12),
+      borderRadius: moderateScale(8),
+      marginBottom: moderateScale(8),
+  },
+  expandableHeaderText: {
+      color: COLORS.text,
+      fontSize: moderateScale(15),
+      fontWeight: 'bold',
+  },
+  expandableArrow: {
+      color: COLORS.accentGreen,
+      fontSize: moderateScale(16),
+      fontWeight: 'bold',
+  },
+  expandableContent: {
+      marginTop: moderateScale(5),
+  },
+  daySection: {
+      marginBottom: moderateScale(15),
+  },
+  daySectionTitle: {
+      color: COLORS.primaryPurple,
+      fontSize: moderateScale(14),
+      fontWeight: 'bold',
+      marginBottom: moderateScale(6),
+      paddingLeft: moderateScale(8),
+  },
+  otherDayExercise: {
+      marginLeft: moderateScale(8),
+      opacity: 0.8,
+  },
+
   exerciseRow: {
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: COLORS.workoutOption,
       padding: Platform.OS === 'ios' ? moderateScale(12) : moderateScale(10),
       borderRadius: moderateScale(10),
-      marginVertical: moderateScale(5),
+      marginVertical: moderateScale(3),
   },
   selectedWorkout: {
       backgroundColor: COLORS.primaryPurple,
@@ -426,6 +649,9 @@ const styles = StyleSheet.create({
       height: moderateScale(30),
       marginRight: moderateScale(10),
   },
+  exerciseInfo: {
+      flex: 1,
+  },
   exerciseName: {
       color: COLORS.text,
       fontSize: moderateScale(14),
@@ -433,6 +659,12 @@ const styles = StyleSheet.create({
   exerciseTime: {
       color: COLORS.lightGray,
       fontSize: moderateScale(12),
+  },
+  exerciseDay: {
+      color: COLORS.primaryPurple,
+      fontSize: moderateScale(11),
+      fontStyle: 'italic',
+      marginTop: moderateScale(2),
   },
   timerRow: {
       flexDirection: 'row',
@@ -594,7 +826,6 @@ tipText: {
       fontSize: moderateScale(14),
     },
 
-
     daysContainer: {
         marginBottom: moderateScale(15),
         alignItems: 'center',
@@ -610,4 +841,4 @@ tipText: {
       },
 });
 
-export default WorkoutInterface; 
+export default WorkoutInterface;

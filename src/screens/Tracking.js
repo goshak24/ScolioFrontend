@@ -26,7 +26,7 @@ const Tracking = () => {
   const [scheduledEvents, setScheduledEvents] = useState({});
   const [localWorkouts, setLocalWorkouts] = useState([]);
   const [localWeeklySchedule, setLocalWeeklySchedule] = useState([]);
-  const [isInitialized, setIsInitialized] = useState(false);
+  const [isInitialized, setIsInitialized] = useState(false); 
 
   // Only fetch user data once when idToken is available and user is not loaded
   useEffect(() => {
