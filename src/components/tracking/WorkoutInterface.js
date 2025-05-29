@@ -20,9 +20,7 @@ const WorkoutInterface = ({ workouts = [], weeklySchedule = [], customHeader = n
     const [showStreakAnimation, setShowStreakAnimation] = useState(false);
     const [streakExtended, setStreakExtended] = useState(false);
     const [showOtherDays, setShowOtherDays] = useState(false);
-    const streakUpdatedToday = useRef(false);
-
-    console.log('user', user.treatmentData?.physio?.scheduledWorkouts);
+    const streakUpdatedToday = useRef(false); 
 
     const today = getFormattedDate();
     const lastStreakUpdate = user?.lastStreakUpdate;

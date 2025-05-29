@@ -15,14 +15,13 @@ import { TouchableOpacity } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import CalendarModal from '../components/reusable/Calendar/CalendarModal';
-import { format } from 'date-fns';
+import { format } from 'date-fns'; 
 
 const Tracking = () => {
   const { state: { idToken } } = useContext(AuthContext);
   const { state: { user, loading }, fetchUserData, addUserPhysioWorkout } = useContext(UserContext);
 
   const [showCalendarModal, setShowCalendarModal] = useState(false);
-  const [selectedDate, setSelectedDate] = useState(null);
   const [scheduledEvents, setScheduledEvents] = useState({});
   const [localWorkouts, setLocalWorkouts] = useState([]);
   const [localWeeklySchedule, setLocalWeeklySchedule] = useState([]);
@@ -144,6 +143,7 @@ const Tracking = () => {
     }
   }, []);
 
+  // ADD PHYSIO WORKOUT 
   const handleEventAdd = useCallback(async (date, newEvent) => {
     if (!date || !newEvent) return;
     

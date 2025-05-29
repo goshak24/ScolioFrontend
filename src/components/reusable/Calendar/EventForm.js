@@ -52,7 +52,8 @@ const EventForm = ({
     
     const validateTime = (time) => {
       if (!time) return false;
-      const timeRegex = /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/;
+      // Validate time format (MM:SS) for physio events 
+      const timeRegex = /^([0-9]{1,3}):([0-5][0-9])$/;
       return timeRegex.test(time);
     };
 
