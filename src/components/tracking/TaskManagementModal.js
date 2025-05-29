@@ -197,7 +197,7 @@ const TaskManagementModal = ({
           >
             <Ionicons name="pencil" size={moderateScale(14)} color={COLORS.white} />
           </TouchableOpacity>
-          {isDefault && (
+          {
             <TouchableOpacity
               style={styles.deleteButton}
               onPress={() => handleDeleteTask(item.id, item.label)}
@@ -205,7 +205,7 @@ const TaskManagementModal = ({
             >
               <Ionicons name="trash" size={moderateScale(14)} color={COLORS.white} />
             </TouchableOpacity>
-          )}
+          }
         </View>
       </View>
     );
