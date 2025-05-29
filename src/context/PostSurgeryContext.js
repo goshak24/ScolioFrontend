@@ -362,11 +362,13 @@ const deleteCustomTask = (dispatch) => async (taskId) => {
     
     // Don't allow deletion of default tasks (IDs 1-5)
     if (taskId <= 5) {
-      dispatch({ 
-        type: "SET_ERROR", 
-        payload: "Cannot delete default recovery tasks" 
-      });
-      return { success: false, error: "Cannot delete default recovery tasks" };
+      defaultTasksJSON = await AsyncStorage.getItem(TASKS_STORAGE_KEY);
+      defaultTasks = defaultTasksJSON ? JSON.parse(defaultTasksJSON) : [];
+      defaultTasks = defaultTasks.filter(task => task.id !== taskId);
+      await AsyncStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(defaultTasks));
+
+      dispatch({ type: "UPDATE_RECOVERY_TASKS", payload: defaultTasks });
+      return { success: true };
     }
     
     // Get current custom tasks and remove the task
