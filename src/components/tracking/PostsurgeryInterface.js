@@ -22,7 +22,7 @@ const LAST_RESET_DATE_KEY = 'lastRecoveryTasksResetDate';
 const WALKING_MINUTES_KEY = 'walkingMinutes';
 const SURGERY_DATE_KEY = 'surgeryDate';
 
-const PostsurgeryInterface = ({ surgeryData = {}, physioData = {} }) => {
+const PostsurgeryInterface = ({ surgeryData = {}, physioData = {}, showSuccess, successMessage, onActivityComplete }) => {
   const { 
     state: { recoveryTasks, walkingMinutes, loading }, 
     loadRecoveryData, 
@@ -125,6 +125,9 @@ const PostsurgeryInterface = ({ surgeryData = {}, physioData = {} }) => {
         handleToggleTask={handleToggleTask}
         daysSinceSurgery={daysSinceSurgery}
         surgeryDate={actualSurgeryDate}
+        showSuccess={showSuccess}
+        successMessage={successMessage}
+        onActivityComplete={onActivityComplete}
       />
     </View>
   );

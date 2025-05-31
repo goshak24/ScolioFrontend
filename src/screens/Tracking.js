@@ -1,10 +1,11 @@
 import { StyleSheet, View, SafeAreaView, StatusBar, ScrollView, Text, ActivityIndicator, Platform } from 'react-native';
-import React, { useContext, useEffect, useState, useMemo, useCallback } from 'react';
+import React, { useContext, useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import WorkoutInterface from '../components/tracking/WorkoutInterface';
 import COLORS from '../constants/COLORS';
 import { moderateScale } from 'react-native-size-matters';
 import { Context as AuthContext } from '../context/AuthContext';
 import { Context as UserContext } from '../context/UserContext';
+import { Context as ActivityContext } from '../context/ActivityContext';
 import HeightSpacer from '../components/reusable/HeightSpacer';
 import BracePhysio from '../components/tracking/BracePhysio';
 import BraceTrackerInterface from '../components/tracking/BraceTrackerInterface';
@@ -15,17 +16,32 @@ import { TouchableOpacity } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import CalendarModal from '../components/reusable/Calendar/CalendarModal';
-import { format } from 'date-fns'; 
+import { format } from 'date-fns';
+import StreakExtensionAnimation from '../components/StreakExtensionAnimation';
+import { getFormattedDate, getDateStringFromFirestoreTimestamp } from '../components/timeZoneHelpers';
 
 const Tracking = () => {
   const { state: { idToken } } = useContext(AuthContext);
-  const { state: { user, loading }, fetchUserData, addUserPhysioWorkout } = useContext(UserContext);
+  const { state: { user, loading }, fetchUserData, addUserPhysioWorkout, incrementPhysio } = useContext(UserContext);
+  const { state: activityState, updateStreak, logPhysio, updateBraceWornHours } = useContext(ActivityContext); 
 
   const [showCalendarModal, setShowCalendarModal] = useState(false);
   const [scheduledEvents, setScheduledEvents] = useState({});
   const [localWorkouts, setLocalWorkouts] = useState([]);
   const [localWeeklySchedule, setLocalWeeklySchedule] = useState([]);
-  const [isInitialized, setIsInitialized] = useState(false); 
+  const [isInitialized, setIsInitialized] = useState(false);
+  
+  // Centralized streak state
+  const [showStreakAnimation, setShowStreakAnimation] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
+  const streakUpdatedToday = useRef(false);
+
+  // Get today's date and check if streak was already updated
+  const today = getFormattedDate();
+  const lastStreakUpdate = user?.lastStreakUpdate;
+  const lastUpdateDateString = getDateStringFromFirestoreTimestamp(lastStreakUpdate);
+  const wasStreakUpdatedToday = lastUpdateDateString === today;
 
   // Only fetch user data once when idToken is available and user is not loaded
   useEffect(() => {
@@ -142,6 +158,176 @@ const Tracking = () => {
       return null;
     }
   }, []);
+
+  // Helper function to get full day name from date
+  const getFullDayNameFromDate = useCallback((dateStr) => {
+    try {
+      const date = new Date(dateStr);
+      if (isNaN(date.getTime())) return null;
+      
+      const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      return days[date.getDay()];
+    } catch (error) {
+      console.error('Error getting day name:', error);
+      return null;
+    }
+  }, []);  
+
+  // Helper function to check if physio is complete for a specific date
+  const isPhysioCompleteForDate = useCallback((date) => {
+    if (!user?.treatmentData?.physio) return false;
+    
+    const physioHistory = user.treatmentData.physio.physioHistory || {};
+    const scheduledWorkouts = user.treatmentData.physio.scheduledWorkouts || {};
+    
+    // Get the full day name (e.g., "Saturday", "Monday") for the given date
+    const dayName = getFullDayNameFromDate(date);
+    if (!dayName) return false;
+    
+    // Get scheduled workouts for this day
+    const workoutsForDay = scheduledWorkouts[dayName] || [];
+    
+    // If no workouts scheduled for this day, consider physio complete
+    if (workoutsForDay.length === 0) {
+      return true;
+    }
+    
+    // Get completed sessions for this date
+    const completedSessions = physioHistory[date] || 0;
+    
+    // Check if completed sessions meet or exceed scheduled workouts
+    return completedSessions >= workoutsForDay.length;
+  }, [user, getFullDayNameFromDate]);
+
+  // CENTRALIZED ACTIVITY COMPLETION HANDLER
+  const handleActivityCompletion = useCallback(async (activityType, specificDate = null) => {
+    try {
+      let activityResult;
+      let message = '';
+      const accountType = userData?.userAccType?.toLowerCase();
+      const targetDate = specificDate || today;
+  
+      // Switch statement for different activity types
+      switch (activityType) {
+        case 'physio':
+          console.log("Calling logPhysio...");
+          activityResult = await logPhysio(specificDate);
+          
+          if (activityResult.success) {
+            incrementPhysio(specificDate);
+            message = 'Physio session completed! 💪';
+          }
+          break;
+  
+        case 'brace':
+          console.log("Calling updateBraceWornHours...");
+          activityResult = await updateBraceWornHours(specificDate);
+          
+          if (activityResult.success) {
+            message = 'Brace goal achieved! 🦴';
+          }
+          break;
+  
+        case 'brace + physio':
+          console.log("Calling logPhysio for brace + physio...");
+          activityResult = await logPhysio(specificDate);
+          
+          if (activityResult.success) {
+            incrementPhysio(specificDate);
+            message = 'Physio session completed! 💪';
+          }
+          break;
+  
+        case 'pre-surgery':
+          console.log("Pre-surgery activity completion not implemented yet");
+          return;
+  
+        case 'post-surgery':
+          activityResult = await logPhysio(specificDate);
+          
+          if (activityResult.success) {
+            incrementPhysio(specificDate);
+            message = 'Post-surgery activity completed! 🏥';
+          }
+          break;
+  
+        default:
+          console.warn("Unknown activity type:", activityType);
+          return;
+      }
+  
+      if (activityResult && activityResult.success) {
+        // Show success feedback
+        setSuccessMessage(message);
+        setShowSuccess(true);
+        setTimeout(() => setShowSuccess(false), 2000);
+  
+        // Special logic for brace + physio accounts
+        if (accountType === 'brace + physio') {
+          // Check if both activities are completed for the target date
+          const braceHoursForDate = activityState?.braceData?.[targetDate] || 0;
+          const braceTarget = user?.treatmentData?.brace?.wearingSchedule || 0;
+          
+          // Use our helper function to check if physio is complete
+          const isPhysioComplete = isPhysioCompleteForDate(targetDate);
+  
+          console.log("Brace + Physio check:", {
+            targetDate,
+            braceHoursForDate,
+            braceTarget,
+            isPhysioComplete,
+            activityType
+          });
+  
+          // For brace + physio users, only update streak if BOTH activities are completed
+          const isBraceComplete = braceHoursForDate >= braceTarget;
+  
+          if (isBraceComplete && isPhysioComplete && !streakUpdatedToday.current && !wasStreakUpdatedToday) {
+            console.log("Both brace and physio completed - updating streak...");
+            const streakResult = await updateStreak();
+            
+            if (streakResult.success) {
+              streakUpdatedToday.current = true;
+              setShowStreakAnimation(true);
+            }
+          } else {
+            console.log("Not all activities completed yet for brace + physio user", {
+              isBraceComplete,
+              isPhysioComplete,
+              streakUpdatedToday: streakUpdatedToday.current,
+              wasStreakUpdatedToday
+            });
+          }
+        } else {
+          // For other account types, update streak immediately after activity completion
+          if (!streakUpdatedToday.current && !wasStreakUpdatedToday) {
+            console.log("Updating streak for non brace + physio user...");
+            const streakResult = await updateStreak();
+            
+            if (streakResult.success) {
+              streakUpdatedToday.current = true;
+              setShowStreakAnimation(true);
+            }
+          }
+        }
+      } else {
+        console.error("Failed to log activity:", activityResult?.error);
+      }
+    } catch (error) {
+      console.error("Activity completion error:", error);
+    }
+  }, [logPhysio, updateBraceWornHours, incrementPhysio, updateStreak, wasStreakUpdatedToday, userData, user, today, isPhysioCompleteForDate]);
+  
+  // Helper function to check if both activities are completed
+  const checkBothActivitiesComplete = useCallback((date = today) => {
+    if (userData?.userAccType?.toLowerCase() !== 'brace + physio') return false;
+    
+    const braceHoursForDate = user?.treatmentData?.brace?.wearingHistory?.[date] || 0;
+    const braceTarget = user?.treatmentData?.brace?.wearingSchedule || 0;
+    const isPhysioComplete = isPhysioCompleteForDate(date);
+    
+    return braceHoursForDate >= braceTarget && isPhysioComplete;
+  }, [userData, user, today, isPhysioCompleteForDate]);
 
   // ADD PHYSIO WORKOUT 
   const handleEventAdd = useCallback(async (date, newEvent) => {
@@ -298,19 +484,25 @@ const Tracking = () => {
   }
 
   const renderTrackingComponent = () => {
-    switch (userData.userAccType.toLowerCase()) {
+    const accountType = userData.userAccType.toLowerCase();
+    
+    switch (accountType) {
       case 'post-surgery':
         return <PostsurgeryInterface 
                  physioData={{
-                   exercises: localWorkouts, // Use local workouts instead of userData
-                   weeklySchedule: localWeeklySchedule // Use local schedule instead of userData
+                   exercises: localWorkouts,
+                   weeklySchedule: localWeeklySchedule
                  }} 
                  surgeryData={userData.surgeryData}
+                 onActivityComplete={() => handleActivityCompletion('post-surgery')}
+                 showSuccess={showSuccess}
+                 successMessage={successMessage}
                />;
       case 'pre-surgery':
         return <PresurgeryInterface 
                  braceData={userData.braceData}
                  surgeryData={userData.surgeryData}
+                 onActivityComplete={() => handleActivityCompletion('pre-surgery')}
                />;
       case 'brace + physio':
         return <BracePhysio 
@@ -319,11 +511,18 @@ const Tracking = () => {
                  braceData={userData.braceData}
                  wearingSchedule={userData.braceData.wearingSchedule}
                  customHeader={renderWorkoutHeader()}
+                 onActivityCompleteBrace={() => handleActivityCompletion('brace')}
+                 onActivityCompletePhysio={() => handleActivityCompletion('physio')}
+                 showSuccess={showSuccess}
+                 successMessage={successMessage}
                />;
       case 'brace':
         return <BraceTrackerInterface 
                  data={userData.braceData} 
                  wearingSchedule={userData.braceData.wearingSchedule}
+                 onActivityComplete={handleActivityCompletion}
+                 showSuccess={showSuccess}
+                 successMessage={successMessage}
                />;
       case 'physio':
         return (
@@ -332,6 +531,9 @@ const Tracking = () => {
               weeklySchedule={localWeeklySchedule}
               frequency={userData.physioFrequency}
               customHeader={renderWorkoutHeader()}
+              onActivityComplete={() => handleActivityCompletion('physio')}
+              showSuccess={showSuccess}
+              successMessage={successMessage}
             />
         );
       default:
@@ -341,6 +543,13 @@ const Tracking = () => {
 
   return (
     <SafeAreaView style={styles.safeContainer}> 
+      {/* Centralized Streak Extension Animation */}
+      <StreakExtensionAnimation 
+        visible={showStreakAnimation} 
+        message="Streak Extended! 🔥" 
+        onAnimationComplete={() => setShowStreakAnimation(false)}
+      />
+
       <ScrollView
         contentContainerStyle={styles.scrollContainer}
         showsVerticalScrollIndicator={false}

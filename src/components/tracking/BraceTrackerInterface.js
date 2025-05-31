@@ -9,12 +9,17 @@ import BraceTimer from './BraceTimer';
 import { Context as ActivityContext } from '../../context/ActivityContext'; 
 import { Context as UserContext } from '../../context/UserContext'; 
 
-const BraceTrackerInterface = ({ wearingSchedule }) => {
-  const { state, updateBraceWornHours, updateStreak, initBraceTracking } = useContext(ActivityContext); 
+const BraceTrackerInterface = ({ 
+  wearingSchedule, 
+  onActivityComplete,
+  showSuccess,
+  successMessage 
+}) => {
+  const { state, updateBraceWornHours, initBraceTracking } = useContext(ActivityContext); 
   const { state: UserState, resetDailyBraceHours } = useContext(UserContext); 
   const [timerOn, setTimerOn] = useState(false);
   const [progressColor, setProgressColor] = useState(COLORS.primaryPurple);
-  const streakUpdatedToday = useRef(false); 
+  const goalAchievedToday = useRef(false);
 
   // Get today's date in YYYY-MM-DD format
   const today = new Date().toISOString().split('T')[0];
@@ -35,46 +40,18 @@ const BraceTrackerInterface = ({ wearingSchedule }) => {
   // Calculate time remaining
   const braceTimeRemaining = expectedWearingHours - wornTodayHours;
 
-  // Check if streak was already updated today
-  const wasStreakUpdatedToday = UserState.user?.lastStreakUpdate === today;
-  
   useEffect(() => {
     if (wornTodayHours >= expectedWearingHours) {
       setProgressColor(COLORS.accentGreen);
+      // Trigger activity completion for streak update if goal just achieved
+      if (!goalAchievedToday.current && onActivityComplete) {
+        goalAchievedToday.current = true;
+        onActivityComplete('brace');
+      }
     } else {
       setProgressColor(COLORS.primaryPurple);
     }
-  }, [wornTodayHours, expectedWearingHours]);
-
-  const handleStreakUpdate = async () => {
-    try {
-      // Check if streak was already updated today
-      if (wasStreakUpdatedToday) {
-        console.log("Streak already updated today, skipping update");
-        return;
-      }
-      
-      console.log("Handling Streak Update - once per day");
-      console.log("Current User Context State:", UserState.user?.uid, UserState.user?.streaks);
-      console.log("Current Activity Context State:", state.streaks, state.lastStreakUpdate);
-      
-      // Let the server handle streak increments - don't call incrementStreak locally
-      console.log("Calling updateStreak function...");
-      const streakResult = await updateStreak();
-      console.log("updateStreak result:", streakResult);
-      
-      if (streakResult.success) {
-        // The server has already updated the streak and our contexts should be in sync
-        // No need to call incrementStreak anymore
-        console.log("Streak update successful, marking as updated today");
-        streakUpdatedToday.current = true;
-      } else {
-        console.log("Streak update failed:", streakResult.error);
-      }
-    } catch (error) {
-      console.error('Error in extending streak:', error);
-    }
-  };
+  }, [wornTodayHours, expectedWearingHours, onActivityComplete]);
   
   const handleTimeSaved = async (hours) => {
     try {
@@ -87,13 +64,10 @@ const BraceTrackerInterface = ({ wearingSchedule }) => {
       // Manually calculate updated hours
       const updatedHours = (wornTodayHours || 0) + hours;
   
-      if (
-        updatedHours >= expectedWearingHours &&
-        !wasStreakUpdatedToday &&
-        !streakUpdatedToday.current
-      ) { 
-        await handleStreakUpdate();
-        streakUpdatedToday.current = true;
+      // Check if goal was achieved and trigger activity completion
+      if (updatedHours >= expectedWearingHours && !goalAchievedToday.current && onActivityComplete) {
+        goalAchievedToday.current = true;
+        onActivityComplete('brace');
       }
     } catch (error) {
       console.error('Error in handleTimeSaved:', error);
@@ -112,13 +86,10 @@ const BraceTrackerInterface = ({ wearingSchedule }) => {
       // Manually calculate updated hours
       const updatedHours = (wornTodayHours || 0) + hours;
   
-      if (
-        updatedHours >= expectedWearingHours &&
-        !wasStreakUpdatedToday && 
-        !streakUpdatedToday.current
-      ) {
-        await handleStreakUpdate();
-        streakUpdatedToday.current = true;
+      // Check if goal was achieved and trigger activity completion
+      if (updatedHours >= expectedWearingHours && !goalAchievedToday.current && onActivityComplete) {
+        goalAchievedToday.current = true;
+        onActivityComplete('brace');
       }
     } catch (error) {
       console.error('Error in quickLogHours:', error);
@@ -159,6 +130,13 @@ const BraceTrackerInterface = ({ wearingSchedule }) => {
 
   return (
     <View style={styles.container}>
+      {/* Success Message */}
+      {showSuccess && (
+        <View style={styles.successBanner}>
+          <Text style={styles.successText}>{successMessage}</Text>
+        </View>
+      )}
+
       {timerOn && (
         <BraceTimer
           onTimeSaved={handleTimeSaved}
@@ -348,5 +326,17 @@ const styles = StyleSheet.create({
   historyDuration: {
     color: COLORS.lightGray,
     fontSize: moderateScale(12),
-  },  
+  },
+  successBanner: {
+    backgroundColor: COLORS.accentGreen,
+    padding: moderateScale(10),
+    borderRadius: moderateScale(8),
+    marginBottom: moderateScale(15),
+    alignItems: 'center',
+  },
+  successText: {
+    color: COLORS.white,
+    fontSize: moderateScale(14),
+    fontWeight: 'bold',
+  },
 });

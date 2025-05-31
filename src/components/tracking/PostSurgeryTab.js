@@ -15,7 +15,7 @@ import CalendarModal from '../reusable/Calendar/CalendarModal';
 import { Context as UserContext } from '../../context/UserContext';
 import { format } from 'date-fns';
 
-const PostSurgeryTab = ({ workouts = [], weeklySchedule = [], recoveryTasks, walkingMinutes, handleToggleTask, daysSinceSurgery, surgeryDate }) => {
+const PostSurgeryTab = ({ workouts = [], weeklySchedule = [], recoveryTasks, walkingMinutes, handleToggleTask, daysSinceSurgery, surgeryDate, showSuccess, successMessage, onActivityComplete }) => {
   const [activeTab, setActiveTab] = useState('Recovery'); 
   const targetWalkingMinutes = 30;
   const [showCalendarModal, setShowCalendarModal] = useState(false);
@@ -255,7 +255,10 @@ const PostSurgeryTab = ({ workouts = [], weeklySchedule = [], recoveryTasks, wal
           <WorkoutInterface 
             workouts={localWorkouts || []} 
             weeklySchedule={localWeeklySchedule || []} 
-            customHeader={renderWorkoutHeader()}
+            customHeader={renderWorkoutHeader()} 
+            showSuccess={showSuccess}
+            successMessage={successMessage}
+            onActivityComplete={onActivityComplete}
           /> 
         </View>
       )}

@@ -5,30 +5,25 @@ import { moderateScale } from 'react-native-size-matters';
 import COLORS from '../../constants/COLORS';
 import HeightSpacer from '../../components/reusable/HeightSpacer';
 import { Context as UserContext } from '../../context/UserContext'; 
-import { Context as ActivityContext } from '../../context/ActivityContext';
-import StreakExtensionAnimation from '../StreakExtensionAnimation';
 import { getFormattedDate, getDateStringFromFirestoreTimestamp } from '../timeZoneHelpers'; 
 
-const WorkoutInterface = ({ workouts = [], weeklySchedule = [], customHeader = null }) => {
-    const { updateStreak, logPhysio } = useContext(ActivityContext);
-    const { state: { user }, incrementPhysio } = useContext(UserContext);
+const WorkoutInterface = ({ 
+  workouts = [], 
+  weeklySchedule = [], 
+  customHeader = null, 
+  onActivityComplete,
+  showSuccess = false,
+  successMessage = ''
+}) => {
+    const { state: { user } } = useContext(UserContext);
     
     const [selectedWorkouts, setSelectedWorkouts] = useState([]);
     const [remainingTime, setRemainingTime] = useState(0);
     const [isRunning, setIsRunning] = useState(false);
-    const [showSuccess, setShowSuccess] = useState(false);
-    const [showStreakAnimation, setShowStreakAnimation] = useState(false);
-    const [streakExtended, setStreakExtended] = useState(false);
     const [showOtherDays, setShowOtherDays] = useState(false);
-    const streakUpdatedToday = useRef(false); 
+    const [streakExtended, setStreakExtended] = useState(false);
 
     const today = getFormattedDate();
-    const lastStreakUpdate = user?.lastStreakUpdate;
-
-    const lastUpdateDateString = getDateStringFromFirestoreTimestamp(lastStreakUpdate);
-
-    // Check if streak was already updated today from UserContext
-    const wasStreakUpdatedToday = lastUpdateDateString === today; 
     
     const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -48,7 +43,7 @@ const WorkoutInterface = ({ workouts = [], weeklySchedule = [], customHeader = n
         const scheduledWorkouts = user?.treatmentData?.physio?.scheduledWorkouts || {};
         
         // Get today's workouts
-        const todaysWorkouts = scheduledWorkouts[currentDayName] || [];
+        const todaysWorkouts = scheduledWorkouts[currentDayName] || []; 
         
         // Get other days' workouts
         const otherDaysWorkouts = {};
@@ -76,7 +71,7 @@ const WorkoutInterface = ({ workouts = [], weeklySchedule = [], customHeader = n
         // Get physio history from user data - using new structure
         const physioHistory = user?.treatmentData?.physio?.physioHistory || {};
         
-        // Generate last 5 days history
+        // Generate last 3 days history
         for (let i = 0; i < 3; i++) {
             const date = new Date(now);
             date.setDate(date.getDate() - i);
@@ -226,46 +221,13 @@ const WorkoutInterface = ({ workouts = [], weeklySchedule = [], customHeader = n
         };
     }, [isRunning, remainingTime]);
 
-    // Handle streak extension when the timer completes
+    // Handle workout completion - now calls the centralized handler
     useEffect(() => {
-        if (streakExtended) {
-            handleActivityCompletion(today);
+        if (streakExtended && onActivityComplete) {
+            onActivityComplete(today);
             setStreakExtended(false);
         }
-    }, [streakExtended]);
-
-    const handleActivityCompletion = async (specificDate = null) => {
-        try {
-            // Log physio session for either the specified date or today
-            console.log("Calling logPhysio...");
-            const physioResult = await logPhysio(specificDate);
-            console.log("logPhysio result:", physioResult);
-
-            if (physioResult.success) {
-                // Always increment the local state counter
-                incrementPhysio(specificDate);
-                
-                // Show success feedback
-                setShowSuccess(true);
-                setTimeout(() => setShowSuccess(false), 2000);
-
-                // Only update streak if it hasn't been updated today
-                if (!streakUpdatedToday.current && !wasStreakUpdatedToday) {
-                    console.log("Updating streak...");
-                    const streakResult = await updateStreak();
-                    
-                    if (streakResult.success) {
-                        streakUpdatedToday.current = true;
-                        setShowStreakAnimation(true);
-                    }
-                }
-            } else {
-                console.error("Failed to log physio session:", physioResult.error);
-            }
-        } catch (error) {
-            console.error("Activity completion error:", error);
-        }
-    };
+    }, [streakExtended, onActivityComplete, today]);
 
     // Get the recent history data
     const recentHistory = getRecentHistory();
@@ -304,12 +266,6 @@ const WorkoutInterface = ({ workouts = [], weeklySchedule = [], customHeader = n
 
     return (
         <View style={styles.container}>
-            {/* Streak Extension Animation */}
-            <StreakExtensionAnimation 
-                visible={showStreakAnimation} 
-                message="Streak Extended!" 
-                onAnimationComplete={() => setShowStreakAnimation(false)}
-            />
 
             <View style={styles.card}>
                 {/* Render custom header or default title */}
@@ -345,7 +301,7 @@ const WorkoutInterface = ({ workouts = [], weeklySchedule = [], customHeader = n
                 )}
 
                 {showSuccess && (
-                    <Text style={styles.successText}>{wasStreakUpdatedToday ? 'Physio session completed! 💪' : 'Streak extended! 🔥'}</Text>
+                    <Text style={styles.successText}>{successMessage}</Text>
                 )}
 
                 <ScrollView>

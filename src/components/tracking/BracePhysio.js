@@ -4,7 +4,7 @@ import BracePhysioTab from './BracePhysioTab';
 import COLORS from '../../constants/COLORS'; 
 import { moderateScale } from 'react-native-size-matters';
 
-const BracePhysio = ({ workouts, weeklySchedule, braceData, wearingSchedule, customHeader }) => {
+const BracePhysio = ({ workouts, weeklySchedule, braceData, wearingSchedule, customHeader, onActivityCompleteBrace, onActivityCompletePhysio, showSuccess, successMessage }) => {
   return (
     <View style={styles.container}>
       <BracePhysioTab 
@@ -12,7 +12,9 @@ const BracePhysio = ({ workouts, weeklySchedule, braceData, wearingSchedule, cus
         weeklySchedule={weeklySchedule}
         braceData={braceData}
         wearingSchedule={wearingSchedule}
-        customHeader={customHeader}
+        customHeader={customHeader} 
+        onActivityCompleteBrace={onActivityCompleteBrace} 
+        onActivityCompletePhysio={onActivityCompletePhysio}
       />
     </View>
   );

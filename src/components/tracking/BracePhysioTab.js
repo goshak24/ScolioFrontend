@@ -7,7 +7,7 @@ import WorkoutInterface from './WorkoutInterface';
 import HeightSpacer from '../reusable/HeightSpacer';
 import BraceTrackerInterface from './BraceTrackerInterface';
 
-const BracePhysioTab = ({ workouts, weeklySchedule, braceData, wearingSchedule, customHeader }) => {
+const BracePhysioTab = ({ workouts, weeklySchedule, braceData, wearingSchedule, customHeader, onActivityCompleteBrace, onActivityCompletePhysio, showSuccess, successMessage }) => {
   const [activeTab, setActiveTab] = useState('Brace'); 
 
   return (
@@ -47,6 +47,7 @@ const BracePhysioTab = ({ workouts, weeklySchedule, braceData, wearingSchedule, 
           <BraceTrackerInterface 
             data={braceData} 
             wearingSchedule={wearingSchedule}
+            onActivityComplete={onActivityCompleteBrace}
           /> 
         </View> 
       ) : (
@@ -55,6 +56,9 @@ const BracePhysioTab = ({ workouts, weeklySchedule, braceData, wearingSchedule, 
             workouts={workouts} 
             weeklySchedule={weeklySchedule}
             customHeader={customHeader} 
+            onActivityComplete={onActivityCompletePhysio}
+            showSuccess={showSuccess}
+            successMessage={successMessage}
           /> 
         </View>
       )}
