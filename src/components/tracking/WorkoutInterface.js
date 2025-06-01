@@ -6,6 +6,7 @@ import COLORS from '../../constants/COLORS';
 import HeightSpacer from '../../components/reusable/HeightSpacer';
 import { Context as UserContext } from '../../context/UserContext'; 
 import { getFormattedDate, getDateStringFromFirestoreTimestamp } from '../timeZoneHelpers'; 
+import PhysioTimerComponent from './PhysioTimerComponent';
 
 const WorkoutInterface = ({ 
   workouts = [], 
@@ -18,10 +19,9 @@ const WorkoutInterface = ({
     const { state: { user } } = useContext(UserContext);
     
     const [selectedWorkouts, setSelectedWorkouts] = useState([]);
-    const [remainingTime, setRemainingTime] = useState(0);
-    const [isRunning, setIsRunning] = useState(false);
+    const [totalWorkoutTime, setTotalWorkoutTime] = useState(0);
     const [showOtherDays, setShowOtherDays] = useState(false);
-    const [streakExtended, setStreakExtended] = useState(false);
+    const [workoutCompleted, setWorkoutCompleted] = useState(false);
 
     const today = getFormattedDate();
     
@@ -107,13 +107,6 @@ const WorkoutInterface = ({
         return history;
     };
 
-    // Format time (MM:SS)
-    const formatTime = (time) => {
-        const minutes = Math.floor(time / 60);
-        const seconds = time % 60;
-        return `${minutes}:${seconds.toString().padStart(2, '0')}`;
-    };
-
     // Create a combined workout list with day indicators
     const createCombinedWorkoutList = () => {
         const combined = [];
@@ -131,103 +124,64 @@ const WorkoutInterface = ({
             workoutIndex++;
         });
 
-        // Add other days' workouts if expanded
-        if (showOtherDays) {
-            Object.entries(otherDaysWorkouts).forEach(([day, dayWorkouts]) => {
-                dayWorkouts.forEach((workout, index) => {
-                    combined.push({
-                        ...workout,
-                        originalIndex: workoutIndex,
-                        day: day,
-                        isToday: false,
-                        dayIndex: index
-                    });
-                    workoutIndex++;
+        // Add other days' workouts
+        Object.entries(otherDaysWorkouts).forEach(([day, dayWorkouts]) => {
+            dayWorkouts.forEach((workout, index) => {
+                combined.push({
+                    ...workout,
+                    originalIndex: workoutIndex,
+                    day: day,
+                    isToday: false,
+                    dayIndex: index
                 });
+                workoutIndex++;
             });
-        }
+        });
 
         return combined;
     };
 
     const combinedWorkouts = createCombinedWorkoutList();
 
+    // Calculate total workout time based on selected workouts
+    const calculateTotalTime = (selectedIndices) => {
+        return selectedIndices.reduce((sum, i) => {
+            const workout = combinedWorkouts.find(w => w.originalIndex === i);
+            if (!workout?.time || typeof workout.time !== 'string' || !workout.time.includes(":")) return sum;
+        
+            const [minutes, seconds] = workout.time.split(":").map(Number);
+            return sum + (minutes * 60 + seconds);
+        }, 0);
+    };
+
     // Toggle workout selection
     const toggleWorkoutSelection = (originalIndex) => {
         setSelectedWorkouts(prev => {
             const newSelection = prev.includes(originalIndex)
                 ? prev.filter(i => i !== originalIndex)
-                : [originalIndex];
+                : [...prev, originalIndex];
 
-            // Calculate total time in seconds using combined workout list
-            const newTotalTime = newSelection.reduce((sum, i) => {
-                const workout = combinedWorkouts.find(w => w.originalIndex === i);
-                if (!workout?.time || typeof workout.time !== 'string' || !workout.time.includes(":")) return sum;
-            
-                const [minutes, seconds] = workout.time.split(":").map(Number);
-                return sum + (minutes * 60 + seconds);
-            }, 0);
+            // Calculate new total time
+            const newTotalTime = calculateTotalTime(newSelection);
+            setTotalWorkoutTime(newTotalTime);
 
-            setRemainingTime(newTotalTime);
             return newSelection;
         });
     };
 
-    // Start workout timer
-    const startWorkout = () => {
-        if (isRunning || remainingTime <= 0) return;
-        setIsRunning(true);
-    };
-
-    // Stop workout timer
-    const stopWorkout = () => {
-        setIsRunning(false);
-    };
-
-    // Reset workout timer
-    const resetWorkout = () => {
-        setIsRunning(false);
-        setRemainingTime(
-            selectedWorkouts.reduce((sum, i) => {
-                const workout = combinedWorkouts.find(w => w.originalIndex === i);
-                if (!workout?.time || typeof workout.time !== 'string' || !workout.time.includes(":")) return sum;
-          
-                const [minutes, seconds] = workout.time.split(":").map(Number);
-                return sum + (minutes * 60 + seconds);
-            }, 0)
-        ); 
-    };
-
-    // Timer effect
-    useEffect(() => {
-        let intervalId;
-        
-        if (isRunning && remainingTime > 0) {
-            intervalId = setInterval(() => {
-                setRemainingTime(prev => {
-                    if (prev <= 1) {
-                        clearInterval(intervalId);
-                        setIsRunning(false);
-                        setStreakExtended(true);
-                        return 0;
-                    }
-                    return prev - 1;
-                });
-            }, 1000);
-        }
-
-        return () => {
-            if (intervalId) clearInterval(intervalId);
-        };
-    }, [isRunning, remainingTime]);
-
-    // Handle workout completion - now calls the centralized handler
-    useEffect(() => {
-        if (streakExtended && onActivityComplete) {
+    // Handle timer completion
+    const handleTimerComplete = () => {
+        setWorkoutCompleted(true);
+        if (onActivityComplete) {
             onActivityComplete(today);
-            setStreakExtended(false);
         }
-    }, [streakExtended, onActivityComplete, today]);
+    };
+
+    // Handle timer state changes
+    const handleTimerChange = (timerState) => {
+        // You can use this to track timer state if needed
+        // For example, disable workout selection while timer is running
+    };
 
     // Get the recent history data
     const recentHistory = getRecentHistory();
@@ -279,29 +233,17 @@ const WorkoutInterface = ({
 
                 <HeightSpacer height={moderateScale(5)} /> 
 
-                {/* Timer Display */}
-                {remainingTime > 0 && (
-                    <View style={styles.timerRow}>
-                        <Text style={styles.timerText}>⏳ {formatTime(remainingTime)}</Text>
-                        
-                        <TouchableOpacity 
-                            style={[styles.controlButton, styles.stopButton]} 
-                            onPress={stopWorkout}
-                        >
-                            <Text style={styles.controlButtonText}>⏹ Stop</Text>
-                        </TouchableOpacity>
-                        
-                        <TouchableOpacity 
-                            style={[styles.controlButton, styles.resetButton]} 
-                            onPress={resetWorkout}
-                        >
-                            <Text style={styles.controlButtonText}>🔄 Reset</Text>
-                        </TouchableOpacity>
-                    </View>
-                )}
+                {/* Timer Display - Only show when workouts are selected */}
+                <PhysioTimerComponent
+                    totalTime={totalWorkoutTime}
+                    onComplete={handleTimerComplete}
+                    onTimerChange={handleTimerChange}
+                />
 
-                {showSuccess && (
-                    <Text style={styles.successText}>{successMessage}</Text>
+                {(showSuccess || workoutCompleted) && (
+                    <Text style={styles.successText}>
+                        {workoutCompleted ? "Great job! Workout completed!" : successMessage}
+                    </Text>
                 )}
 
                 <ScrollView>
@@ -374,23 +316,6 @@ const WorkoutInterface = ({
                     )}
                 </ScrollView>
 
-                {/* Start Workout Button */}
-                <TouchableOpacity 
-                    style={styles.button} 
-                    onPress={startWorkout}
-                    disabled={remainingTime <= 0}
-                >
-                    <LinearGradient
-                        colors={[COLORS.accentGreen, "#0D9488"]}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 1 }}
-                        style={styles.gradientButton}
-                    >
-                        <Text style={styles.buttonText}>
-                            {isRunning ? 'Workout in Progress' : '▶ Start Workout'}
-                        </Text>
-                    </LinearGradient>
-                </TouchableOpacity>
             </View>
 
             <HeightSpacer height={moderateScale(15)} /> 
@@ -519,8 +444,8 @@ const styles = StyleSheet.create({
   },
   
   // New workout section styles
-  workoutSection: {
-      marginBottom: moderateScale(10),
+  workoutSection: { 
+    
   },
   sectionTitle: {
       color: COLORS.accentGreen,
@@ -532,8 +457,7 @@ const styles = StyleSheet.create({
   noWorkoutsContainer: {
       backgroundColor: COLORS.workoutOption,
       padding: moderateScale(15),
-      borderRadius: moderateScale(10),
-      marginBottom: moderateScale(10),
+      borderRadius: moderateScale(10), 
       alignItems: 'center',
   },
   noWorkoutsText: {

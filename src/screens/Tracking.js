@@ -185,7 +185,7 @@ const Tracking = () => {
     if (!dayName) return false;
     
     // Get scheduled workouts for this day
-    const workoutsForDay = scheduledWorkouts[dayName] || [];
+    const workoutsForDay = scheduledWorkouts[dayName] || []; 
     
     // If no workouts scheduled for this day, consider physio complete
     if (workoutsForDay.length === 0) {
@@ -196,7 +196,7 @@ const Tracking = () => {
     const completedSessions = physioHistory[date] || 0;
     
     // Check if completed sessions meet or exceed scheduled workouts
-    return completedSessions >= workoutsForDay.length;
+    return completedSessions >= workoutsForDay.length - 1;
   }, [user, getFullDayNameFromDate]);
 
   // CENTRALIZED ACTIVITY COMPLETION HANDLER
@@ -298,6 +298,23 @@ const Tracking = () => {
               wasStreakUpdatedToday
             });
           }
+        } else if (accountType === 'physio')  {
+          const isPhysioComplete = isPhysioCompleteForDate(targetDate);
+          if (isPhysioComplete && !streakUpdatedToday.current && !wasStreakUpdatedToday) {
+            console.log("Physio completed - updating streak...");
+            const streakResult = await updateStreak();
+            
+            if (streakResult.success) {
+              streakUpdatedToday.current = true;
+              setShowStreakAnimation(true);
+            }
+          } else {
+            console.log("Physio not completed yet for physio user", {
+              isPhysioComplete,
+              streakUpdatedToday: streakUpdatedToday.current,
+              wasStreakUpdatedToday
+            });
+          } 
         } else {
           // For other account types, update streak immediately after activity completion
           if (!streakUpdatedToday.current && !wasStreakUpdatedToday) {
