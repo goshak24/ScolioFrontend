@@ -133,14 +133,13 @@ const BodyPartSelector = ({ selectedAreas = [], onSelectArea, showBack = false }
     return (
       <TouchableOpacity 
         key={id}
-        style={[
-          styles.bodyArea, 
-          style,
-          !isSelected && styles.dottedOutline // Add dotted outline when not selected
-        ]}
+        style={[styles.bodyArea, style]}
         onPress={() => onSelectArea(id)}
         activeOpacity={0.7}
       >
+        {!isSelected && (
+          <View style={styles.dottedOutline} />
+        )}
         {isSelected && (
           <View style={styles.indicatorContainer}>
             <LinearGradient
@@ -191,10 +190,13 @@ const styles = StyleSheet.create({
     minHeight: moderateScale(30),
   },
   dottedOutline: {
+    width: moderateScale(20),
+    height: moderateScale(20),
+    borderRadius: moderateScale(6),
     borderWidth: 1,
-    borderColor: 'rgba(255, 149, 0, 0.6)',
+    borderColor: 'rgba(255, 149, 0, 0.9)',
     borderStyle: 'dashed',
-    borderRadius: moderateScale(4),
+    backgroundColor: 'transparent',
   },
   indicatorContainer: {
     alignItems: 'center',
@@ -227,7 +229,7 @@ const styles = StyleSheet.create({
   // Head
   head: {
     top: '3%',
-    left: '37%',
+    left: '36.5%',
     width: '26%',
     height: '8%',
     borderRadius: moderateScale(20),
@@ -235,8 +237,8 @@ const styles = StyleSheet.create({
   
   // Neck
   neck: {
-    top: '12%',
-    left: '42%',
+    top: '14%',
+    left: '41.5%',
     width: '16%',
     height: '4%',
   },
@@ -250,7 +252,7 @@ const styles = StyleSheet.create({
   },
   rightShoulder: {
     top: '18%',
-    right: '32%',
+    right: '32.5%',
     width: '16%',
     height: '6%',
   },
@@ -264,22 +266,22 @@ const styles = StyleSheet.create({
   },
   rightArm: {
     top: '26%',
-    right: '30%',
+    right: '31%',
     width: '8%',
     height: '16%',
   },
   
   // Hands
   leftHand: {
-    top: '50%',
-    left: '22.5%',
+    top: '47%',
+    left: '23.5%',
     width: '12%',
     height: '8%',
     borderRadius: moderateScale(8),
   },
   rightHand: {
-    top: '50%',
-    right: '22.5%',
+    top: '47%',
+    right: '23.5%',
     width: '12%',
     height: '8%',
     borderRadius: moderateScale(8),
@@ -396,14 +398,14 @@ const styles = StyleSheet.create({
 
   // Back shoulders
   leftShoulderBack: {
-    top: '26%',
-    left: '30%',
+    top: '27%',
+    left: '27%',
     width: '16%',
     height: '6%',
   },
   rightShoulderBack: {
-    top: '26%',
-    right: '30%',
+    top: '27%',
+    right: '26.5%',
     width: '16%',
     height: '6%',
   },

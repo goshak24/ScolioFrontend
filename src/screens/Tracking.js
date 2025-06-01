@@ -264,9 +264,18 @@ const Tracking = () => {
   
         // Special logic for brace + physio accounts
         if (accountType === 'brace + physio') {
-          // Check if both activities are completed for the target date
-          const braceHoursForDate = activityState?.braceData?.[targetDate] || 0;
-          const braceTarget = user?.treatmentData?.brace?.wearingSchedule || 0;
+          // Get the UPDATED brace hours from the activity result or current state
+          let braceHoursForDate;
+          
+          if (activityType === 'brace' && activityResult.totalHours !== undefined) {
+            // Use the updated hours from the brace activity result
+            braceHoursForDate = activityResult.totalHours;
+          } else {
+            // For physio completion, get current hours from state
+            braceHoursForDate = activityState?.braceData?.[targetDate] || 0;
+          }
+          
+          const braceTarget = user?.treatmentData?.brace?.wearingSchedule || 0; 
           
           // Use our helper function to check if physio is complete
           const isPhysioComplete = isPhysioCompleteForDate(targetDate);
