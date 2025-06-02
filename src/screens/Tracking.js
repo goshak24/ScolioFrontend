@@ -25,7 +25,7 @@ const Tracking = () => {
   const { state: { idToken } } = useContext(AuthContext);
   const { state: { user, loading }, fetchUserData, addUserPhysioWorkout, incrementPhysio } = useContext(UserContext);
   const { state: activityState, updateStreak, logPhysio, updateBraceWornHours } = useContext(ActivityContext); 
-  const { isRecoveryChecklistCompleteForDate } = useContext(PostSurgeryContext);
+  const { updateRecoveryTasks, isRecoveryChecklistCompleteForDate } = useContext(PostSurgeryContext);
 
   const [showCalendarModal, setShowCalendarModal] = useState(false);
   const [scheduledEvents, setScheduledEvents] = useState({});
@@ -202,7 +202,7 @@ const Tracking = () => {
   }, [user, getFullDayNameFromDate]);
 
   // CENTRALIZED ACTIVITY COMPLETION HANDLER
-  const handleActivityCompletion = useCallback(async (activityType, specificDate = null) => {
+  const handleActivityCompletion = useCallback(async (activityType, specificDate = null, taskId = null) => {
     try {
       let activityResult;
       let message = '';
@@ -244,14 +244,13 @@ const Tracking = () => {
           console.log("Pre-surgery activity completion not implemented yet");
           return;
   
-        case 'post-surgery':
-          activityResult = await logPhysio(specificDate);
-          
-          if (activityResult.success) {
-            incrementPhysio(specificDate);
-            message = 'Post-surgery activity completed! 🏥';
-          }
-          break;
+        case 'post-surgery-tasks': 
+          // Just toggle the recovery task - we don't need the return value
+          await updateRecoveryTasks(taskId);
+          // Since updateRecoveryTasks doesn't return a success value, set it manually
+          activityResult = { success: true };
+          message = 'Recovery task completed! 📝';
+          break; 
   
         default:
           console.warn("Unknown activity type:", activityType);
@@ -338,6 +337,8 @@ const Tracking = () => {
             wasStreakUpdatedToday
           });
 
+          // Updated condition to check if either physio is completed or recovery tasks are completed
+          // This allows streak to update as soon as both conditions are met, whether from physio completion or task completion
           if (isPhysioComplete && isRecoveryChecklistComplete && !streakUpdatedToday.current && !wasStreakUpdatedToday) {
             console.log("Both physio and recovery checklist completed - updating streak...");
             const streakResult = await updateStreak();
@@ -550,7 +551,8 @@ const Tracking = () => {
                    weeklySchedule: localWeeklySchedule
                  }} 
                  surgeryData={userData.surgeryData}
-                 onActivityComplete={() => handleActivityCompletion('post-surgery')}
+                 onActivityCompletePhysio={() => handleActivityCompletion('physio')}
+                 onActivityCompleteTasks={(taskId) => handleActivityCompletion('post-surgery-tasks', null, taskId)} 
                  showSuccess={showSuccess}
                  successMessage={successMessage}
                />;

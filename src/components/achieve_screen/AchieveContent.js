@@ -10,6 +10,7 @@ import HeightSpacer from '../reusable/HeightSpacer';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Context as PostSurgeryContext } from '../../context/PostSurgeryContext';
 import { Context as PreSurgeryContext } from '../../context/PreSurgeryContext';
+import { Context as ActivityContext } from '../../context/ActivityContext';
 
 // Storage keys
 const POSTSURGERY_TASKS_KEY = 'recoveryTasks';
@@ -22,13 +23,68 @@ const AchieveContent = ({ activeTab, streakDays, physioSessions, achievements, u
     total: 0
   });
   const [walkingMinutes, setWalkingMinutes] = useState(0);
-
+  const [braceWornThisWeek, setBraceWornThisWeek] = useState(0);
+  
+  // Get activity context for real-time brace data updates
+  const { state: activityState, fetchActivityData } = useContext(ActivityContext);
+  
   // --- SURGERY CONTEXTS HOOKUP ---
   const postSurgCtx = useContext(PostSurgeryContext);
   const preSurgCtx = useContext(PreSurgeryContext);
   const accountType = user?.acc_type?.toLowerCase() || 'brace + physio';
   const isPreSurgery = accountType === 'presurgery' || accountType === 'pre-surgery';
   const isPostSurgery = accountType === 'postsurgery' || accountType === 'post-surgery';
+
+  const calculateBraceTimeThisWeek = () => {
+    // Get the start of the current week (Monday)
+    const startOfWeek = moment().startOf('isoWeek'); // ISO week starts on Monday
+    const endOfWeek = moment().endOf('isoWeek');
+    
+    let totalHours = 0;
+    
+    // First try to get data from activity context for real-time updates
+    if (activityState?.braceData) {
+      Object.entries(activityState.braceData).forEach(([dateString, hours]) => {
+        const date = moment(dateString);
+        
+        // Check if the date falls within this week
+        if (date.isBetween(startOfWeek, endOfWeek, null, '[]')) {
+          totalHours += hours;
+        }
+      });
+    }
+    
+    // If no data from activity context, fall back to user data
+    if (totalHours === 0 && user?.treatmentData?.brace?.wearingHistory) {
+      const wearingHistory = user.treatmentData.brace.wearingHistory;
+      
+      // Iterate through the wearing history
+      Object.entries(wearingHistory).forEach(([dateString, hours]) => {
+        const date = moment(dateString);
+        
+        // Check if the date falls within this week
+        if (date.isBetween(startOfWeek, endOfWeek, null, '[]')) {
+          totalHours += hours;
+        }
+      });
+    }
+
+    return Math.round(totalHours * 100) / 100; 
+  };
+  
+  // Update brace worn this week whenever activity state changes
+  useEffect(() => {
+    setBraceWornThisWeek(calculateBraceTimeThisWeek());
+  }, [activityState, user?.treatmentData?.brace?.wearingHistory]);
+  
+  // Fetch activity data on component mount and when accountType changes
+  useEffect(() => {
+    if (accountType === 'brace' || accountType === 'brace + physio') {
+      fetchActivityData();
+    }
+  }, [accountType]);
+
+  const braceTimeRequiredThisWeek = (user?.treatmentData?.brace?.wearingSchedule)*7;
 
   // --- Update surgery tasks and walking minutes from context (post-surgery) ---
   useEffect(() => {
@@ -126,7 +182,7 @@ const AchieveContent = ({ activeTab, streakDays, physioSessions, achievements, u
       case 'brace':
         return [
           ...metrics,
-          { id: 'brace', label: 'Brace Hours', value: user?.treatmentData?.brace?.weeklyHours || 68, max: 112, icon: 'time' },
+          { id: 'brace', label: 'Brace Hours', value: braceWornThisWeek || 68, max: braceTimeRequiredThisWeek, icon: 'time' },
           { id: 'pain', label: 'Pain Logs', value: user?.treatmentData?.painLogs?.count || 6, max: 7, icon: 'medical' }
         ];
       case 'physio':
@@ -138,7 +194,7 @@ const AchieveContent = ({ activeTab, streakDays, physioSessions, achievements, u
       case 'brace + physio':
         return [
           ...metrics,
-          { id: 'brace', label: 'Brace Hours', value: user?.treatmentData?.brace?.weeklyHours || 68, max: 112, icon: 'time' },
+          { id: 'brace', label: 'Brace Hours', value: braceWornThisWeek || 68, max: braceTimeRequiredThisWeek, icon: 'time' },
           { id: 'physio', label: 'Physio Sessions', value: physioSessions || 0, max: 5, icon: 'fitness' },
           { id: 'pain', label: 'Pain Logs', value: user?.treatmentData?.painLogs?.count || 6, max: 7, icon: 'medical' }
         ];

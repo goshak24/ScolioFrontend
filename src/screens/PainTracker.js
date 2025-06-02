@@ -92,19 +92,57 @@ const PainTracker = ({ navigation }) => {
   };
 
   // Navigate to previous day
-  const goToPreviousDay = () => {
+  const goToPreviousDay = async () => {
     const currentDate = new Date(currentHistoryDate);
+    const currentMonth = currentDate.toISOString().slice(0, 7); // Get current month (YYYY-MM)
+    
+    // Move to previous day
     currentDate.setDate(currentDate.getDate() - 1);
-    setCurrentHistoryDate(currentDate.toISOString().split('T')[0]);
+    const newDate = currentDate.toISOString().split('T')[0];
+    const newMonth = currentDate.toISOString().slice(0, 7); // Get new month after navigation
+    
+    // If month has changed, load data for the new month
+    if (newMonth !== currentMonth) {
+      console.log(`Month changed from ${currentMonth} to ${newMonth}, loading data...`);
+      try {
+        setIsLoadingHistory(true);
+        await dbLoadPainLogsForMonth(newMonth);
+      } catch (error) {
+        console.error(`Error loading pain logs for month ${newMonth}:`, error);
+      } finally {
+        setIsLoadingHistory(false);
+      }
+    }
+    
+    setCurrentHistoryDate(newDate);
   };
 
   // Navigate to next day
-  const goToNextDay = () => {
+  const goToNextDay = async () => {
     const currentDate = new Date(currentHistoryDate);
+    const currentMonth = currentDate.toISOString().slice(0, 7); // Get current month (YYYY-MM)
+    
+    // Move to next day
     currentDate.setDate(currentDate.getDate() + 1);
     const nextDate = currentDate.toISOString().split('T')[0];
+    
     // Don't allow selecting future dates
     if (nextDate <= new Date().toISOString().split('T')[0]) {
+      const newMonth = currentDate.toISOString().slice(0, 7); // Get new month after navigation
+      
+      // If month has changed, load data for the new month
+      if (newMonth !== currentMonth) {
+        console.log(`Month changed from ${currentMonth} to ${newMonth}, loading data...`);
+        try {
+          setIsLoadingHistory(true);
+          await dbLoadPainLogsForMonth(newMonth);
+        } catch (error) {
+          console.error(`Error loading pain logs for month ${newMonth}:`, error);
+        } finally {
+          setIsLoadingHistory(false);
+        }
+      }
+      
       setCurrentHistoryDate(nextDate);
     }
   };
