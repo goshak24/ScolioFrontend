@@ -19,11 +19,13 @@ import CalendarModal from '../components/reusable/Calendar/CalendarModal';
 import { format } from 'date-fns';
 import StreakExtensionAnimation from '../components/StreakExtensionAnimation';
 import { getFormattedDate, getDateStringFromFirestoreTimestamp } from '../components/timeZoneHelpers';
+import { Context as PostSurgeryContext } from '../context/PostSurgeryContext';
 
 const Tracking = () => {
   const { state: { idToken } } = useContext(AuthContext);
   const { state: { user, loading }, fetchUserData, addUserPhysioWorkout, incrementPhysio } = useContext(UserContext);
   const { state: activityState, updateStreak, logPhysio, updateBraceWornHours } = useContext(ActivityContext); 
+  const { isRecoveryChecklistCompleteForDate } = useContext(PostSurgeryContext);
 
   const [showCalendarModal, setShowCalendarModal] = useState(false);
   const [scheduledEvents, setScheduledEvents] = useState({});
@@ -324,6 +326,34 @@ const Tracking = () => {
               wasStreakUpdatedToday
             });
           } 
+        } else if (accountType === 'post-surgery') {
+          const isPhysioComplete = isPhysioCompleteForDate(targetDate);
+          const isRecoveryChecklistComplete = await isRecoveryChecklistCompleteForDate(targetDate);
+
+          console.log('Post-surgery completion check:', {
+            targetDate,
+            isPhysioComplete,
+            isRecoveryChecklistComplete,
+            streakUpdatedToday: streakUpdatedToday.current,
+            wasStreakUpdatedToday
+          });
+
+          if (isPhysioComplete && isRecoveryChecklistComplete && !streakUpdatedToday.current && !wasStreakUpdatedToday) {
+            console.log("Both physio and recovery checklist completed - updating streak...");
+            const streakResult = await updateStreak();
+            
+            if (streakResult.success) {
+              streakUpdatedToday.current = true;
+              setShowStreakAnimation(true);
+            }
+          } else {
+            console.log("Not all activities completed yet for post-surgery user", {
+              isPhysioComplete,
+              isRecoveryChecklistComplete,
+              streakUpdatedToday: streakUpdatedToday.current,
+              wasStreakUpdatedToday
+            });
+          }
         } else {
           // For other account types, update streak immediately after activity completion
           if (!streakUpdatedToday.current && !wasStreakUpdatedToday) {
@@ -342,7 +372,7 @@ const Tracking = () => {
     } catch (error) {
       console.error("Activity completion error:", error);
     }
-  }, [logPhysio, updateBraceWornHours, incrementPhysio, updateStreak, wasStreakUpdatedToday, userData, user, today, isPhysioCompleteForDate]);
+  }, [logPhysio, updateBraceWornHours, incrementPhysio, updateStreak, wasStreakUpdatedToday, userData, user, today, isPhysioCompleteForDate, isRecoveryChecklistCompleteForDate]);
   
   // Helper function to check if both activities are completed
   const checkBothActivitiesComplete = useCallback((date = today) => {

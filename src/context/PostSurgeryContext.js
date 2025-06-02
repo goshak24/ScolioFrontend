@@ -477,6 +477,47 @@ const incrementWalkingMinutes = (dispatch) => async (increment) => {
   }
 };
 
+const isRecoveryChecklistCompleteForDate = (dispatch) => async (date = null) => {
+  try {
+    dispatch({ type: "SET_LOADING", payload: true });
+    
+    // Use today's date if no date is provided
+    const targetDate = date || new Date().toISOString().split('T')[0];
+    
+    // Get current tasks from AsyncStorage
+    const savedTasksJSON = await AsyncStorage.getItem(TASKS_STORAGE_KEY);
+    let currentTasks = [];
+    
+    if (savedTasksJSON) {
+      currentTasks = JSON.parse(savedTasksJSON);
+    } else {
+      // If no saved tasks, load default and custom tasks
+      const customTasksJSON = await AsyncStorage.getItem(CUSTOM_TASKS_STORAGE_KEY);
+      const customTasks = customTasksJSON ? JSON.parse(customTasksJSON) : [];
+      currentTasks = [...defaultRecoveryTasks, ...customTasks];
+    }
+    
+    // Check if all tasks are completed
+    const allTasksCompleted = currentTasks.length > 0 && currentTasks.every(task => task.completed === true);
+    
+    console.log('Recovery checklist completion check:', {
+      targetDate,
+      totalTasks: currentTasks.length,
+      completedTasks: currentTasks.filter(task => task.completed).length,
+      allTasksCompleted
+    });
+    
+    return allTasksCompleted;
+    
+  } catch (error) {
+    console.error('Error checking recovery checklist completion:', error);
+    dispatch({ type: "SET_ERROR", payload: error.message || "Failed to check recovery checklist completion" });
+    return false;
+  } finally {
+    dispatch({ type: "SET_LOADING", payload: false });
+  }
+};
+
 export const { Provider, Context } = createDataContext(
   postSurgeryReducer,
   { 
@@ -486,7 +527,8 @@ export const { Provider, Context } = createDataContext(
     fetchWalkingData,
     addCustomTask,
     deleteCustomTask,
-    editCustomTask
+    editCustomTask,
+    isRecoveryChecklistCompleteForDate,
   },
   { 
     recoveryTasks: defaultRecoveryTasks,
