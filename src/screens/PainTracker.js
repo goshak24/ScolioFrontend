@@ -38,6 +38,9 @@ const PainTracker = ({ navigation }) => {
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [dataInitialized, setDataInitialized] = useState(false);
 
+  // Pain patterns tracking week navigation 
+  const [currentWeekOffset, setCurrentWeekOffset] = useState(0); // 0 = current week, -1 = previous week, etc.
+
   // Tab navigation state
   const [activeTab, setActiveTab] = useState('track');
 
@@ -402,11 +405,286 @@ const PainTracker = ({ navigation }) => {
               </>
             )}
 
-            {/* Patterns Content - Placeholder */}
-            {activeTab === 'patterns' && (
-              <View style={styles.placeholderContainer}>
-                <Text style={styles.placeholderText}>Pain patterns will be displayed here</Text>
+            {/* Pain Intensity Over Time Chart */}
+            {activeTab === 'patterns' && ( 
+              <View>
+              <View style={styles.patternSection}>
+                <Text style={styles.patternSectionTitle}>Pain Intensity Over Time</Text>
+                <View style={styles.chartContainer}>
+                  <View style={styles.chartYAxis}>
+                    <Text style={styles.yAxisLabel}>10</Text>
+                    <Text style={styles.yAxisLabel}>5</Text>
+                    <Text style={styles.yAxisLabel}>0</Text>
+                  </View>
+                  <View style={styles.chartArea}>
+                    <View style={styles.chartGrid}>
+                      {/* Grid lines */}
+                      <View style={styles.gridLine} />
+                      <View style={styles.gridLine} />
+                      <View style={styles.gridLine} />
+                    </View>
+                    {/* Dynamic data visualization */}
+                    <View style={styles.lineChart}>
+                      {(() => {
+                        // Process pain logs to get last 7 days of data
+                        const last7Days = [];
+                        const today = new Date();
+                        
+                        for (let i = 6; i >= 0; i--) {
+                          const date = new Date(today);
+                          date.setDate(date.getDate() - i);
+                          last7Days.push(date.toISOString().split('T')[0]);
+                        }
+
+                        // Group pain logs by date and calculate average intensity
+                        const dailyAverages = last7Days.map(date => {
+                          const logsForDate = state.painLogs.filter(log => log.date === date);
+                          if (logsForDate.length === 0) return { date, avgIntensity: 0, hasData: false };
+                          
+                          const totalIntensity = logsForDate.reduce((sum, log) => sum + log.painIntensity, 0);
+                          return { 
+                            date, 
+                            avgIntensity: totalIntensity / logsForDate.length,
+                            hasData: true 
+                          };
+                        });
+
+                        // Create data points for the chart
+                        return dailyAverages.map((dayData, index) => {
+                          if (!dayData.hasData) return null;
+                          
+                          const leftPosition = (index / (dailyAverages.length - 1)) * 85 + 6.25; // Distribute evenly across chart width
+                          const bottomPosition = (dayData.avgIntensity / 10) * 85 + 5; // Scale to chart height (0-10 pain scale)
+                          
+                          return (
+                            <View 
+                              key={index}
+                              style={[
+                                styles.dataPoint, 
+                                { 
+                                  left: `${leftPosition}%`, 
+                                  bottom: `${bottomPosition}%` 
+                                }
+                              ]} 
+                            />
+                          );
+                        }).filter(point => point !== null);
+                      })()}
+                    </View>
+                  </View>
+                </View>
+                <View style={styles.chartXAxis}>
+                  {(() => {
+                    // Generate last 7 days labels
+                    const last7Days = [];
+                    const today = new Date();
+                    
+                    for (let i = 6; i >= 0; i--) {
+                      const date = new Date(today);
+                      date.setDate(date.getDate() - i);
+                      last7Days.push(date.getDate().toString());
+                    }
+                    
+                    return last7Days.map((day, index) => (
+                      <Text key={index} style={styles.xAxisLabel}>{day}</Text>
+                    ));
+                  })()}
+                </View>
               </View>
+
+              {/* Pain by Body Area - Dynamic */}
+              <View style={styles.patternSection}>
+                <Text style={styles.patternSectionTitle}>Pain by Body Area</Text>
+                <View style={[styles.bodyAreaContainer, { backgroundColor: COLORS.workoutOption }]}>
+                  {(() => {
+                    // Process pain logs to get body part frequency
+                    const bodyPartCounts = {};
+                    const totalLogs = state.painLogs.length;
+                    
+                    state.painLogs.forEach(log => {
+                      log.bodyParts.forEach(part => {
+                        bodyPartCounts[part] = (bodyPartCounts[part] || 0) + 1;
+                      });
+                    });
+                    
+                    // Convert to array and sort by frequency
+                    const sortedBodyParts = Object.entries(bodyPartCounts)
+                      .map(([part, count]) => ({
+                        name: part.replace(/_/g, ' ').split(' ').map(word => 
+                          word.charAt(0).toUpperCase() + word.slice(1)
+                        ).join(' '),
+                        percentage: totalLogs > 0 ? Math.round((count / totalLogs) * 100) : 0,
+                        count
+                      }))
+                      .sort((a, b) => b.count - a.count)
+                      .slice(0, 5); // Show top 5 body parts
+                    
+                    if (sortedBodyParts.length === 0) {
+                      return (
+                        <Text style={styles.noDataText}>No pain data available yet</Text>
+                      );
+                    }
+                    
+                    return sortedBodyParts.map((bodyPart, index) => {
+                      // Color based on frequency
+                      let barColor = COLORS.primaryPurple;
+                      if (bodyPart.percentage >= 80) barColor = COLORS.red;
+                      else if (bodyPart.percentage >= 50) barColor = COLORS.accentOrange;
+                      else if (bodyPart.percentage >= 20) barColor = COLORS.primaryPurple;
+                      
+                      return (
+                        <View key={index} style={styles.bodyAreaItem}>
+                          <View style={styles.bodyAreaInfo}>
+                            <Text style={styles.bodyAreaName}>{bodyPart.name}</Text>
+                            <Text style={styles.bodyAreaPercentage}>{bodyPart.percentage}% of logs</Text>
+                          </View>
+                          <View style={styles.progressBarContainer}>
+                            <View style={[
+                              styles.progressBar, 
+                              { 
+                                width: `${bodyPart.percentage}%`, 
+                                backgroundColor: barColor 
+                              }
+                            ]} />
+                          </View>
+                        </View>
+                      );
+                    });
+                  })()}
+                </View>
+              </View>
+
+              {/* Pain Correlation with Activities - Dynamic */}
+              <View style={styles.patternSection}>
+                <Text style={styles.patternSectionTitle}>Pain Correlation with Activities</Text>
+                <View style={[styles.activitiesContainer, { backgroundColor: COLORS.workoutOption }]}>
+                  {(() => {
+                    // Process activities and their correlation with high pain
+                    const activityAnalysis = {}; 
+                    
+                    state.painLogs.forEach(log => {
+                      log.activities.forEach(activity => {
+                        if (!activityAnalysis[activity]) {
+                          activityAnalysis[activity] = { totalLogs: 0, highPainLogs: 0 };
+                        }
+                        activityAnalysis[activity].totalLogs++;
+                        if (log.painIntensity >= 7) { // Consider 7+ as high pain
+                          activityAnalysis[activity].highPainLogs++;
+                        }
+                      });
+                    });
+                    
+                    // Calculate correlation percentages
+                    const correlationData = Object.entries(activityAnalysis)
+                      .map(([activity, data]) => {
+                        const correlationPercentage = data.totalLogs > 0 
+                          ? Math.round((data.highPainLogs / data.totalLogs) * 100) 
+                          : 0;
+                        
+                        return {
+                          name: activity.charAt(0).toUpperCase() + activity.slice(1),
+                          correlation: correlationPercentage,
+                          isPositive: correlationPercentage > 50,
+                          totalLogs: data.totalLogs
+                        };
+                      })
+                      .filter(item => item.totalLogs >= 2) // Only show activities with at least 2 logs
+                      .sort((a, b) => Math.abs(b.correlation - 50) - Math.abs(a.correlation - 50)) // Sort by strongest correlation
+                      .slice(0, 4); // Show top 4 activities
+                    
+                    if (correlationData.length === 0) {
+                      return (
+                        <Text style={styles.noDataText}>Not enough activity data yet</Text>
+                      );
+                    }
+                    
+                    return correlationData.map((activity, index) => {
+                      const isHighPain = activity.correlation > 60;
+                      const dotColor = isHighPain ? COLORS.red : 
+                                      activity.correlation > 40 ? COLORS.accentOrange : COLORS.accentGreen;
+                      const changeText = activity.correlation > 50 
+                        ? `+${activity.correlation - 50}% pain risk`
+                        : `-${50 - activity.correlation}% pain risk`;
+                      const bgColor = isHighPain ? COLORS.red + '20' : COLORS.accentGreen + '20';
+                      const textColor = isHighPain ? COLORS.red : COLORS.accentGreen;
+                      
+                      return (
+                        <View key={index} style={styles.activityItem}>
+                          <View style={styles.activityInfo}>
+                            <View style={[styles.activityDot, { backgroundColor: dotColor }]} />
+                            <Text style={styles.activityName}>{activity.name}</Text>
+                          </View>
+                          <View style={[styles.painChangeContainer, { backgroundColor: bgColor }]}>
+                            <Text style={[styles.painChangeText, { color: textColor }]}>
+                              {changeText}
+                            </Text>
+                          </View>
+                        </View>
+                      );
+                    });
+                  })()}
+                </View>
+              </View>
+
+              {/* Recommendations - Dynamic */}
+              <View style={styles.patternSection}>
+                <Text style={styles.patternSectionTitle}>Recommendations</Text>
+                <View style={[styles.recommendationsContainer, { backgroundColor: COLORS.workoutOption }]}>
+                  {(() => {
+                    const recommendations = [];
+                    
+                    // Analyze pain patterns for recommendations
+                    if (state.painLogs.length === 0) {
+                      return (
+                        <Text style={styles.noDataText}>Start tracking pain to get personalized recommendations</Text>
+                      );
+                    }
+                    
+                    // Check for high pain days
+                    const highPainDays = state.painLogs.filter(log => log.painIntensity >= 7).length;
+                    const totalLogs = state.painLogs.length;
+                    
+                    if (highPainDays / totalLogs > 0.5) {
+                      recommendations.push("Consider consulting with a healthcare provider about your pain levels");
+                    }
+                    
+                    // Check most common body parts
+                    const bodyPartCounts = {};
+                    state.painLogs.forEach(log => {
+                      log.bodyParts.forEach(part => {
+                        bodyPartCounts[part] = (bodyPartCounts[part] || 0) + 1;
+                      });
+                    });
+                    
+                    const mostCommonPart = Object.entries(bodyPartCounts)
+                      .sort(([,a], [,b]) => b - a)[0];
+                    
+                    if (mostCommonPart && mostCommonPart[0].includes('back')) {
+                      recommendations.push("Try gentle back stretches and consider ergonomic improvements");
+                    }
+                    
+                    // Check sleep quality correlation
+                    const avgSleepQuality = state.painLogs.reduce((sum, log) => sum + (log.sleepQuality || 5), 0) / totalLogs;
+                    if (avgSleepQuality < 6) {
+                      recommendations.push("Poor sleep may be affecting your pain - consider improving sleep hygiene");
+                    }
+                    
+                    // Generic recommendations if not enough data
+                    if (recommendations.length === 0) {
+                      recommendations.push("Keep tracking your pain to identify patterns");
+                      recommendations.push("Stay hydrated and maintain gentle movement throughout the day");
+                    }
+                    
+                    return recommendations.slice(0, 3).map((rec, index) => (
+                      <View key={index} style={styles.recommendationItem}>
+                        <Ionicons name="checkmark-circle" size={moderateScale(20)} color={COLORS.accentGreen} />
+                        <Text style={styles.recommendationText}>{rec}</Text>
+                      </View>
+                    ));
+                  })()}
+                </View>
+              </View>
+            </View>
             )}
           </View>
         </ScrollView>
@@ -499,8 +777,7 @@ const styles = StyleSheet.create({
     borderRadius: 15,
     backgroundColor: COLORS.cardDark,
     marginHorizontal: moderateScale(10),
-    marginTop: moderateScale(15),
-    paddingBottom: moderateScale(20),
+    marginTop: moderateScale(15), 
   },
   sectionContainer: {
     paddingHorizontal: moderateScale(15),
@@ -550,5 +827,184 @@ const styles = StyleSheet.create({
   descriptionText: {
     fontSize: moderateScale(14),
     color: COLORS.lightGray,
+  },
+
+  // Pattern styles
+  patternSection: {
+    paddingHorizontal: moderateScale(15),
+    marginBottom: moderateScale(25)
+  },
+  patternSectionTitle: {
+    fontSize: moderateScale(18),
+    fontWeight: '600',
+    color: COLORS.white,
+    marginBottom: moderateScale(15),
+  },
+  
+  // Chart styles
+  chartContainer: {
+    flexDirection: 'row',
+    height: moderateScale(150),
+    backgroundColor: COLORS.workoutOption, 
+    borderTopLeftRadius: moderateScale(10),
+    borderTopRightRadius: moderateScale(10),
+    padding: moderateScale(10),
+    paddingVertical: moderateScale(12),
+    marginBottom: moderateScale(10),
+  },
+  chartYAxis: {
+    width: moderateScale(25),
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
+    paddingRight: moderateScale(10),
+  },
+  yAxisLabel: {
+    color: COLORS.lightGray,
+    fontSize: moderateScale(12),
+  },
+  chartArea: {
+    flex: 1,
+    position: 'relative',
+  },
+  chartGrid: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'space-between',
+  },
+  gridLine: {
+    height: 1,
+    backgroundColor: COLORS.lightGray + '30',
+  },
+  lineChart: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  dataPoint: {
+    position: 'absolute',
+    width: moderateScale(8),
+    height: moderateScale(8),
+    borderRadius: moderateScale(4),
+    backgroundColor: COLORS.primaryPurple,
+  },
+  chartXAxis: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingHorizontal: moderateScale(10),
+    paddingBottom: moderateScale(7.5), 
+    backgroundColor: COLORS.workoutOption, 
+    marginTop: -moderateScale(10), 
+    borderBottomLeftRadius: moderateScale(10), 
+    borderBottomRightRadius: moderateScale(10), 
+  },
+  xAxisLabel: {
+    color: COLORS.lightGray,
+    fontSize: moderateScale(12),
+  },
+  
+  // Body area styles
+  bodyAreaContainer: {
+    backgroundColor: COLORS.cardDark,
+    borderRadius: moderateScale(10),
+    padding: moderateScale(15),
+  },
+  bodyAreaItem: {
+    marginBottom: moderateScale(15),
+  },
+  bodyAreaInfo: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: moderateScale(8),
+  },
+  bodyAreaName: {
+    color: COLORS.white,
+    fontSize: moderateScale(14),
+    fontWeight: '500',
+  },
+  bodyAreaPercentage: {
+    color: COLORS.lightGray,
+    fontSize: moderateScale(12),
+  },
+  progressBarContainer: {
+    height: moderateScale(8),
+    backgroundColor: COLORS.darkBackground,
+    borderRadius: moderateScale(4),
+    overflow: 'hidden',
+  },
+  progressBar: {
+    height: '100%',
+    borderRadius: moderateScale(4),
+  },
+  
+  // Activities styles
+  activitiesContainer: {
+    backgroundColor: COLORS.cardDark,
+    borderRadius: moderateScale(10),
+    padding: moderateScale(15),
+  },
+  activityItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: moderateScale(12),
+  },
+  activityInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  activityDot: {
+    width: moderateScale(12),
+    height: moderateScale(12),
+    borderRadius: moderateScale(6),
+    marginRight: moderateScale(12),
+  },
+  activityName: {
+    color: COLORS.white,
+    fontSize: moderateScale(14),
+    fontWeight: '500',
+  },
+  painChangeContainer: {
+    backgroundColor: COLORS.red + '20',
+    paddingHorizontal: moderateScale(10),
+    paddingVertical: moderateScale(4),
+    borderRadius: moderateScale(6),
+  },
+  painChangeText: {
+    color: COLORS.red,
+    fontSize: moderateScale(12),
+    fontWeight: '600',
+  },
+  
+  // Recommendations styles
+  recommendationsContainer: {
+    backgroundColor: COLORS.cardDark,
+    borderRadius: moderateScale(10),
+    padding: moderateScale(15),
+  },
+  recommendationItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start', 
+    marginVertical: moderateScale(5),
+  },
+  recommendationText: {
+    color: COLORS.white,
+    fontSize: moderateScale(14),
+    marginLeft: moderateScale(10),
+    flex: 1,
+    lineHeight: moderateScale(20),
+  },
+  noDataText: {
+    color: COLORS.lightGray,
+    fontSize: moderateScale(14),
+    textAlign: 'center',
+    fontStyle: 'italic',
+    padding: moderateScale(20),
   },
 });

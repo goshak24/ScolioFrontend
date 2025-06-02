@@ -103,6 +103,17 @@ const Squad = () => {
     useCallback(() => {
       const now = new Date().getTime();
       
+      // Don't run focus effect logic if initial data hasn't been loaded yet
+      if (!initialDataLoaded.current.Forums && activeTab === "Forums") {
+        console.log("⏩ Skipping focus effect - initial Forums data not loaded yet");
+        return;
+      }
+      
+      if (!initialDataLoaded.current.Messages && activeTab === "Messages") {
+        console.log("⏩ Skipping focus effect - initial Messages data not loaded yet");
+        return;
+      }
+      
       // Only refresh data if returning after a significant time (e.g., 2+ minutes)
       const timeSinceLastFocus = now - lastFocusTime.current;
       const shouldRefreshOnFocus = timeSinceLastFocus > 2 * 60 * 1000; // 2 minutes
@@ -130,7 +141,7 @@ const Squad = () => {
         // No cleanup needed
       };
     }, [activeTab])
-  );
+);
 
   // Handle tab changes
   useEffect(() => {
@@ -313,9 +324,6 @@ const Squad = () => {
       console.log("❌ No user or user.id provided to getCompleteUserData");
       return user;
     }
-    
-    console.log(`🔍 Looking up user data for ID: ${user.id}`);
-    console.log(`📋 Current user data:`, user);
     
     // Already has all the data we need
     if (user.username && user.avatar) {

@@ -1,21 +1,45 @@
 import { StyleSheet, Text, View, TouchableOpacity, Image } from 'react-native';
-import React from 'react';
+import React, { useContext } from 'react';
 import { useNavigation } from '@react-navigation/native';
 import { moderateScale } from 'react-native-size-matters';
 import COLORS from '../../constants/COLORS';
 import { Ionicons } from '@expo/vector-icons';
 import ReusableButton from '../../components/reusable/ReusableButton';
+import { Context as PainTrackingContext } from '../../context/PainTrackingContext';
 
 const PainTrackerSummary = () => {
   const navigation = useNavigation();
+  const { state } = useContext(PainTrackingContext); 
 
-  // Mock data for visualization
-  const mockPainAreas = [
-    { id: 'upper_back_right', name: 'Upper Back (Right)', intensity: 3, description: 'Much better' },
-    { id: 'shoulder_right', name: 'Right Shoulder', intensity: 5, description: 'New pain after carrying backpack' },
-  ];
+  // Get the most recent pain log
+  const getMostRecentPainLog = () => {
+    if (!state.painLogs || state.painLogs.length === 0) {
+      return null;
+    }
+    
+    // Sort by createdAt timestamp (most recent first)
+    const sortedLogs = [...state.painLogs].sort((a, b) => {
+      const timeA = a.createdAt._seconds * 1000 + a.createdAt._nanoseconds / 1000000;
+      const timeB = b.createdAt._seconds * 1000 + b.createdAt._nanoseconds / 1000000;
+      return timeB - timeA;
+    });
+    
+    return sortedLogs[0];
+  };
 
-  const mockActivities = ['School', 'Carrying heavy bag', 'Sitting'];
+  // Format body parts for display
+  const formatBodyParts = (bodyParts) => {
+    if (!bodyParts || bodyParts.length === 0) return 'No area specified';
+    
+    return bodyParts.map(part => {
+      // Convert snake_case to readable format
+      return part.split('_').map(word => 
+        word.charAt(0).toUpperCase() + word.slice(1)
+      ).join(' ');
+    }).join(', ');
+  };
+
+  const recentPainLog = getMostRecentPainLog();
   
   // Navigate to full PainTracker screen
   const handleViewFullTracker = () => {
@@ -34,18 +58,29 @@ const PainTrackerSummary = () => {
       </View>
 
       <View style={styles.bodyContainer}>
-        
         <View style={styles.infoContainer}>
-          <View style={styles.recentEntryContainer}>
-            <Text style={styles.sectionTitle}>Recent Pain</Text>
-            <View style={styles.entryRow}>
-              <Text style={styles.entryLabel}>{mockPainAreas[1].name}</Text>
-              <View style={styles.intensityBadge}>
-                <Text style={styles.intensityText}>{mockPainAreas[1].intensity}/10</Text>
+          {recentPainLog ? (
+            <View style={styles.recentEntryContainer}>
+              <Text style={styles.sectionTitle}>Recent Pain</Text>
+              <View style={styles.entryRow}>
+                <Text style={styles.entryLabel}>{formatBodyParts(recentPainLog.bodyParts)}</Text>
+                <View style={styles.intensityBadge}>
+                  <Text style={styles.intensityText}>{recentPainLog.painIntensity}/10</Text>
+                </View>
               </View>
+              <Text style={styles.entryDescription}>
+                {recentPainLog.notes || 'No notes provided'}
+              </Text>
+              <Text style={styles.entryMeta}>
+                {recentPainLog.timeOfDay} • {recentPainLog.date}
+              </Text>
             </View>
-            <Text style={styles.entryDescription}>{mockPainAreas[1].description}</Text>
-          </View>
+          ) : (
+            <View style={styles.recentEntryContainer}>
+              <Text style={styles.sectionTitle}>Recent Pain</Text>
+              <Text style={styles.noDataText}>No pain logs recorded yet</Text>
+            </View>
+          )}
         </View>
       </View>
 
@@ -54,18 +89,31 @@ const PainTrackerSummary = () => {
           <Ionicons name="pulse-outline" size={moderateScale(16)} color={COLORS.accentOrange} style={styles.metricIcon} />
           <Text style={styles.metricLabel}>Overall Pain</Text>
           <View style={styles.progressContainer}>
-            <View style={[styles.progress, { width: '40%' }]} />
+            <View style={[
+              styles.progress, 
+              { width: recentPainLog ? `${(recentPainLog.painIntensity / 10) * 100}%` : '0%' }
+            ]} />
           </View>
-          <Text style={styles.metricValue}>4/10</Text>
+          <Text style={styles.metricValue}>
+            {recentPainLog ? `${recentPainLog.painIntensity}/10` : '0/10'}
+          </Text>
         </View>
 
         <View style={styles.metricItem}>
           <Ionicons name="bed-outline" size={moderateScale(16)} color={COLORS.primaryPurple} style={styles.metricIcon} />
           <Text style={styles.metricLabel}>Sleep Quality</Text>
           <View style={styles.progressContainer}>
-            <View style={[styles.progress, { width: '70%', backgroundColor: COLORS.primaryPurple }]} />
+            <View style={[
+              styles.progress, 
+              { 
+                width: recentPainLog ? `${(recentPainLog.sleepQuality / 10) * 100}%` : '0%',
+                backgroundColor: COLORS.primaryPurple 
+              }
+            ]} />
           </View>
-          <Text style={styles.metricValue}>7/10</Text>
+          <Text style={styles.metricValue}>
+            {recentPainLog ? `${recentPainLog.sleepQuality}/10` : '0/10'}
+          </Text>
         </View>
       </View>
 
@@ -195,6 +243,17 @@ const styles = StyleSheet.create({
   entryDescription: {
     fontSize: moderateScale(12),
     color: COLORS.lightGray,
+    marginBottom: moderateScale(3),
+  },
+  entryMeta: {
+    fontSize: moderateScale(11),
+    color: COLORS.lightGray,
+    opacity: 0.7,
+  },
+  noDataText: {
+    fontSize: moderateScale(12),
+    color: COLORS.lightGray,
+    fontStyle: 'italic',
   },
   metricsContainer: {
     flexDirection: 'row',
