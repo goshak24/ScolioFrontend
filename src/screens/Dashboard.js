@@ -14,12 +14,10 @@ import CommunityCard from '../components/dashboard/CommunityCard';
 import SurgeryProgressCard from '../components/dashboard/SurgeryProgressCard';
 import PainTrackerSummary from '../components/dashboard/PainTrackerSummary';
 import { Context as UserContext } from '../context/UserContext';
-import { Context as AuthContext } from '../context/AuthContext';
 import Constants from 'expo-constants'
 
 const Dashboard = () => {
   const { state: { user, loading } } = useContext(UserContext);
-  const { state: authState } = useContext(AuthContext); 
 
   // Show loading indicator if user data is being fetched
   if (loading || !user) {

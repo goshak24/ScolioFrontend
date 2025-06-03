@@ -1,3 +1,5 @@
+import { format, isToday, isYesterday } from 'date-fns';
+
 const getFormattedDate = (date = new Date()) => {
     try {
         // Use local timezone to avoid date shifting issues
@@ -67,4 +69,40 @@ const getDateStringFromFirestoreTimestamp = (timestamp) => {
     }
 };
 
-export { getFormattedDate, getDateStringFromFirestoreTimestamp };
+const MDYformatTimestamp = (timestamp) => {
+        if (!timestamp) return "";
+
+        try {
+            // Handle Firebase timestamp object
+            let date;
+            if (timestamp._seconds) {
+                date = new Date(timestamp._seconds * 1000);
+            } else if (timestamp.seconds) {
+                date = new Date(timestamp.seconds * 1000);
+            } else if (timestamp instanceof Date) {
+                date = timestamp;
+            } else if (typeof timestamp === 'string') {
+                date = new Date(timestamp);
+            } else {
+                return ""; // Return empty string for invalid timestamps
+            }
+            
+            // Check if date is valid before formatting
+            if (isNaN(date.getTime())) {
+                return "";
+            }
+
+            if (isToday(date)) {
+                return format(date, 'h:mm a');
+            } else if (isYesterday(date)) {
+                return 'Yesterday';
+            } else {
+                return format(date, 'MM/dd/yyyy');
+            }
+        } catch (error) {
+            console.warn("Error formatting timestamp:", error);
+            return "";
+        }
+    };
+
+export { getFormattedDate, getDateStringFromFirestoreTimestamp, MDYformatTimestamp };

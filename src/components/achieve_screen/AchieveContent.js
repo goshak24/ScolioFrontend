@@ -182,7 +182,7 @@ const AchieveContent = ({ activeTab, streakDays, physioSessions, achievements, u
       case 'brace':
         return [
           ...metrics,
-          { id: 'brace', label: 'Brace Hours', value: braceWornThisWeek || 68, max: braceTimeRequiredThisWeek, icon: 'time' },
+          { id: 'brace', label: 'Brace Hours', value: braceWornThisWeek || 0, max: braceTimeRequiredThisWeek, icon: 'time' },
           { id: 'pain', label: 'Pain Logs', value: user?.treatmentData?.painLogs?.count || 6, max: 7, icon: 'medical' }
         ];
       case 'physio':
@@ -194,7 +194,7 @@ const AchieveContent = ({ activeTab, streakDays, physioSessions, achievements, u
       case 'brace + physio':
         return [
           ...metrics,
-          { id: 'brace', label: 'Brace Hours', value: braceWornThisWeek || 68, max: braceTimeRequiredThisWeek, icon: 'time' },
+          { id: 'brace', label: 'Brace Hours', value: braceWornThisWeek || 0, max: braceTimeRequiredThisWeek, icon: 'time' },
           { id: 'physio', label: 'Physio Sessions', value: physioSessions || 0, max: 5, icon: 'fitness' },
           { id: 'pain', label: 'Pain Logs', value: user?.treatmentData?.painLogs?.count || 6, max: 7, icon: 'medical' }
         ];

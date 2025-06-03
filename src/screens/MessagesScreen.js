@@ -15,20 +15,19 @@ import { Ionicons } from '@expo/vector-icons';
 import COLORS from '../constants/COLORS';
 import HeightSpacer from '../components/reusable/HeightSpacer';
 import { Context as MessagesContext } from '../context/MessagesContext';
-import { Context as AuthContext } from '../context/AuthContext';
-import { format, isToday, isYesterday } from 'date-fns';
+
 import Constants from 'expo-constants';
+import { MDYformatTimestamp } from '../components/timeZoneHelpers';
 
 const MessagesScreen = ({ navigation }) => {
     const { state: messagesState, getConversations } = useContext(MessagesContext);
-    const { state: authState } = useContext(AuthContext);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         const fetchConversations = async () => {
             setLoading(true);
             await getConversations();
-            setLoading(false);
+            setLoading(false); 
         };
 
         fetchConversations();
@@ -37,43 +36,6 @@ const MessagesScreen = ({ navigation }) => {
         const unsubscribe = navigation.addListener('focus', fetchConversations);
         return unsubscribe;
     }, [navigation]);
-
-    // Format the timestamp for display
-    const formatTimestamp = (timestamp) => {
-        if (!timestamp) return "";
-
-        try {
-            // Handle Firebase timestamp object
-            let date;
-            if (timestamp._seconds) {
-                date = new Date(timestamp._seconds * 1000);
-            } else if (timestamp.seconds) {
-                date = new Date(timestamp.seconds * 1000);
-            } else if (timestamp instanceof Date) {
-                date = timestamp;
-            } else if (typeof timestamp === 'string') {
-                date = new Date(timestamp);
-            } else {
-                return ""; // Return empty string for invalid timestamps
-            }
-            
-            // Check if date is valid before formatting
-            if (isNaN(date.getTime())) {
-                return "";
-            }
-
-            if (isToday(date)) {
-                return format(date, 'h:mm a');
-            } else if (isYesterday(date)) {
-                return 'Yesterday';
-            } else {
-                return format(date, 'MM/dd/yyyy');
-            }
-        } catch (error) {
-            console.warn("Error formatting timestamp:", error);
-            return "";
-        }
-    };
 
     // Navigate to conversation screen
     const navigateToConversation = (otherUser) => {
@@ -100,7 +62,7 @@ const MessagesScreen = ({ navigation }) => {
                 <View style={styles.conversationInfo}>
                     <View style={styles.conversationHeader}>
                         <Text style={styles.username}>{item.user.username || 'Unknown User'}</Text>
-                        <Text style={styles.timestamp}>{formatTimestamp(item.lastMessageTime)}</Text>
+                        <Text style={styles.timestamp}>{MDYformatTimestamp(item.lastMessageTime)}</Text>
                     </View>
                     <View style={styles.messagePreviewContainer}>
                         <Text style={styles.messagePreview} numberOfLines={1}>

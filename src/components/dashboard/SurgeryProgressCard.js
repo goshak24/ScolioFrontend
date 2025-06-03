@@ -7,14 +7,7 @@ import { Context as UserContext } from '../../context/UserContext';
 import { Context as PostSurgeryContext } from '../../context/PostSurgeryContext';
 import { Context as PreSurgeryContext } from '../../context/PreSurgeryContext';
 import { ProgressBar } from 'react-native-paper';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { navigate } from '../navigation/navigationRef';
-import ReusableButton from '../reusable/ReusableButton';
 import HeightSpacer from '../reusable/HeightSpacer'; 
-
-// Storage keys
-const PRESURGERY_TASKS_KEY = 'presurgeryChecklist';
-const PLANNED_SURGERY_DATE_KEY = 'plannedSurgeryDate';
 
 const SurgeryProgressCard = () => {
   const { state: { user } } = useContext(UserContext);
