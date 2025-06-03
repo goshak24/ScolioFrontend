@@ -7,7 +7,8 @@ import {
   SafeAreaView,
   ActivityIndicator,
   TouchableOpacity, 
-  Platform
+  Platform,
+  Alert
 } from "react-native";
 import { moderateScale } from "react-native-size-matters";
 import { Ionicons } from "@expo/vector-icons";
@@ -39,7 +40,7 @@ const Squad = () => {
   const { state: AuthState } = useContext(AuthContext);
   const { state: UserState } = useContext(UserContext); 
   const { state: FriendsState, getFriends, getFriendRequests, getUserById } = useContext(FriendsContext);
-  const { state: MessagesState, getConversations, clearCache, clearConversationCache } = useContext(MessagesContext);
+  const { state: MessagesState, getConversations, clearCache, clearConversationCache, deleteConversationById } = useContext(MessagesContext);
   const [showCreatePostModal, setShowCreatePostModal] = useState(false);
   const [filteredPosts, setFilteredPosts] = useState([]);
   const [profileModalVisible, setProfileModalVisible] = useState(false);
@@ -249,7 +250,7 @@ const Squad = () => {
     } finally {
       setMessagesLoading(false);
     }
-  };
+  }; 
 
   const handleNewThread = () => {
     setShowCreatePostModal(true);
@@ -291,6 +292,28 @@ const Squad = () => {
     navigation.navigate('ChatScreen', { otherUser: enhancedUser });
   };
 
+  const deleteConversation = (conversationId) => { 
+    Alert.alert(
+      "Delete Conversation",
+      "Are you sure you want to delete this conversation?",
+      [
+        {
+          text: "Cancel",
+          onPress: () => console.log("Cancel Pressed"),
+          style: "cancel"
+        },
+        {
+          text: "Delete",
+          onPress: async () => {
+            await deleteConversationById(conversationId);
+            // Force refresh conversations after deletion
+            loadConversations(true); 
+          }
+        }
+      ]
+    ); 
+  };
+
   // Render conversation item with enhanced user data
   const renderConversationItem = ({ item }) => {
     // Enhance user data with friends context data
@@ -328,6 +351,9 @@ const Squad = () => {
             <Text style={styles.messagePreview} numberOfLines={1}>
               {enhancedItem.lastMessage || 'No messages yet'}
             </Text>
+            <TouchableOpacity style={{position:'absolute', right: moderateScale(0), top: moderateScale(0), padding: moderateScale(0)}} onPress={() => deleteConversation(enhancedItem.id)}>
+              <Ionicons name="trash-outline" size={moderateScale(20)} color="gray" />
+            </TouchableOpacity>
             {enhancedItem.unreadCount > 0 && (
               <View style={styles.unreadBadge}>
                 <Text style={styles.unreadCount}>{enhancedItem.unreadCount}</Text>
@@ -641,6 +667,9 @@ const styles = StyleSheet.create({
   timestamp: {
     color: COLORS.lightGray,
     fontSize: moderateScale(12),
+    position: 'absolute',
+    right: moderateScale(0),
+    top: moderateScale(0),
   },
   messagePreviewContainer: {
     flexDirection: 'row',

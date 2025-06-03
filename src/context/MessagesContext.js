@@ -200,6 +200,14 @@ const messagesReducer = (state, action) => {
         ...state,
         hasMoreMessages: action.payload
       };
+    case "DELETE_CONVERSATION":
+      if (state.conversations.some(conversation => conversation.id === action.payload)) {
+        return {
+          ...state,
+          conversations: state.conversations.filter(conversation => conversation.id !== action.payload)
+        };
+      }
+      return state;
     default:
       return state;
   }
@@ -855,6 +863,18 @@ const clearCache = (dispatch) => async () => {
   }
 };
 
+const deleteConversationById = (dispatch) => async (conversationId) => {
+  try {
+    await api.delete(`/messages/conversation/delete/${conversationId}`);
+    dispatch({ type: "DELETE_CONVERSATION", payload: conversationId });
+    return true;
+  } catch (error) {
+    console.error("Error deleting conversation:", error);
+    dispatch({ type: "SET_ERROR", payload: "Failed to delete conversation" });
+    return false;
+  }
+};
+
 export const { Provider, Context } = createDataContext(
   messagesReducer,
   {
@@ -866,7 +886,8 @@ export const { Provider, Context } = createDataContext(
     startConversation,
     getUnreadMessageCount,
     getOlderMessages,
-    clearCache
+    clearCache,
+    deleteConversationById
   },
   {
     conversations: [],

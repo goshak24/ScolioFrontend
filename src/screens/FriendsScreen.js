@@ -346,7 +346,7 @@ const FriendsScreen = ({ navigation }) => {
                 <View style={styles.friendActions}>
                     <DirectMessageButton 
                         user={friend} 
-                        iconSize={16}
+                        iconSize={moderateScale(16)}
                         style={styles.messageButton}
                     />
                     <TouchableOpacity 
