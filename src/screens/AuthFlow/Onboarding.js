@@ -8,10 +8,13 @@ import { navigate } from '../../components/navigation/navigationRef';
 import HeightSpacer from '../../components/reusable/HeightSpacer';
 import { Context as AuthContext } from '../../context/AuthContext';
 import { Context as UserContext } from '../../context/UserContext';
+import { Context as NotificationContext } from '../../context/NotificationContext';
 
 const Onboarding = () => {
   const { tryLocalSignIn, state: { loading: authLoading, idToken } } = useContext(AuthContext);
   const { fetchUserData, state: { loading: userLoading, user } } = useContext(UserContext);
+  const { registerForNotifications, checkToken } = useContext(NotificationContext);
+
   const [fontsLoaded] = useFonts({
     'LeagueSpartan-Regular': require('../../../assets/fonts/LeagueSpartan-Regular.ttf'),
     'LeagueSpartan-Bold': require('../../../assets/fonts/LeagueSpartan-Bold.ttf'),
@@ -26,6 +29,12 @@ const Onboarding = () => {
         const success = await tryLocalSignIn();
         if (success) {
           await fetchUserData(idToken);
+          const checkTokenResult = await checkToken();
+          if (!checkTokenResult) {
+              await registerForNotifications();
+          } else {
+              console.log('Push notification token already registered');
+          }
           navigate("Main");
         } else {
           navigate("Auth");

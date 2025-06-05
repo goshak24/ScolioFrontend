@@ -4,6 +4,8 @@ import { initializeAuth, getReactNativePersistence } from "firebase/auth";
 import { getStorage } from "firebase/storage";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
+import * as Notifications from 'expo-notifications';
+import * as Device from 'expo-device'; 
 
 const {
   FIREBASE_API_KEY,
@@ -29,7 +31,7 @@ const auth = initializeAuth(app, {
 });
 const storage = getStorage(app);
 
-const API_BASE_URL = 'https://f2ea-86-30-169-92.ngrok-free.app/api/'; 
+const API_BASE_URL = 'https://61eb-86-30-169-92.ngrok-free.app/api/'; 
 
 const api = axios.create({
   baseURL: API_BASE_URL,

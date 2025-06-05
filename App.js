@@ -2,7 +2,7 @@ import { createStackNavigator } from "@react-navigation/stack";
 import { NavigationContainer } from "@react-navigation/native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import React, { useContext, useEffect } from 'react';
+import React, { useContext, useEffect, useRef } from 'react';
 import { Platform, StatusBar, View, StyleSheet } from 'react-native';
 
 import { navigationRef } from "./src/components/navigation/navigationRef";
@@ -21,6 +21,7 @@ import { Provider as ForumProvider } from "./src/context/ForumContext";
 import { configureServerCaching } from './src/utilities/backendApi';
 import { Provider as PainTrackingProvider } from './src/context/PainTrackingContext';
 import { Provider as AssistantProvider } from './src/context/AssistantContext';
+import { Provider as NotificationProvider } from './src/context/NotificationContext';
 
 const RootStack = createStackNavigator(); 
 const AuthStack = createStackNavigator(); 
@@ -31,6 +32,9 @@ import SignIn from "./src/screens/AuthFlow/SignIn/SignIn";
 import SignUp1 from "./src/screens/AuthFlow/SignUp/SignUp1"; 
 import LoadingScreen from "./src/screens/LoadingScreen";
 import SignUp2 from "./src/screens/AuthFlow/SignUp/SignUp2";
+
+import * as Notifications from 'expo-notifications';
+import { registerForPushNotificationsAsync } from "./src/utilities/notifications";
 
 const AuthStackScreens = () => {
   return (
@@ -64,6 +68,31 @@ const ContextConnector = ({ children }) => {
 };
 
 const App = () => {
+  const notificationListener = useRef();
+  const responseListener = useRef();
+
+  useEffect(() => {
+    // Register device for push notifications
+    registerForPushNotificationsAsync().then(token => {
+      if (token) console.log('✅ Push token registered:'); 
+    });
+
+    // Foreground notification
+    notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
+      //console.log('🔔 Notification received in foreground:', notification);
+    });
+
+    // Tap interaction
+    responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
+      //console.log('📲 Notification tapped by user:', response);
+    });
+
+    return () => {
+      Notifications.removeNotificationSubscription(notificationListener.current);
+      Notifications.removeNotificationSubscription(responseListener.current);
+    };
+  }, []);
+
   // Initialize server-side caching on app startup
   useEffect(() => {
     // Wrap in a function so we can retry
@@ -150,15 +179,17 @@ export default () => {
             <PostSurgeryProvider>
               <PreSurgeryProvider>
                 <FriendsProvider>
-                  <MessagesProvider>
-                    <PainTrackingProvider>
-                      <AssistantProvider>
-                        <ContextConnector>
-                          <App />
-                        </ContextConnector>
-                      </AssistantProvider>
-                    </PainTrackingProvider>
-                  </MessagesProvider>
+                  <NotificationProvider>
+                    <MessagesProvider>
+                      <PainTrackingProvider>
+                        <AssistantProvider>
+                          <ContextConnector>
+                            <App />
+                          </ContextConnector>
+                        </AssistantProvider>
+                      </PainTrackingProvider>
+                    </MessagesProvider>
+                  </NotificationProvider>
                 </FriendsProvider>
               </PreSurgeryProvider>
             </PostSurgeryProvider>

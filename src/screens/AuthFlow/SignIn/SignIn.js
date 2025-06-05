@@ -8,11 +8,14 @@ import BackButton from '../../../components/reusable/BackButton';
 import { navigate, goBack } from '../../../components/navigation/navigationRef';
 import { Context as AuthContext } from '../../../context/AuthContext'; 
 import { Context as UserContext } from '../../../context/UserContext'; 
+import { Context as NotificationContext } from '../../../context/NotificationContext';
 import KeyboardAvoidingWrapper from '../../../components/reusable/KeyboardAvoidingWrapper';
 
 const SignIn = () => {
   const { signIn } = useContext(AuthContext); 
   const { fetchUserData } = useContext(UserContext); 
+  const { registerForNotifications, checkToken } = useContext(NotificationContext)
+
   const [loading, setLoading] = useState(false); 
   const [error, setError] = useState(null);
   const [fieldErrors, setFieldErrors] = useState({
@@ -93,6 +96,14 @@ const SignIn = () => {
       if (result.idToken) {
         // Then fetch user data using the token
         await fetchUserData(result.idToken);
+
+        // Register for notifications
+        const checkTokenResult = await checkToken();
+        if (!checkTokenResult) {
+            await registerForNotifications();
+        } else {
+            console.log('Push notification token already registered');
+        }
         
         // If successful, navigate to main screen
         navigate("Main");

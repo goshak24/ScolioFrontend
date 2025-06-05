@@ -8,8 +8,11 @@ import ReusableForm from '../../../components/reusable/ReusableForm';
 import BackButton from '../../../components/reusable/BackButton';
 import { goBack, navigate } from '../../../components/navigation/navigationRef';
 import KeyboardAvoidingWrapper from '../../../components/reusable/KeyboardAvoidingWrapper';
+import { Context as NotificationContext } from '../../../context/NotificationContext';
 
 const SignUp2 = ({ route }) => {
+  const { registerForNotifications, checkToken } = useContext(NotificationContext);
+
   const { userData, treatmentContext } = route.params; 
   const { signUp } = useContext(AuthContext);
   const { fetchUserData } = useContext(UserContext);
@@ -102,6 +105,12 @@ const SignUp2 = ({ route }) => {
       if (result.success) {
         // Use the idToken returned directly from signUp
         await fetchUserData(result.idToken);
+        const checkTokenResult = await checkToken();
+        if (!checkTokenResult) {
+            await registerForNotifications();
+        } else {
+            console.log('Push notification token already registered');
+        }
         navigate('Main');
       }
     } catch (error) {
