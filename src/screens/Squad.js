@@ -116,6 +116,8 @@ const Squad = () => {
         return;
       }
       
+      // DATA REFRESHING LOGIC: HANDLES THE FORUM POST REFRESHING AFTER A CERTAIN PERIOD OF TIME 
+      // 
       // Only refresh data if returning after a significant time (e.g., 2+ minutes)
       const timeSinceLastFocus = now - lastFocusTime.current;
       const shouldRefreshOnFocus = timeSinceLastFocus > 2 * 60 * 1000; // 2 minutes

@@ -62,7 +62,7 @@ const Dashboard = () => {
             {/* Conditionally render streak display only for non-surgery account types */}
             {user.acc_type !== 'presurgery' && (
               <View style={{ alignItems: 'center' }}>
-                <Text style={styles.daysText}>{user.streaks || 0} days</Text>
+                <Text style={styles.daysText}>Streak: {user.streaks || 0} {user.streaks === 1 ? 'day' : 'days'}</Text>
                 <HeightSpacer height={moderateScale(2)} />
                 <Text style={styles.subtitle}>Your progress is giving main character energy ✨</Text>
                 <HeightSpacer height={moderateScale(5)} />
