@@ -187,7 +187,7 @@ const Tracking = () => {
     if (!dayName) return false;
     
     // Get scheduled workouts for this day
-    const workoutsForDay = scheduledWorkouts[dayName] || weeklySchedule; // added weekly schedule to handle no workouts scheduled for a day 
+    const workoutsForDay = scheduledWorkouts[dayName] || [];
     
     // If no workouts scheduled for this day, consider physio complete
     if (workoutsForDay.length === 0) {
@@ -279,7 +279,18 @@ const Tracking = () => {
           const braceTarget = user?.treatmentData?.brace?.wearingSchedule || 0; 
           
           // Use our helper function to check if physio is complete
-          const isPhysioComplete = isPhysioCompleteForDate(targetDate);
+          let isPhysioComplete;
+          if (activityType === 'physio') {
+            isPhysioComplete = isPhysioCompleteForDate(targetDate);
+          }
+          else{
+            if (user.treatmentData?.physio?.scheduledWorkouts?.[targetDate] === null) {
+              isPhysioComplete = true;
+            }
+            else{
+              isPhysioComplete = false;
+            }
+          }
   
           console.log("Brace + Physio check:", {
             targetDate,
