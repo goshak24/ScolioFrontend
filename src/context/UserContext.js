@@ -169,6 +169,11 @@ const userReducer = (state, action) => {
                     physioSessions: (state.user?.physioSessions || 0) + 1
                 }
             };
+        case "SET_BADGES":
+            return {
+                ...state,
+                badges: action.payload
+            };
         case "SIGN_OUT":
             return { user: null, loading: false, error: null };
         default:
@@ -552,6 +557,23 @@ const updateProfilePicture = (dispatch) => async (imageUri) => {
     }
 };
 
+const getUserBadges = (dispatch) => async (idToken) => {
+    try {
+        const response = await api.get("/badges/getBadges", {
+            headers: { Authorization: `Bearer ${idToken}` }
+        }); 
+
+        const badges = response.data.earnedBadges;
+        
+        dispatch({ type: "SET_BADGES", payload: badges });
+        return badges;
+    } catch (error) {
+        console.error("Error fetching user badges:", error);
+        dispatch({ type: "SET_ERROR", payload: "Failed to fetch user badges" });
+        return null;
+    }
+};
+
 export const { Provider, Context } = createDataContext(
     userReducer,
     { 
@@ -569,7 +591,8 @@ export const { Provider, Context } = createDataContext(
         resetDailyBraceHours,
         addUserPhysioWorkout,
         signOut,
-        updateProfilePicture
+        updateProfilePicture,
+        getUserBadges
     },
     { user: null, loading: false, error: null }
 );

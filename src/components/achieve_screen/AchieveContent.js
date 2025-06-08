@@ -155,14 +155,13 @@ const AchieveContent = ({ activeTab, streakDays, physioSessions, achievements, u
 
   const points = 2850; 
   // Parse Achievements from AuthState
-  const earnedBadges = Object.entries(achievements || {})
-   .filter(([key, achievement]) => achievement.unlocked)
+  const earnedBadges = Object.entries(achievements || {}) 
    .map(([key, achievement]) => ({
      id: key,
-     name: key.replace(/_/g, ' '), 
-     description: achievement.message,
-     date: moment(achievement.date).format('MMM DD, YYYY'), // Format date
-  })); 
+     name: achievement.name, 
+     description: achievement.description,
+     date: moment(achievement.earnedAt).format('MMM DD, YYYY'), 
+   })); 
 
   // Static data need to subtract earned badges from all badges 
   const unearnedBadges = [

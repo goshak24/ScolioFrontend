@@ -187,7 +187,7 @@ const Tracking = () => {
     if (!dayName) return false;
     
     // Get scheduled workouts for this day
-    const workoutsForDay = scheduledWorkouts[dayName] || []; 
+    const workoutsForDay = scheduledWorkouts[dayName] || weeklySchedule; // added weekly schedule to handle no workouts scheduled for a day 
     
     // If no workouts scheduled for this day, consider physio complete
     if (workoutsForDay.length === 0) {

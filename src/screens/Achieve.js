@@ -12,7 +12,7 @@ import Constants from 'expo-constants';
 
 const Achieve = () => { 
   const { state: { idToken } } = useContext(AuthContext);
-  const { state: { user, loading, error }, fetchUserData } = useContext(UserContext);
+  const { state: { user, loading, error, badges }, fetchUserData, getUserBadges } = useContext(UserContext);
   const [activeTab, setActiveTab] = useState("badges");
   const [refreshing, setRefreshing] = useState(false);
 
@@ -33,6 +33,12 @@ const Achieve = () => {
       setRefreshing(false);
     }
   };
+
+  useEffect(() => {
+    if (idToken) {
+      getUserBadges(idToken);
+    }
+  }, [idToken]); 
 
   if (loading && !user) {
     return (
@@ -77,7 +83,7 @@ const Achieve = () => {
               activeTab={activeTab} 
               streakDays={user?.streaks || 0} 
               physioSessions={user?.physioSessions || 0} 
-              achievements={user?.achievements || {}} 
+              achievements={badges || {}} 
               user={user}
             />
           </>

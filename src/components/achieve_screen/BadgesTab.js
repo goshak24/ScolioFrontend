@@ -6,7 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Context as AuthContext } from '../../context/AuthContext'; 
 
 const BadgesTab = () => {
-  const { state: AuthState } = useContext(AuthContext);
+  const { state: AuthState } = useContext(AuthContext); 
 
   const earnedBadges = Object.entries(AuthState.user.achievements || {})
     .filter(([_, achievement]) => achievement.unlocked)
