@@ -16,6 +16,42 @@ import { Context as ActivityContext } from '../../context/ActivityContext';
 const POSTSURGERY_TASKS_KEY = 'recoveryTasks';
 const WALKING_MINUTES_KEY = 'walkingMinutes';
 
+// All available badges from the controller
+const availableBadges = [
+  { id: '1', name: 'Ultimate Achiever', description: 'Complete all achievements' },
+  { id: '2', name: 'Legend', description: 'Reach top 1% leaderboard' },
+
+  // 🦴 Brace Adherence
+  { id: '3', name: 'Brace Starter', description: 'Wore your brace for the first time' },
+  { id: '4', name: 'Brace Boss', description: 'Wore your brace daily for 7 days straight' },
+  { id: '5', name: 'Aligned & Strong', description: 'Completed your first full week wearing the brace as prescribed' },
+  { id: '6', name: 'Support Squad', description: 'Scanned or logged brace usage 10 times' },
+  { id: '7', name: 'Posture Pro', description: 'Great posture and brace usage for 14 days!' },
+  { id: '8', name: 'Brace & Win', description: '30-day streak with your brace - commitment pays off' },
+
+  // 🧘 Physio Therapy
+  { id: '9', name: 'Stretch Starter', description: 'First log, committed to moving better!' },
+  { id: '10', name: 'Motion Master', description: 'Completed 5 movement therapy sessions' },
+  { id: '11', name: 'Therapy Trailblazer', description: 'Completed 10 unique physio routines' },
+  { id: '12', name: 'Pain Slayer', description: 'Logged progress on pain reduction over 2 weeks' },
+  { id: '13', name: 'Recovery Ritualist', description: 'Checked in with physio tracker for 14 days straight' },
+  { id: '14', name: 'Move to Heal', description: 'Hit a 30-day rehab streak - wow!' },
+
+  // 💬 Community / Messaging
+  { id: '15', name: 'First Voice', description: 'Posted your first message in the forum' },
+  { id: '16', name: 'Circle Builder', description: 'Replied to 5 others posts with kindness or tips' },
+  { id: '17', name: 'Uplifter', description: 'Gave 10+ upvotes or reactions to community posts' },
+  { id: '18', name: 'Community Guide', description: 'Answered someones question with helpful advice' },
+  { id: '19', name: 'Kindred Spirit', description: 'Supported a fellow user via private messaging' },
+
+  // 💡 Bonus
+  { id: '20', name: 'Nudge Ninja', description: 'Responded to in-app nudge 10+ times' },
+  { id: '21', name: 'Progress Tracker', description: 'Logged daily recovery score for 14 days' },
+  { id: '22', name: 'Realign Rebel', description: 'Broke through a recovery plateau with consistency' },
+  { id: '23', name: 'Milestone Maven', description: 'Hit all weekly goals 3 weeks in a row' },
+  { id: '24', name: 'Hope Holder', description: 'Shared a positive message with others in recovery' },
+];
+
 const AchieveContent = ({ activeTab, streakDays, physioSessions, achievements, user }) => { 
   // State for surgery task data
   const [surgeryTasks, setSurgeryTasks] = useState({
@@ -24,6 +60,7 @@ const AchieveContent = ({ activeTab, streakDays, physioSessions, achievements, u
   });
   const [walkingMinutes, setWalkingMinutes] = useState(0);
   const [braceWornThisWeek, setBraceWornThisWeek] = useState(0);
+  const [showAllUnearnedBadges, setShowAllUnearnedBadges] = useState(false);
   
   // Get activity context for real-time brace data updates
   const { state: activityState, fetchActivityData } = useContext(ActivityContext);
@@ -154,7 +191,8 @@ const AchieveContent = ({ activeTab, streakDays, physioSessions, achievements, u
     });
 
   const points = 2850; 
-  // Parse Achievements from AuthState
+
+  // Parse Achievements from AuthState and create earned badges
   const earnedBadges = Object.entries(achievements || {}) 
    .map(([key, achievement]) => ({
      id: key,
@@ -163,11 +201,11 @@ const AchieveContent = ({ activeTab, streakDays, physioSessions, achievements, u
      date: moment(achievement.earnedAt).format('MMM DD, YYYY'), 
    })); 
 
-  // Static data need to subtract earned badges from all badges 
-  const unearnedBadges = [
-    { id: '3', name: 'Ultimate Achiever', description: 'Complete all achievements' },
-    { id: '4', name: 'Legend', description: 'Reach top 1% leaderboard' },
-  ]; 
+  // Get earned badge IDs for filtering
+  const earnedBadgeIds = earnedBadges.map(badge => badge.id);
+
+  // Filter available badges to get unearned badges
+  const unearnedBadges = availableBadges.filter(badge => !earnedBadgeIds.includes(badge.id));
 
   // Get progress metrics based on account type
   const getProgressMetrics = () => {
@@ -241,56 +279,90 @@ const AchieveContent = ({ activeTab, streakDays, physioSessions, achievements, u
     <View style={styles.container}>
       {activeTab === 'badges' && (
         <View>
-          {/* Unearned Badges Section */}
-          <View style={styles.section}>
-            <View style={styles.header}>
-              <Ionicons name="star-outline" size={moderateScale(18)} color={COLORS.tabInactive} />
-              <Text style={styles.headerText}>Badges to Earn</Text>
-              <View style={{width: moderateScale(18)}}></View>
-            </View>
-            <FlatList
-              data={unearnedBadges}
-              keyExtractor={(item) => item.id}
-              numColumns={2}
-              overScrollMode="never"
-              bounces={false}
-              renderItem={({ item }) => (
-                <View style={styles.badgeCard}>
-                  <View style={styles.unearnedBadgeIcon}>
-                    <Ionicons name="trophy-outline" size={moderateScale(28)} color={COLORS.lightGray} />
+          {/* Show unearned badges only if there are any */}
+          {unearnedBadges.length > 0 && (
+            <View style={styles.section}>
+              <View style={styles.header}>
+                <Ionicons name="star-outline" size={moderateScale(18)} color={COLORS.tabInactive} />
+                <Text style={styles.headerText}>Badges to Earn ({unearnedBadges.length})</Text>
+                <View style={{width: moderateScale(18)}}></View>
+              </View>
+              
+              <FlatList
+                data={showAllUnearnedBadges ? unearnedBadges : unearnedBadges.slice(0, 4)}
+                keyExtractor={(item) => item.id}
+                numColumns={2}
+                overScrollMode="never"
+                bounces={false}
+                renderItem={({ item }) => (
+                  <View style={styles.badgeCard}>
+                    <View style={styles.unearnedBadgeIcon}>
+                      <Ionicons name="trophy-outline" size={moderateScale(28)} color={COLORS.lightGray} />
+                    </View>
+                    <Text style={styles.badgeTitle}>{item.name}</Text>
+                    <Text style={styles.badgeDescription}>{item.description}</Text>
                   </View>
-                  <Text style={styles.badgeTitle}>{item.name}</Text>
-                  <Text style={styles.badgeDescription}>{item.description}</Text>
+                )}
+              />
+              
+              {/* Show More/Show Less button - only show if there are more than 4 badges */}
+              {unearnedBadges.length > 4 && (
+                <View style={styles.showMoreContainer}>
+                  <ReusableButton 
+                    onPress={() => setShowAllUnearnedBadges(!showAllUnearnedBadges)}
+                    btnText={showAllUnearnedBadges ? "Show Less" : `Show More (${unearnedBadges.length - 4} more)`}
+                    textColor={COLORS.white}
+                    width="100%"
+                    backgroundColor="transparent"
+                    borderWidth={1}
+                    borderRadius={moderateScale(8)}
+                    borderColor={COLORS.tabActiveStart}
+                  />
                 </View>
               )}
-            />
-          </View>
+            </View>
+)}
 
-          {/* Earned Badges Section */}
-          <View style={styles.section}>
-            <View style={styles.header}>
-              <Ionicons name="trophy" size={moderateScale(18)} color={COLORS.tabActiveStart} />
-              <Text style={styles.headerText}>Earned Badges</Text>
-              <View style={{width: moderateScale(18)}}></View>
-            </View>
-            <FlatList
-              data={earnedBadges}
-              keyExtractor={(item) => item.id}
-              overScrollMode="never"
-              bounces={false}
-              numColumns={2}
-              renderItem={({ item }) => (
-                <View style={styles.badgeCard}>
-                  <View style={styles.badgeIcon}>
-                    <Ionicons name="trophy" size={moderateScale(28)} color="white" />
+          {/* Show earned badges only if there are any */}
+          {earnedBadges.length > 0 && (
+            <View style={styles.section}>
+              <View style={styles.header}>
+                <Ionicons name="trophy" size={moderateScale(18)} color={COLORS.tabActiveStart} />
+                <Text style={styles.headerText}>Earned Badges ({earnedBadges.length})</Text>
+                <View style={{width: moderateScale(18)}}></View>
+              </View>
+              <FlatList
+                data={earnedBadges}
+                keyExtractor={(item) => item.id}
+                overScrollMode="never"
+                bounces={false}
+                numColumns={2}
+                renderItem={({ item }) => (
+                  <View style={styles.badgeCard}>
+                    <View style={styles.badgeIcon}>
+                      <Ionicons name="trophy" size={moderateScale(28)} color="white" />
+                    </View>
+                    <Text style={styles.badgeTitle}>{item.name}</Text>
+                    <Text style={styles.badgeDescription}>{item.description}</Text>
+                    <Text style={styles.badgeDate}>Earned {item.date}</Text>
                   </View>
-                  <Text style={styles.badgeTitle}>{item.name}</Text>
-                  <Text style={styles.badgeDescription}>{item.description}</Text>
-                  <Text style={styles.badgeDate}>Earned {item.date}</Text>
-                </View>
-              )}
-            />
-          </View>
+                )}
+              />
+            </View>
+          )}
+
+          {/* Show message if no badges earned yet */}
+          {earnedBadges.length === 0 && (
+            <View style={styles.section}>
+              <View style={styles.emptyStateContainer}>
+                <Ionicons name="trophy-outline" size={moderateScale(48)} color={COLORS.lightGray} />
+                <Text style={styles.emptyStateTitle}>No Badges Earned Yet</Text>
+                <Text style={styles.emptyStateDescription}>
+                  Complete your daily activities to start earning badges!
+                </Text>
+              </View>
+            </View>
+          )}
         </View>
       )}
 
@@ -449,6 +521,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: moderateScale(6),
   },
+  showMoreContainer: {
+    marginTop: moderateScale(12),
+    alignItems: 'center',
+  },
   badgeTitle: {
     fontWeight: 'bold',
     color: COLORS.white,
@@ -464,6 +540,24 @@ const styles = StyleSheet.create({
   badgeDate: {
     fontSize: moderateScale(10),
     color: COLORS.tabActiveStart,
+  },
+  emptyStateContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: moderateScale(30),
+  },
+  emptyStateTitle: {
+    fontSize: moderateScale(18),
+    fontWeight: 'bold',
+    color: COLORS.white,
+    marginTop: moderateScale(10),
+    marginBottom: moderateScale(5),
+  },
+  emptyStateDescription: {
+    fontSize: moderateScale(14),
+    color: COLORS.lightGray,
+    textAlign: 'center',
+    paddingHorizontal: moderateScale(20),
   },
   progressItem: {
     marginBottom: moderateScale(10),

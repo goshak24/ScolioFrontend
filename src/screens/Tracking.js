@@ -337,8 +337,15 @@ const Tracking = () => {
             });
           } 
         } else if (accountType === 'post-surgery') {
-          const isPhysioComplete = isPhysioCompleteForDate(targetDate);
-          const isRecoveryChecklistComplete = await isRecoveryChecklistCompleteForDate(targetDate);
+          let isPhysioComplete;
+          if (user.treatmentData?.physio?.scheduledWorkouts?.[getFullDayNameFromDate(targetDate)] === null) {
+            isPhysioComplete = true;
+          }
+          else{
+            isPhysioComplete = isPhysioCompleteForDate(targetDate);
+          }
+          
+          const isRecoveryChecklistComplete = await isRecoveryChecklistCompleteForDate(targetDate); 
 
           console.log('Post-surgery completion check:', {
             targetDate,
@@ -616,6 +623,9 @@ const Tracking = () => {
       <StreakExtensionAnimation 
         visible={showStreakAnimation} 
         message="Streak Extended! 🔥" 
+        duration={4000}
+        enableVibration={true}
+        enableSound={true}
         onAnimationComplete={() => setShowStreakAnimation(false)}
       />
 

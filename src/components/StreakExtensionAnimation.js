@@ -18,7 +18,7 @@ import COLORS from '../constants/COLORS';
 const StreakExtensionAnimation = ({ 
   visible = false, 
   message = "Streak Extended!", 
-  duration = 4000,
+  duration = 6000,
   onAnimationComplete = () => {},
   style = {},
   enableVibration = true,

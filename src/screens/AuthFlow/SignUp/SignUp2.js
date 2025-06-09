@@ -9,6 +9,7 @@ import BackButton from '../../../components/reusable/BackButton';
 import { goBack, navigate } from '../../../components/navigation/navigationRef';
 import KeyboardAvoidingWrapper from '../../../components/reusable/KeyboardAvoidingWrapper';
 import { Context as NotificationContext } from '../../../context/NotificationContext';
+import HeightSpacer from '../../../components/reusable/HeightSpacer';
 
 const SignUp2 = ({ route }) => {
   const { registerForNotifications, checkToken } = useContext(NotificationContext);
@@ -17,6 +18,8 @@ const SignUp2 = ({ route }) => {
   const { signUp } = useContext(AuthContext);
   const { fetchUserData } = useContext(UserContext);
   const [scheduledEvents, setScheduledEvents] = useState({});
+  const [error, setError] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleDateSelect = (date) => {
     // no-op unless needed
@@ -91,6 +94,9 @@ const SignUp2 = ({ route }) => {
 
   const handleSubmit = async (treatmentData) => { 
     try {
+      setIsSubmitting(true);
+      setError(null); // Clear any previous errors
+
       // Combine user data and treatment-specific data
       const completeData = {
         ...userData,
@@ -112,9 +118,15 @@ const SignUp2 = ({ route }) => {
             console.log('Push notification token already registered');
         }
         navigate('Main');
+      } else {
+        // Handle signup failure with specific error message
+        setError(result.error || 'Signup failed. Please try again.');
       }
     } catch (error) {
       console.error("Signup error:", error);
+      setError('An unexpected error occurred. Please try again.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -183,10 +195,20 @@ const SignUp2 = ({ route }) => {
           <Text style={styles.title}>{title}</Text>
           <Text style={styles.welcomeText}>{description}</Text>
 
+          {/* Error display with same styling as SignUp1 */}
+          {error && (
+            <View style={styles.errorContainer}>
+              <Text style={styles.errorText}>{error}</Text>
+            </View>
+          )}
+
+          <HeightSpacer height={moderateScale(10)} />
+
           <ReusableForm 
             fields={fields}
             onSubmit={handleSubmit}
-            buttonText="Complete Sign Up"
+            buttonText={isSubmitting ? "Creating Account..." : "Complete Sign Up"}
+            buttonDisabled={isSubmitting}
             showCalendar={shouldShowCalendar}
             scheduledEvents={scheduledEvents}
             onDateSelect={handleDateSelect}
@@ -230,5 +252,19 @@ const styles = StyleSheet.create({
     fontSize: moderateScale(16),
     textAlign: 'center',
     marginBottom: moderateScale(30),
-  }
+  },
+  // Error styling matching SignUp1
+  errorContainer: {
+    width: '100%',
+    backgroundColor: 'rgba(255, 87, 87, 0.1)',
+    borderRadius: moderateScale(8),
+    padding: moderateScale(10),
+    marginBottom: moderateScale(15),
+  },
+  errorText: {
+    color: COLORS.white, 
+    textAlign: 'center', 
+    fontSize: moderateScale(14),
+    marginBottom: moderateScale(5),
+  },
 });

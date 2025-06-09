@@ -71,6 +71,7 @@ const signUp = (dispatch) => async (formData) => {
         };
 
         const response = await api.post("/auth/signup", signupData);
+        
         await storeAuthTokens(response.data.idToken, response.data.refreshToken);
 
         dispatch({ 
@@ -84,7 +85,6 @@ const signUp = (dispatch) => async (formData) => {
         
         // Initialize token refresh mechanism
         await TokenManager.initializeTokenRefresh();
-
         // Return tokens for immediate use (similar to signIn)
         return { 
             success: true,
@@ -94,11 +94,11 @@ const signUp = (dispatch) => async (formData) => {
     } catch (error) {
         dispatch({ 
             type: "AUTH_ERROR", 
-            payload: error.response?.data?.message || "Signup failed" 
+            payload: error.response?.data?.error || "Signup failed" 
         });
         return { 
             success: false,
-            error: error.response?.data?.message || "Signup failed"
+            error: error.response?.data?.error || "Signup failed"
         };
     } finally {
         dispatch({ type: "SET_LOADING", payload: false });
