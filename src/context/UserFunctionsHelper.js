@@ -86,7 +86,8 @@ export const logPhysioSession = async (idToken, date = null) => {
         return {
             success: true,
             newPhysioCount: response.data.newPhysioCount,
-            achievements: response.data.achievements || {},
+            achievements: response.data.badges || {},
+            newAchievements: response.data.newBadges || {},
             date: response.data.date, // The date used for the log (could be provided or today's date)
             totalSessionsForDate: response.data.totalSessionsForDate || 1 // Number of sessions for this specific date
         };
@@ -115,7 +116,8 @@ export const updateWornHours = async (idToken, hours, date = null) => {
             return {
                 success: true,
                 totalHours: response.data.totalHours,
-                date: response.data.date // Date used for the update
+                date: response.data.date, // Date used for the update
+                newAchievements: response.data.newBadges || {},
             };
         } else {
             return { 

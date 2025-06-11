@@ -20,6 +20,7 @@ import { format } from 'date-fns';
 import StreakExtensionAnimation from '../components/StreakExtensionAnimation';
 import { getFormattedDate, getDateStringFromFirestoreTimestamp } from '../components/timeZoneHelpers';
 import { Context as PostSurgeryContext } from '../context/PostSurgeryContext';
+import NewBadgePopup from '../components/newBadgePopup';
 
 const Tracking = () => {
   const { state: { idToken } } = useContext(AuthContext);
@@ -32,7 +33,10 @@ const Tracking = () => {
   const [localWorkouts, setLocalWorkouts] = useState([]);
   const [localWeeklySchedule, setLocalWeeklySchedule] = useState([]);
   const [isInitialized, setIsInitialized] = useState(false);
-  
+  const [showNewBadgePopup, setShowNewBadgePopup] = useState(false);
+  const [newBadgePopupData, setNewBadgePopupData] = useState(null);
+  const [pendingBadgeData, setPendingBadgeData] = useState(null);
+
   // Centralized streak state
   const [showStreakAnimation, setShowStreakAnimation] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
@@ -176,7 +180,7 @@ const Tracking = () => {
   }, []);  
 
   // Helper function to check if physio is complete for a specific date
-  const isPhysioCompleteForDate = useCallback((date) => {
+  const isPhysioCompleteForDate = useCallback((date, count = 0) => {
     if (!user?.treatmentData?.physio) return false;
     
     const physioHistory = user.treatmentData.physio.physioHistory || {};
@@ -198,7 +202,7 @@ const Tracking = () => {
     const completedSessions = physioHistory[date] || 0;
     
     // Check if completed sessions meet or exceed scheduled workouts
-    return completedSessions >= workoutsForDay.length - 1;
+    return completedSessions >= workoutsForDay.length + count - 1;
   }, [user, getFullDayNameFromDate]);
 
   // CENTRALIZED ACTIVITY COMPLETION HANDLER
@@ -214,6 +218,8 @@ const Tracking = () => {
         case 'physio':
           console.log("Calling logPhysio...");
           activityResult = await logPhysio(specificDate);
+
+          console.log("Activity result:", activityResult);
           
           if (activityResult.success) {
             incrementPhysio(specificDate);
@@ -224,6 +230,8 @@ const Tracking = () => {
         case 'brace':
           console.log("Calling updateBraceWornHours...");
           activityResult = await updateBraceWornHours(specificDate);
+
+          console.log("Activity result:", activityResult);
           
           if (activityResult.success) {
             message = 'Brace goal achieved! 🦴';
@@ -261,148 +269,100 @@ const Tracking = () => {
         // Show success feedback
         setSuccessMessage(message);
         setShowSuccess(true);
-        setTimeout(() => setShowSuccess(false), 2000);
+        setTimeout(() => setShowSuccess(false), 2000); 
   
-        // Special logic for brace + physio accounts
-        if (accountType === 'brace + physio') {
-          // Get the UPDATED brace hours from the activity result or current state
-          let braceHoursForDate;
-          
-          if (activityType === 'brace' && activityResult.totalHours !== undefined) {
-            // Use the updated hours from the brace activity result
-            braceHoursForDate = activityResult.totalHours;
-          } else {
-            // For physio completion, get current hours from state
-            braceHoursForDate = activityState?.braceData?.[targetDate] || 0;
-          }
-          
-          const braceTarget = user?.treatmentData?.brace?.wearingSchedule || 0; 
-          
-          // Use our helper function to check if physio is complete
-          let isPhysioComplete;
-          if (activityType === 'physio') {
-            isPhysioComplete = isPhysioCompleteForDate(targetDate);
-          }
-          else{
-            if (user.treatmentData?.physio?.scheduledWorkouts?.[targetDate] === null) {
+        // Determine if streak should be updated
+        let shouldUpdateStreak = false;
+        
+        if (!streakUpdatedToday.current && !wasStreakUpdatedToday) {
+          if (accountType === 'brace + physio') {
+            // For brace + physio, check if both activities are completed
+            let braceHoursForDate;
+            
+            if (activityType === 'brace' && activityResult.totalHours !== undefined) {
+              braceHoursForDate = activityResult.totalHours;
+            } else {
+              braceHoursForDate = activityState?.braceData?.[targetDate] || 0;
+            }
+            
+            const braceTarget = user?.treatmentData?.brace?.wearingSchedule || 0; 
+            let isPhysioComplete;
+  
+            if (activityType === 'physio') {
+              isPhysioComplete = isPhysioCompleteForDate(targetDate);
+            } else {
+              if (user.treatmentData?.physio?.scheduledWorkouts?.[getFullDayNameFromDate(targetDate)] === null) {
+                isPhysioComplete = true;
+              } else {
+                isPhysioComplete = isPhysioCompleteForDate(targetDate, 1);
+              }
+            }
+  
+            const isBraceComplete = braceHoursForDate >= braceTarget;
+            shouldUpdateStreak = isBraceComplete && isPhysioComplete;
+  
+          } else if (accountType === 'physio') {
+            shouldUpdateStreak = isPhysioCompleteForDate(targetDate);
+  
+          } else if (accountType === 'post-surgery') {
+            let isPhysioComplete;
+            if (user.treatmentData?.physio?.scheduledWorkouts?.[getFullDayNameFromDate(targetDate)] === null) {
               isPhysioComplete = true;
+            } else {
+              isPhysioComplete = isPhysioCompleteForDate(targetDate);
             }
-            else{
-              isPhysioComplete = false;
-            }
-          }
+            
+            const isRecoveryChecklistComplete = await isRecoveryChecklistCompleteForDate(targetDate); 
+            shouldUpdateStreak = isPhysioComplete && isRecoveryChecklistComplete;
   
-          console.log("Brace + Physio check:", {
-            targetDate,
-            braceHoursForDate,
-            braceTarget,
-            isPhysioComplete,
-            activityType
-          });
-  
-          // For brace + physio users, only update streak if BOTH activities are completed
-          const isBraceComplete = braceHoursForDate >= braceTarget;
-  
-          if (isBraceComplete && isPhysioComplete && !streakUpdatedToday.current && !wasStreakUpdatedToday) {
-            console.log("Both brace and physio completed - updating streak...");
-            const streakResult = await updateStreak();
-            
-            if (streakResult.success) {
-              streakUpdatedToday.current = true;
-              setShowStreakAnimation(true);
-            }
           } else {
-            console.log("Not all activities completed yet for brace + physio user", {
-              isBraceComplete,
-              isPhysioComplete,
-              streakUpdatedToday: streakUpdatedToday.current,
-              wasStreakUpdatedToday
-            });
-          }
-        } else if (accountType === 'physio')  {
-          const isPhysioComplete = isPhysioCompleteForDate(targetDate);
-          if (isPhysioComplete && !streakUpdatedToday.current && !wasStreakUpdatedToday) {
-            console.log("Physio completed - updating streak...");
-            const streakResult = await updateStreak();
-            
-            if (streakResult.success) {
-              streakUpdatedToday.current = true;
-              setShowStreakAnimation(true);
-            }
-          } else {
-            console.log("Physio not completed yet for physio user", {
-              isPhysioComplete,
-              streakUpdatedToday: streakUpdatedToday.current,
-              wasStreakUpdatedToday
-            });
-          } 
-        } else if (accountType === 'post-surgery') {
-          let isPhysioComplete;
-          if (user.treatmentData?.physio?.scheduledWorkouts?.[getFullDayNameFromDate(targetDate)] === null) {
-            isPhysioComplete = true;
-          }
-          else{
-            isPhysioComplete = isPhysioCompleteForDate(targetDate);
-          }
-          
-          const isRecoveryChecklistComplete = await isRecoveryChecklistCompleteForDate(targetDate); 
-
-          console.log('Post-surgery completion check:', {
-            targetDate,
-            isPhysioComplete,
-            isRecoveryChecklistComplete,
-            streakUpdatedToday: streakUpdatedToday.current,
-            wasStreakUpdatedToday
-          });
-
-          // Updated condition to check if either physio is completed or recovery tasks are completed
-          // This allows streak to update as soon as both conditions are met, whether from physio completion or task completion
-          if (isPhysioComplete && isRecoveryChecklistComplete && !streakUpdatedToday.current && !wasStreakUpdatedToday) {
-            console.log("Both physio and recovery checklist completed - updating streak...");
-            const streakResult = await updateStreak();
-            
-            if (streakResult.success) {
-              streakUpdatedToday.current = true;
-              setShowStreakAnimation(true);
-            }
-          } else {
-            console.log("Not all activities completed yet for post-surgery user", {
-              isPhysioComplete,
-              isRecoveryChecklistComplete,
-              streakUpdatedToday: streakUpdatedToday.current,
-              wasStreakUpdatedToday
-            });
-          }
-        } else {
-          // For other account types, update streak immediately after activity completion
-          if (!streakUpdatedToday.current && !wasStreakUpdatedToday) {
-            console.log("Updating streak for non brace + physio user...");
-            const streakResult = await updateStreak();
-            
-            if (streakResult.success) {
-              streakUpdatedToday.current = true;
-              setShowStreakAnimation(true);
-            }
+            // For other account types, update streak immediately
+            shouldUpdateStreak = true;
           }
         }
+  
+        // Handle new achievements/badges based on whether streak will update
+        console.log("Checking for new achievements:", activityResult.newAchievements);
+        if (activityResult.newAchievements && activityResult.newAchievements.length > 0) {
+          console.log("New achievement earned:", activityResult.newAchievements[0]);
+          
+          if (shouldUpdateStreak) {
+            // Streak will happen - store badge to show after streak animation
+            console.log("Badge will be shown after streak animation");
+            setPendingBadgeData(activityResult.newAchievements[0]);
+          } else {
+            // No streak - show badge immediately
+            console.log("No streak update, showing badge immediately");
+            setNewBadgePopupData(activityResult.newAchievements[0]);
+            setShowNewBadgePopup(true);
+          }
+        }
+  
+        // Handle streak update
+        if (shouldUpdateStreak) {
+          console.log("Conditions met - updating streak...");
+          const streakResult = await updateStreak();
+          
+          if (streakResult.success) {
+            streakUpdatedToday.current = true;
+            setShowStreakAnimation(true);
+          } else {
+            // If streak update failed but we have pending badge data, show it immediately
+            if (pendingBadgeData) {
+              console.log("Streak update failed, showing pending badge immediately");
+              setNewBadgePopupData(pendingBadgeData);
+              setShowNewBadgePopup(true);
+              setPendingBadgeData(null);
+            }
+          }
+        } 
       } else {
         console.error("Failed to log activity:", activityResult?.error);
       }
     } catch (error) {
       console.error("Activity completion error:", error);
     }
-  }, [logPhysio, updateBraceWornHours, incrementPhysio, updateStreak, wasStreakUpdatedToday, userData, user, today, isPhysioCompleteForDate, isRecoveryChecklistCompleteForDate]);
-  
-  // Helper function to check if both activities are completed
-  const checkBothActivitiesComplete = useCallback((date = today) => {
-    if (userData?.userAccType?.toLowerCase() !== 'brace + physio') return false;
-    
-    const braceHoursForDate = user?.treatmentData?.brace?.wearingHistory?.[date] || 0;
-    const braceTarget = user?.treatmentData?.brace?.wearingSchedule || 0;
-    const isPhysioComplete = isPhysioCompleteForDate(date);
-    
-    return braceHoursForDate >= braceTarget && isPhysioComplete;
-  }, [userData, user, today, isPhysioCompleteForDate]);
+  }, [logPhysio, updateBraceWornHours, incrementPhysio, updateStreak, wasStreakUpdatedToday, userData, user, today, isPhysioCompleteForDate, isRecoveryChecklistCompleteForDate, activityState, getFullDayNameFromDate]);
 
   // ADD PHYSIO WORKOUT 
   const handleEventAdd = useCallback(async (date, newEvent) => {
@@ -626,7 +586,26 @@ const Tracking = () => {
         duration={4000}
         enableVibration={true}
         enableSound={true}
-        onAnimationComplete={() => setShowStreakAnimation(false)}
+        onAnimationComplete={() => {
+          console.log("Streak animation completed, checking for pending badge:", pendingBadgeData);
+          setShowStreakAnimation(false);
+          // Show badge popup after streak animation completes
+          if (pendingBadgeData) {
+            console.log("Showing pending badge after streak animation");
+            setNewBadgePopupData(pendingBadgeData);
+            setShowNewBadgePopup(true);
+            setPendingBadgeData(null);
+          }
+        }}
+      />
+
+      <NewBadgePopup
+        visible={showNewBadgePopup && newBadgePopupData !== null}
+        badge={newBadgePopupData}
+        onAnimationComplete={() => {
+          setShowNewBadgePopup(false);
+          setNewBadgePopupData(null);
+        }}
       />
 
       <ScrollView

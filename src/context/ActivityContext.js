@@ -128,6 +128,7 @@ const updateBraceWornHours = (dispatch) => async (hours, date = null) => {
                     }
                 }
             });
+            console.log("Updated brace hours:", result);
             return result;
         } else {
             dispatch({ type: "SET_ERROR", payload: result.error });
@@ -211,7 +212,8 @@ const logPhysio = (dispatch) => async (date = null) => {
                 newPhysioCount: result.newPhysioCount,
                 date: result.date,
                 totalSessionsForDate: result.totalSessionsForDate,
-                achievements: result.achievements || {}
+                achievements: result.achievements || {}, 
+                newAchievements: result.newAchievements || {} 
             };
         } else {
             dispatch({ type: "SET_ERROR", payload: result.error });

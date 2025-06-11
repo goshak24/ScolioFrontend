@@ -1,5 +1,5 @@
 import { SafeAreaView, FlatList, StyleSheet, View, ActivityIndicator, Text, Platform } from 'react-native';
-import React, { useState, useContext, useEffect } from 'react';
+import React, { useState, useContext, useEffect, useCallback } from 'react';
 import AchieveHeader from '../components/achieve_screen/AchieveHeader';
 import AchieveTabs from '../components/achieve_screen/AchieveTabs';
 import AchieveContent from '../components/achieve_screen/AchieveContent';
@@ -23,10 +23,21 @@ const Achieve = () => {
     }
   }, [idToken, user]); 
 
+  // Fetch badges when component mounts or when user data changes
+  useEffect(() => {
+    if (idToken && user) {
+      getUserBadges(idToken);
+    }
+  }, [idToken, user]);
+
   const handleRefresh = async () => {
     setRefreshing(true);
     try {
-      await fetchUserData(idToken);
+      // Fetch both user data and badges
+      await Promise.all([
+        fetchUserData(idToken),
+        getUserBadges(idToken)
+      ]);
     } catch (err) {
       console.error("Refresh error:", err);
     } finally {
@@ -34,11 +45,25 @@ const Achieve = () => {
     }
   };
 
-  useEffect(() => {
-    if (idToken) {
-      getUserBadges(idToken);
-    }
-  }, [idToken]); 
+  // Memoize the header component to prevent unnecessary re-renders
+  const renderHeader = useCallback(() => (
+    <>
+      <View style={styles.headerContainer}>
+        <AchieveHeader 
+          level={user?.level || 1} 
+          streakDays={user?.streaks || 0} 
+        />
+        <AchieveTabs setActiveTab={setActiveTab} /> 
+      </View>
+      <AchieveContent 
+        activeTab={activeTab} 
+        streakDays={user?.streaks || 0} 
+        physioSessions={user?.physioSessions || 0} 
+        achievements={badges || {}} 
+        user={user}
+      />
+    </>
+  ), [user, activeTab, badges]);
 
   if (loading && !user) {
     return (
@@ -70,24 +95,7 @@ const Achieve = () => {
         keyExtractor={() => "key"} // Avoid Virtualised List Error 
         refreshing={refreshing}
         onRefresh={handleRefresh}
-        ListHeaderComponent={
-          <>
-            <View style={styles.headerContainer}>
-              <AchieveHeader 
-                level={user?.level || 1} 
-                streakDays={user?.streaks || 0} 
-              />
-              <AchieveTabs setActiveTab={setActiveTab} /> 
-            </View>
-            <AchieveContent 
-              activeTab={activeTab} 
-              streakDays={user?.streaks || 0} 
-              physioSessions={user?.physioSessions || 0} 
-              achievements={badges || {}} 
-              user={user}
-            />
-          </>
-        }
+        ListHeaderComponent={renderHeader}
         overScrollMode="never"
         bounces={false}
         showsVerticalScrollIndicator={false}
