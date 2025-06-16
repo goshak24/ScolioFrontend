@@ -183,14 +183,16 @@ const BraceTrackerInterface = ({
       )}
 
       {/* Badge Popup */}
-      <NewBadgePopup
-        visible={showNewBadgePopup && newBadgePopupData !== null}
-        badge={newBadgePopupData}
-        onAnimationComplete={() => {
-          setShowNewBadgePopup(false);
-          setNewBadgePopupData(null);
-        }}
-      />
+      <View style={styles.badgePopupContainer}>
+        <NewBadgePopup
+          visible={showNewBadgePopup && newBadgePopupData !== null}
+          badge={newBadgePopupData}
+          onAnimationComplete={() => {
+            setShowNewBadgePopup(false);
+            setNewBadgePopupData(null);
+          }}
+        />
+      </View>
 
       {timerOn && (
         <BraceTimer
@@ -393,5 +395,12 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontSize: moderateScale(14),
     fontWeight: 'bold',
+  },
+  badgePopupContainer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: moderateScale(20),
+    zIndex: 1000,
   },
 });

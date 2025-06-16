@@ -23,6 +23,8 @@ import HeightSpacer from '../reusable/HeightSpacer';
 import api from '../../utilities/backendApi'; 
 import { getFileDownloadUrl } from '../../context/UserFunctionsHelper';
 
+// Component also used to display user profile in Squad screen and in the UserProfileScreen (which is a separate screen) 
+
 const UserProfileModal = ({ visible, onClose, userId }) => {
   const [userProfile, setUserProfile] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -77,19 +79,15 @@ const UserProfileModal = ({ visible, onClose, userId }) => {
         setAvatarLoading(true);
         setImageError(false);
         
-        console.log('Loading avatar for path:', userProfile.avatar);
         const url = await getFileDownloadUrl(userProfile.avatar);
         
         if (url) {
-          console.log('Avatar URL loaded successfully:', url);
           setAvatarUrl(url);
         } else {
-          console.log('No avatar URL returned, using default');
           setAvatarUrl(null);
           setImageError(true);
         }
       } catch (error) {
-        console.log('Error loading avatar URL:', error);
         setAvatarUrl(null);
         setImageError(true);
       } finally {
@@ -113,13 +111,9 @@ const UserProfileModal = ({ visible, onClose, userId }) => {
       setAvatarUrl(null); // Reset avatar state
 
       try {
-        console.log(`Fetching profile for user: ${userId}`);
         const response = await api.get(`/forum/profile/${userId}`);
-
-        console.log(response.data)
-        
         if (response.data) {
-          console.log('User profile fetched successfully:', response.data);
+          
           setUserProfile(response.data);
         } else {
           throw new Error('No profile data received');

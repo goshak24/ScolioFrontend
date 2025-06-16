@@ -1,5 +1,5 @@
 import { SafeAreaView, StyleSheet, Text, View, ScrollView, StatusBar, ActivityIndicator, Platform } from 'react-native';
-import React, { useContext } from 'react';
+import React, { useContext, useEffect } from 'react';
 import { scale, moderateScale } from 'react-native-size-matters';
 import CalendarHeader from '../components/dashboard/CalendarHeader';
 import ProgressTracker from '../components/ProgressTracker';
@@ -14,10 +14,33 @@ import CommunityCard from '../components/dashboard/CommunityCard';
 import SurgeryProgressCard from '../components/dashboard/SurgeryProgressCard';
 import PainTrackerSummary from '../components/dashboard/PainTrackerSummary';
 import { Context as UserContext } from '../context/UserContext';
+import { Context as PainTrackingContext } from '../context/PainTrackingContext';
 import Constants from 'expo-constants'
 
 const Dashboard = () => {
   const { state: { user, loading } } = useContext(UserContext);
+
+  const { state, loadPainLogs } = useContext(PainTrackingContext); 
+
+  // Get the most recent pain log
+  const getMostRecentPainLog = () => {
+    if (!state.painLogs || state.painLogs.length === 0) {
+      return null;
+    }
+    
+    // Sort by createdAt timestamp (most recent first)
+    const sortedLogs = [...state.painLogs].sort((a, b) => {
+      const timeA = a.createdAt._seconds * 1000 + a.createdAt._nanoseconds / 1000000;
+      const timeB = b.createdAt._seconds * 1000 + b.createdAt._nanoseconds / 1000000;
+      return timeB - timeA;
+    }); 
+
+    return sortedLogs[0];
+  };
+
+  useEffect(() => {
+    loadPainLogs();
+  }, []);
 
   // Show loading indicator if user data is being fetched
   if (loading || !user) {
@@ -81,7 +104,7 @@ const Dashboard = () => {
             {!isSurgeryRelated && <ProgressTracker physioStreak={user?.streaks} />}
             
             <TrendingFeed />
-            <PainTrackerSummary />
+            <PainTrackerSummary painLog={getMostRecentPainLog()} />
             <AICompanionCard />
             <DailyTipCard />
             <CommunityCard />

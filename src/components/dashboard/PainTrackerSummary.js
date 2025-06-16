@@ -7,25 +7,8 @@ import { Ionicons } from '@expo/vector-icons';
 import ReusableButton from '../../components/reusable/ReusableButton';
 import { Context as PainTrackingContext } from '../../context/PainTrackingContext';
 
-const PainTrackerSummary = () => {
-  const navigation = useNavigation();
-  const { state } = useContext(PainTrackingContext); 
-
-  // Get the most recent pain log
-  const getMostRecentPainLog = () => {
-    if (!state.painLogs || state.painLogs.length === 0) {
-      return null;
-    }
-    
-    // Sort by createdAt timestamp (most recent first)
-    const sortedLogs = [...state.painLogs].sort((a, b) => {
-      const timeA = a.createdAt._seconds * 1000 + a.createdAt._nanoseconds / 1000000;
-      const timeB = b.createdAt._seconds * 1000 + b.createdAt._nanoseconds / 1000000;
-      return timeB - timeA;
-    });
-    
-    return sortedLogs[0];
-  };
+const PainTrackerSummary = ({ painLog }) => {
+  const navigation = useNavigation(); 
 
   // Format body parts for display
   const formatBodyParts = (bodyParts) => {
@@ -39,7 +22,7 @@ const PainTrackerSummary = () => {
     }).join(', ');
   };
 
-  const recentPainLog = getMostRecentPainLog();
+  const recentPainLog = painLog;
   
   // Navigate to full PainTracker screen
   const handleViewFullTracker = () => {
