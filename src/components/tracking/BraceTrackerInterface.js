@@ -6,6 +6,7 @@ import HeightSpacer from '../reusable/HeightSpacer';
 import ReusableButton from '../reusable/ReusableButton';
 import { ProgressBar } from 'react-native-paper';
 import BraceTimer from './BraceTimer';
+import NewBadgePopup from '../newBadgePopup';
 import { Context as ActivityContext } from '../../context/ActivityContext'; 
 import { Context as UserContext } from '../../context/UserContext'; 
 
@@ -13,13 +14,20 @@ const BraceTrackerInterface = ({
   wearingSchedule, 
   onActivityComplete,
   showSuccess,
-  successMessage 
+  successMessage,
+  isStreakAnimationActive = false,
+  onNewBadgeEarned = () => {} // Keep for compatibility but handle locally
 }) => {
   const { state, updateBraceWornHours, initBraceTracking } = useContext(ActivityContext); 
   const { state: UserState, resetDailyBraceHours } = useContext(UserContext); 
   const [timerOn, setTimerOn] = useState(false);
   const [progressColor, setProgressColor] = useState(COLORS.primaryPurple);
   const goalAchievedToday = useRef(false);
+  
+  // Badge popup state - back to local handling but streak-aware
+  const [showNewBadgePopup, setShowNewBadgePopup] = useState(false);
+  const [newBadgePopupData, setNewBadgePopupData] = useState(null);
+  const [pendingBadgeData, setPendingBadgeData] = useState(null);
 
   // Get today's date in YYYY-MM-DD format
   const today = new Date().toISOString().split('T')[0];
@@ -30,6 +38,16 @@ const BraceTrackerInterface = ({
     initBraceTracking();
     resetDailyBraceHours(); 
   }, []);
+
+  // Handle showing pending badges when streak animation completes
+  useEffect(() => {
+    if (!isStreakAnimationActive && pendingBadgeData) {
+      console.log("Streak animation completed, showing pending badge");
+      setNewBadgePopupData(pendingBadgeData);
+      setShowNewBadgePopup(true);
+      setPendingBadgeData(null);
+    }
+  }, [isStreakAnimationActive, pendingBadgeData]);
   
   // Get worn hours from the wearingHistory map for today, defaulting to 0
   const wornTodayHours = state.braceData?.[today] || UserState.user?.treatmentData?.brace?.wearingHistory?.[today] || 0;
@@ -53,12 +71,34 @@ const BraceTrackerInterface = ({
     }
   }, [wornTodayHours, expectedWearingHours, onActivityComplete]);
   
+  const handleBadgeDisplay = (badgeData) => {
+    if (!badgeData) return;
+    
+    console.log("Badge earned in brace interface:", badgeData);
+    
+    if (isStreakAnimationActive) {
+      // Streak is active, store badge for later
+      console.log("Streak animation active, storing badge for later");
+      setPendingBadgeData(badgeData);
+    } else {
+      // No streak, show immediately
+      console.log("No streak animation, showing badge immediately");
+      setNewBadgePopupData(badgeData);
+      setShowNewBadgePopup(true);
+    }
+  };
+  
   const handleTimeSaved = async (hours) => {
     try {
       const result = await updateBraceWornHours(hours);
       if (!result?.success) {
         console.error('Error updating brace hours:', result?.error);
         return;
+      }
+
+      // Handle badge display with streak awareness
+      if (result.newAchievements && result.newAchievements.length > 0) {
+        handleBadgeDisplay(result.newAchievements[0]);
       }
   
       // Manually calculate updated hours
@@ -81,6 +121,11 @@ const BraceTrackerInterface = ({
       if (!result?.success) {
         console.error('Error in quickLogHours:', result?.error);
         return;
+      }
+
+      // Handle badge display with streak awareness
+      if (result.newAchievements && result.newAchievements.length > 0) {
+        handleBadgeDisplay(result.newAchievements[0]);
       }
   
       // Manually calculate updated hours
@@ -136,6 +181,16 @@ const BraceTrackerInterface = ({
           <Text style={styles.successText}>{successMessage}</Text>
         </View>
       )}
+
+      {/* Badge Popup */}
+      <NewBadgePopup
+        visible={showNewBadgePopup && newBadgePopupData !== null}
+        badge={newBadgePopupData}
+        onAnimationComplete={() => {
+          setShowNewBadgePopup(false);
+          setNewBadgePopupData(null);
+        }}
+      />
 
       {timerOn && (
         <BraceTimer

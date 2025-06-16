@@ -1,13 +1,10 @@
-import React, { useState } from "react";
+import React from "react";
 import { View, Text, StyleSheet, Pressable, SafeAreaView } from "react-native";
 import COLORS from "../../constants/COLORS";
 import { moderateScale } from "react-native-size-matters";
 
-const AchieveTabs = ({ setActiveTab }) => {
-  const [activeTab, setLocalActiveTab] = useState("badges");
-
+const AchieveTabs = ({ activeTab, setActiveTab }) => {
   const handleTabPress = (tab) => {
-    setLocalActiveTab(tab);
     setActiveTab(tab);
   };
 
@@ -64,8 +61,8 @@ const AchieveTabs = ({ setActiveTab }) => {
 };
 
 const styles = StyleSheet.create({
-  container: { 
-    marginHorizontal: moderateScale(10), 
+  container: {
+    marginHorizontal: moderateScale(10),
   },
   tabsContainer: {
     flexDirection: "row",
@@ -93,4 +90,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default AchieveTabs; 
+export default AchieveTabs;

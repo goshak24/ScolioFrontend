@@ -534,6 +534,12 @@ const Tracking = () => {
     });
   }, []);
 
+  // Keep this function for compatibility but it's no longer needed since brace components handle badges locally
+  const handleNewBadgeEarned = useCallback((badgeData) => {
+    // This is now handled by the individual components
+    console.log("Badge handling delegated to components");
+  }, []);
+
   // Custom workout title row with plus icon
   const renderWorkoutHeader = useCallback(() => (
     <View style={styles.workoutHeaderRow}>
@@ -596,6 +602,8 @@ const Tracking = () => {
                  onActivityCompletePhysio={() => handleActivityCompletion('physio')}
                  showSuccess={showSuccess}
                  successMessage={successMessage}
+                 isStreakAnimationActive={showStreakAnimation}
+                 onNewBadgeEarned={handleNewBadgeEarned}
                />;
       case 'brace':
         return <BraceTrackerInterface 
@@ -604,6 +612,8 @@ const Tracking = () => {
                  onActivityComplete={handleActivityCompletion}
                  showSuccess={showSuccess}
                  successMessage={successMessage}
+                 isStreakAnimationActive={showStreakAnimation}
+                 onNewBadgeEarned={handleNewBadgeEarned}
                />;
       case 'physio':
         return (

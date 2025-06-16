@@ -53,7 +53,10 @@ const Achieve = () => {
           level={user?.level || 1} 
           streakDays={user?.streaks || 0} 
         />
-        <AchieveTabs setActiveTab={setActiveTab} /> 
+        <AchieveTabs 
+          activeTab={activeTab}
+          setActiveTab={setActiveTab} 
+        /> 
       </View>
       <AchieveContent 
         activeTab={activeTab} 
