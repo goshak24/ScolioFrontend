@@ -5,7 +5,43 @@ import { moderateScale, verticalScale } from "react-native-size-matters";
 import COLORS from "../../constants/COLORS";
 import { format } from "date-fns";
 
-const CommentItem = ({ comment, onAvatarPress, avatarPic }) => {
+const CommentItem = ({ 
+  comment, 
+  onAvatarPress, 
+  avatarPic, 
+  onLikeComment, 
+  onUnlikeComment, 
+  currentUserId, 
+  postId 
+}) => {
+  // Check if current user has liked this comment
+  const isLiked = comment.likes && Array.isArray(comment.likes) 
+    ? comment.likes.includes(currentUserId) 
+    : false;
+  const likesCount = comment.likes ? comment.likes.length : 0;
+
+  // Handle like/unlike functionality
+  const handleLike = async () => {
+    if (!currentUserId || !postId || !comment.id) {
+      console.error("Missing required data for comment like:", {
+        currentUserId,
+        postId,
+        commentId: comment.id
+      });
+      return;
+    }
+
+    try {
+      if (isLiked) {
+        await onUnlikeComment(postId, comment.id, currentUserId);
+      } else {
+        await onLikeComment(postId, comment.id, currentUserId);
+      }
+    } catch (error) {
+      console.error("Error handling comment like:", error);
+    }
+  };
+
   // Handle different timestamp formats
   const formatTimestamp = () => {
     try {
@@ -74,9 +110,22 @@ const CommentItem = ({ comment, onAvatarPress, avatarPic }) => {
       </View>
       <Text style={styles.commentContent}>{comment.content}</Text>
       <View style={styles.commentActions}>
-        <TouchableOpacity style={styles.commentActionButton}>
-          <Ionicons name="heart-outline" size={moderateScale(16)} color={COLORS.white} />
-          <Text style={styles.commentActionText}>{comment.likesCount || 0}</Text>
+        <TouchableOpacity 
+          style={styles.commentActionButton}
+          onPress={handleLike}
+          disabled={!currentUserId || !onLikeComment || !onUnlikeComment}
+        >
+          <Ionicons 
+            name={isLiked ? "heart" : "heart-outline"} 
+            size={moderateScale(16)} 
+            color={isLiked ? COLORS.gradientPink : COLORS.white} 
+          />
+          <Text style={[
+            styles.commentActionText,
+            isLiked && { color: COLORS.gradientPink }
+          ]}>
+            {likesCount}
+          </Text>
         </TouchableOpacity>
       </View>
     </View>

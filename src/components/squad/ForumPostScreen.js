@@ -28,7 +28,7 @@ import UserProfileModal from '../profile/UserProfileModal';
 
 const ForumPostScreen = ({ route, navigation }) => { 
   const { state: AuthState, printUserId } = useContext(AuthContext); 
-  const { state: ForumState, likePost, unlikePost, addComment } = useContext(ForumContext); 
+  const { state: ForumState, likePost, unlikePost, addComment, likeComment, unlikeComment } = useContext(ForumContext); 
   const { state: UserState } = useContext(UserContext); 
 
   // Get initial post data from route params
@@ -239,13 +239,29 @@ const ForumPostScreen = ({ route, navigation }) => {
       {safePost.comments.length === 0 ? (
         <Text style={styles.noCommentsText}>No comments yet. Be the first to comment!</Text>
       ) : (
-        safePost.comments.map(comment => (
-          <CommentItem 
-            key={comment.id} 
-            comment={comment}
-            onAvatarPress={() => openUserProfile(comment.userId)}
-          />
-        ))
+        [...safePost.comments]
+          .sort((a, b) => {
+            // Sort comments by creation time - newest first
+            const getTimestamp = (createdAt) => {
+              if (!createdAt) return 0;
+              if (createdAt._seconds) return createdAt._seconds * 1000;
+              if (createdAt.seconds) return createdAt.seconds * 1000;
+              if (typeof createdAt === 'number') return createdAt > 10000000000 ? createdAt : createdAt * 1000;
+              return new Date(createdAt).getTime();
+            };
+            return getTimestamp(b.createdAt) - getTimestamp(a.createdAt);
+          })
+          .map(comment => (
+            <CommentItem 
+              key={comment.id} 
+              comment={comment}
+              onAvatarPress={() => openUserProfile(comment.userId)}
+              onLikeComment={likeComment}
+              onUnlikeComment={unlikeComment}
+              currentUserId={getUserId()}
+              postId={safePost.postId}
+            />
+          ))
       )}
     </View>
   );

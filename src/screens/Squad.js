@@ -8,7 +8,9 @@ import {
   ActivityIndicator,
   TouchableOpacity, 
   Platform,
-  Alert
+  Alert,
+  FlatList,
+  RefreshControl
 } from "react-native";
 import { moderateScale } from "react-native-size-matters";
 import { Ionicons } from "@expo/vector-icons";
@@ -28,7 +30,7 @@ import Constants from 'expo-constants';
 import CreatePostModal from "../components/squad/CreatePostModal";
 import SearchBar from "../components/squad/SearchBar";
 import UserProfileModal from "../components/profile/UserProfileModal";
-import { FlatList, Image } from "react-native";
+import { Image } from "react-native";
 import { getCompleteUserData } from "../components/squad/getUserDataFromFriendsContext";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MDYformatTimestamp } from "../components/timeZoneHelpers";
@@ -36,7 +38,13 @@ import { MDYformatTimestamp } from "../components/timeZoneHelpers";
 const Squad = () => {
   const navigation = useNavigation();
   const [activeTab, setActiveTab] = useState("Forums");
-  const { state: ForumState, fetchPosts, createPost } = useContext(ForumContext);
+  const { 
+    state: ForumState, 
+    fetchPosts, 
+    loadMorePosts, 
+    createPost, likeComment, unlikeComment,
+    clearForumCache 
+  } = useContext(ForumContext);
   const { state: AuthState } = useContext(AuthContext);
   const { state: UserState } = useContext(UserContext); 
   const { state: FriendsState, getFriends, getFriendRequests, getUserById } = useContext(FriendsContext);
@@ -46,7 +54,8 @@ const Squad = () => {
   const [profileModalVisible, setProfileModalVisible] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState(null);
   const [messagesLoading, setMessagesLoading] = useState(true);
-  const [forumLoading, setForumLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [searchActive, setSearchActive] = useState(false);
   
   // Track if friends data is already loaded
   const friendsLoaded = useRef(false);
@@ -67,16 +76,13 @@ const Squad = () => {
         // Load forum posts first
         if (ForumState.posts.length === 0) {
           console.log("🔄 Loading initial forum posts");
-          setForumLoading(true);
-          await fetchPosts(false); // Use cache if available
+          await fetchPosts({ forceFetch: false, page: 1 });
           lastForumFetchTime.current = new Date().getTime();
         } else {
           console.log("📋 Using existing forum posts from state");
         }
       } catch (error) {
         console.error("❌ Error loading initial data:", error);
-      } finally {
-        setForumLoading(false);
       }
 
       // Load friend-related data
@@ -92,13 +98,6 @@ const Squad = () => {
 
     loadInitialData();
   }, []);
-  
-  // Update forum loading state when ForumState changes
-  useEffect(() => {
-    if (ForumState.loading !== undefined) {
-      setForumLoading(ForumState.loading);
-    }
-  }, [ForumState.loading]);
   
   // Reset data load flags when the screen is focused
   useFocusEffect(
@@ -129,7 +128,7 @@ const Squad = () => {
         
         if (shouldRefreshForums) {
           console.log("🔄 Refreshing forum posts after returning to screen");
-          fetchPosts(true); // Force refresh
+          fetchPosts({ forceFetch: true, page: 1 });
           lastForumFetchTime.current = now;
         }
       } else if (activeTab === "Messages" && shouldRefreshOnFocus) {
@@ -145,7 +144,7 @@ const Squad = () => {
         // No cleanup needed
       };
     }, [activeTab])
-);
+  );
 
   // Handle tab changes
   useEffect(() => {
@@ -161,7 +160,7 @@ const Squad = () => {
       
       if (shouldRefresh || ForumState.posts.length === 0) {
         console.log("🔄 Loading forum posts after tab change");
-        fetchPosts(false); // Use cache if available
+        fetchPosts({ forceFetch: false, page: 1 });
         lastForumFetchTime.current = now;
       }
       
@@ -188,8 +187,10 @@ const Squad = () => {
 
   useEffect(() => {
     // Update filtered posts when ForumState.posts changes
-    setFilteredPosts(ForumState.posts || []);
-  }, [ForumState.posts]);
+    if (!searchActive) {
+      setFilteredPosts(ForumState.posts || []);
+    }
+  }, [ForumState.posts, searchActive]);
 
   const loadConversations = async (forceRefresh = false) => {
     setMessagesLoading(true);
@@ -273,12 +274,75 @@ const Squad = () => {
 
   const handleSearchResults = (searchResults) => {
     setFilteredPosts(searchResults || []);
+    setSearchActive(searchResults !== null);
   };
 
   const openUserProfile = (userId) => {
     setSelectedUserId(userId);
     setProfileModalVisible(true);
   };
+
+  // Handle pull to refresh
+  const onRefresh = useCallback(async () => {
+    if (activeTab === "Forums") {
+      setRefreshing(true);
+      try {
+        await fetchPosts({ forceFetch: true, page: 1 });
+        lastForumFetchTime.current = new Date().getTime();
+      } catch (error) {
+        console.error("Error refreshing forum posts:", error);
+      } finally {
+        setRefreshing(false);
+      }
+    } else if (activeTab === "Messages") {
+      setRefreshing(true);
+      try {
+        await loadConversations(true);
+      } catch (error) {
+        console.error("Error refreshing conversations:", error);
+      } finally {
+        setRefreshing(false);
+      }
+    }
+  }, [activeTab]);
+
+  // Handle load more posts when reaching the end
+  const handleLoadMore = useCallback(async () => {
+    // Don't load more if we're already loading, there's no more data, search is active, or there's an error
+    if (ForumState.loadingMore || !ForumState.hasMore || searchActive || ForumState.error) {
+      console.log(`⏭️ Skipping load more: loadingMore=${ForumState.loadingMore}, hasMore=${ForumState.hasMore}, searchActive=${searchActive}, error=${!!ForumState.error}`);
+      return;
+    }
+
+    // Additional check to prevent rapid successive calls
+    if (ForumState.posts.length === 0) {
+      console.log("⏭️ No posts available for pagination");
+      return;
+    }
+
+    try {
+      // Use cursor-based pagination with the last post
+      const lastPost = ForumState.posts[ForumState.posts.length - 1];
+      if (lastPost && lastPost.id && lastPost.createdAt) {
+        console.log(`🔄 Loading more posts after post ${lastPost.id}...`);
+        const result = await loadMorePosts({
+          lastPostId: lastPost.id,
+          lastCreatedAt: lastPost.createdAt,
+          limit: 10
+        });
+        
+        // Log the result for debugging
+        console.log(`📊 Load more result: ${result.posts.length} posts, hasMore: ${result.hasMore}`);
+      } else {
+        console.warn("❌ Last post missing required pagination data:", { 
+          id: lastPost?.id, 
+          createdAt: lastPost?.createdAt 
+        });
+      }
+    } catch (error) {
+      console.error("❌ Error in handleLoadMore:", error);
+    }
+  }, [ForumState.loadingMore, ForumState.hasMore, ForumState.posts, ForumState.error, searchActive, loadMorePosts]);
 
   // Filter friend requests to show only received ones
   const incomingRequests = FriendsState.friendRequests.filter(
@@ -378,18 +442,38 @@ const Squad = () => {
     </View>
   );
 
-  // Render a loading indicator for forums
-  const renderForumLoading = () => {
-    if (forumLoading) {
-      return (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={COLORS.gradientPink} />
-          <Text style={styles.loadingText}>Loading community posts...</Text>
-        </View>
-      );
-    }
-    return null;
+  // Render forum post item for FlatList
+  const renderForumPost = ({ item }) => (
+    <ForumPost
+      post={item}
+      navigation={navigation}
+      onAvatarPress={() => openUserProfile(item.userId)}
+      onLikeComment={likeComment}
+      onUnlikeComment={unlikeComment}
+      currentUserId={AuthState.userId || UserState.user?.uid}
+    />
+  );
+
+  // Render load more footer
+  const renderLoadMoreFooter = () => {
+    if (!ForumState.loadingMore) return null;
+    
+    return (
+      <View style={styles.loadMoreContainer}>
+        <ActivityIndicator size="small" color={COLORS.gradientPink} />
+        <Text style={styles.loadMoreText}>Loading more posts...</Text>
+      </View>
+    );
   };
+
+  // Render empty forums
+  const renderEmptyForums = () => (
+    <View style={styles.emptyContainer}>
+      <Ionicons name="chatbubble-ellipses" size={moderateScale(50)} color={COLORS.lightGray} />
+      <HeightSpacer height={10} />
+      <Text style={styles.emptyText}>No posts yet! Be the first to share something.</Text>
+    </View>
+  );
 
   return (
     <SafeAreaView style={styles.container}>
@@ -451,34 +535,30 @@ const Squad = () => {
 
       {/* Tab Content */}
       {activeTab === "Forums" ? (
-        <>
-          {renderForumLoading()}
-          
-          {!forumLoading && (
-            <ScrollView
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={styles.scrollContainer}
-            >
-              <View style={styles.postsContainer}>
-                {/* Only render posts if we're not loading */}
-                {!forumLoading && filteredPosts.length === 0 && (
-                  <View style={styles.emptyContainer}>
-                    <Text style={styles.emptyText}>No posts yet! Be the first to share something.</Text>
-                  </View>
-                )}
-                
-                {filteredPosts.map((post) => (
-                  <ForumPost
-                    key={post.id}
-                    post={post}
-                    navigation={navigation}
-                    onAvatarPress={() => openUserProfile(post.userId)}
-                  />
-                ))}
-              </View>
-            </ScrollView>
-          )}
-        </>
+        <FlatList
+          data={filteredPosts}
+          keyExtractor={(item) => item.id}
+          renderItem={renderForumPost}
+          contentContainerStyle={styles.forumListContainer}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[COLORS.gradientPink]}
+              tintColor={COLORS.gradientPink}
+            />
+          }
+          onEndReached={handleLoadMore}
+          onEndReachedThreshold={0.1}
+          ListFooterComponent={renderLoadMoreFooter}
+          ListEmptyComponent={ForumState.loading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color={COLORS.gradientPink} />
+              <Text style={styles.loadingText}>Loading community posts...</Text>
+            </View>
+          ) : renderEmptyForums}
+        />
       ) : activeTab === "Messages" ? (
         // Messages Tab Content
         messagesLoading ? (
@@ -492,6 +572,14 @@ const Squad = () => {
             renderItem={renderConversationItem}
             contentContainerStyle={styles.listContainer}
             showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                colors={[COLORS.gradientPink]}
+                tintColor={COLORS.gradientPink}
+              />
+            }
             ListEmptyComponent={renderEmptyMessages}
           />
         )
@@ -582,24 +670,33 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     marginTop: moderateScale(5),
   },
-  postsContainer: {
-    flex: 1,
-  },
-  postsContent: {
-    paddingBottom: moderateScale(20),
+  // Updated styles for FlatList
+  forumListContainer: {
     paddingHorizontal: moderateScale(10),
+    paddingBottom: moderateScale(20),
+    flexGrow: 1,
   },
-  noResultsText: {
-    color: COLORS.lightGray,
-    textAlign: 'center',
-    marginTop: moderateScale(30),
-    fontSize: moderateScale(16),
-  },
-  // New styles for Messages tab
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    padding: moderateScale(20)
+  },
+  loadingText: {
+    color: COLORS.white,
+    marginTop: moderateScale(10),
+    fontSize: moderateScale(14)
+  },
+  loadMoreContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: moderateScale(20),
+  },
+  loadMoreText: {
+    color: COLORS.lightGray,
+    marginLeft: moderateScale(10),
+    fontSize: moderateScale(14),
   },
   emptyContainer: {
     flex: 1,
@@ -696,28 +793,5 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontSize: moderateScale(10),
     fontWeight: 'bold',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: moderateScale(20)
-  },
-  loadingText: {
-    color: COLORS.white,
-    marginTop: moderateScale(10),
-    fontSize: moderateScale(14)
-  },
-  scrollContainer: {
-    paddingBottom: moderateScale(20),
-    paddingHorizontal: moderateScale(10),
-  },
-  actionButton: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    padding: moderateScale(10),
-    backgroundColor: COLORS.gradientPurple,
-    borderRadius: moderateScale(20),
   },
 });
