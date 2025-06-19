@@ -29,7 +29,7 @@ const auth = initializeAuth(app, {
 });
 const storage = getStorage(app);
 
-const API_BASE_URL = 'https://1904-86-30-169-92.ngrok-free.app/api/'; 
+const API_BASE_URL = 'https://scoliobackend.ew.r.appspot.com/api/'; // Remeber to push back notification controller days to not alert people of old notifications 
 
 const api = axios.create({
   baseURL: API_BASE_URL,

@@ -25,67 +25,47 @@ const assistantReducer = (state, action) => {
         currentConversation: action.payload,
         error: null
       };
-    case 'ADD_MESSAGE':
-      const updatedConversation = state.currentConversation 
-        ? {
-            ...state.currentConversation,
-            messages: [...state.currentConversation.messages, action.payload]
-          }
-        : {
-            id: new Date().toISOString(),
-            messages: [action.payload]
-          };
-      
+    case 'UPDATE_CONVERSATION_MESSAGES':
       return {
         ...state,
-        currentConversation: updatedConversation,
+        currentConversation: {
+          ...state.currentConversation,
+          messages: action.payload
+        },
+        error: null
+      };
+    case 'ADD_MESSAGE_TO_CURRENT_CONVERSATION':
+      return {
+        ...state,
+        currentConversation: {
+          ...state.currentConversation,
+          messages: [...(state.currentConversation?.messages || []), action.payload]
+        },
         error: null
       };
     case 'SET_ERROR':
       return { ...state, error: action.payload, loading: false };
     case 'SET_LOADING':
       return { ...state, loading: action.payload };
+    case 'CLEAR_CURRENT_CONVERSATION':
+      return { ...state, currentConversation: null };
     default:
       return state;
   }
 };
 
-// Save conversations to AsyncStorage
-const saveConversationsToStorage = async (conversations) => {
-  try {
-    await AsyncStorage.setItem('aiConversations', JSON.stringify(conversations));
-  } catch (error) {
-    console.error('Error saving AI conversations to storage:', error);
-  }
-};
-
-/*
-// Load conversations from storage
+// Load conversation list (summaries only)
 const loadConversations = dispatch => async () => {
   try {
     dispatch({ type: 'SET_LOADING', payload: true });
     
-    try {
-      // First try to get from backend
-      const response = await api.get('assistant/conversations');
-      dispatch({ type: 'SET_CONVERSATIONS', payload: response.data.conversations || [] });
-    } catch (error) {
-      console.log('Could not fetch conversations from backend, falling back to local storage');
-      
-      // Fall back to local storage if backend fails
-      const storedConversations = await AsyncStorage.getItem('aiConversations');
-      if (storedConversations) {
-        dispatch({ type: 'SET_CONVERSATIONS', payload: JSON.parse(storedConversations) });
-      } else {
-        dispatch({ type: 'SET_CONVERSATIONS', payload: [] });
-      }
-    }
+    const response = await api.get('assistant/conversations');
+    dispatch({ type: 'SET_CONVERSATIONS', payload: response.data.conversations || [] });
   } catch (error) {
     console.error('Error loading conversations:', error);
     dispatch({ type: 'SET_ERROR', payload: 'Failed to load conversations' });
   }
 };
-*/ 
 
 // Send a message to the AI and get a response
 const sendMessage = dispatch => async (message, conversationId = null) => {
@@ -97,16 +77,19 @@ const sendMessage = dispatch => async (message, conversationId = null) => {
       throw new Error('Message is required');
     }
     
-    // Create user message object
+    // Create user message object for immediate UI update
     const userMessage = {
       id: Date.now().toString(),
       text: message.trim(),
       isUser: true,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      timestamp: new Date().toISOString()
     };
     
-    // Add user message to state
-    dispatch({ type: 'ADD_MESSAGE', payload: userMessage });
+    // Update UI immediately with user message
+    dispatch({ 
+      type: 'ADD_MESSAGE_TO_CURRENT_CONVERSATION', 
+      payload: userMessage
+    });
     
     try {
       // Send message to backend API
@@ -115,25 +98,11 @@ const sendMessage = dispatch => async (message, conversationId = null) => {
         conversationId
       });
       
-      // Create AI response message
-      const aiMessage = {
-        id: (Date.now() + 1).toString(),
-        text: response.data.response,
-        isUser: false,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      };
-      
-      // Add AI response to state
-      dispatch({ type: 'ADD_MESSAGE', payload: aiMessage });
-      
-      // If this is a new conversation, update the conversation ID
-      if (!conversationId && response.data.conversationId) {
+      // Update with the full conversation from backend
+      if (response.data.conversation) {
         dispatch({ 
           type: 'SET_CURRENT_CONVERSATION', 
-          payload: {
-            id: response.data.conversationId,
-            messages: [userMessage, aiMessage]
-          }
+          payload: response.data.conversation
         });
       }
       
@@ -141,15 +110,19 @@ const sendMessage = dispatch => async (message, conversationId = null) => {
     } catch (error) {
       console.error('API Error:', error.response?.data || error.message);
       
-      // Add error message
+      // Add error message to UI
       const errorMessage = {
         id: (Date.now() + 1).toString(),
         text: 'Sorry, I encountered an error processing your request. Please try again.',
         isUser: false,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        timestamp: new Date().toISOString()
       };
       
-      dispatch({ type: 'ADD_MESSAGE', payload: errorMessage });
+      dispatch({ 
+        type: 'ADD_MESSAGE_TO_CURRENT_CONVERSATION', 
+        payload: errorMessage
+      });
+      
       throw new Error(error.response?.data?.error || 'Failed to get AI response');
     }
   } catch (error) {
@@ -171,18 +144,18 @@ const startNewConversation = dispatch => () => {
         id: '1',
         text: 'Hi there! I\'m your AI bestie. I can help you with questions about scoliosis, treatment options, and living with a brace. What would you like to know?',
         isUser: false,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        timestamp: new Date().toISOString()
       }]
     }
   });
 };
 
-// Load a specific conversation
+// Load a specific conversation with full message history
 const loadConversation = dispatch => async (conversationId) => {
   try {
     dispatch({ type: 'SET_LOADING', payload: true });
     
-    // Get conversation from backend
+    // Get full conversation from backend
     const response = await api.get(`assistant/conversations/${conversationId}`);
     
     if (response.data.conversation) {
@@ -200,6 +173,11 @@ const loadConversation = dispatch => async (conversationId) => {
   }
 };
 
+// Clear current conversation
+const clearCurrentConversation = dispatch => () => {
+  dispatch({ type: 'CLEAR_CURRENT_CONVERSATION' });
+};
+
 // Clear any errors
 const clearError = dispatch => () => {
   dispatch({ type: 'SET_ERROR', payload: null });
@@ -212,19 +190,13 @@ export const { Context, Provider } = createDataContext(
     sendMessage,
     startNewConversation,
     loadConversation,
+    loadConversations,
+    clearCurrentConversation,
     clearError
   },
   {
     conversations: [],
-    currentConversation: {
-      id: null,
-      messages: [{
-        id: '1',
-        text: 'Hi there! I\'m your AI bestie. I can help you with questions about scoliosis, treatment options, and living with a brace. What would you like to know?',
-        isUser: false,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      }]
-    },
+    currentConversation: null,
     loading: false,
     error: null
   }

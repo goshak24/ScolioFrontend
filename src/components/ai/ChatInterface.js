@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useContext } from 'react';
+import React, { useState, useRef, useEffect, useContext, useCallback } from 'react';
 import { View, FlatList, StyleSheet, ActivityIndicator, Text, TouchableOpacity, Platform, SafeAreaView, Keyboard, StatusBar, KeyboardAvoidingView } from 'react-native';
 import { moderateScale, verticalScale } from 'react-native-size-matters';
 import { Ionicons } from '@expo/vector-icons';
@@ -20,18 +20,36 @@ const ChatInterface = ({ onClose, isVisible, initialQuestion = null, conversatio
     state: { currentConversation, loading }, 
     sendMessage, 
     startNewConversation,
-    loadConversation
+    loadConversation,
+    clearCurrentConversation
   } = useContext(AssistantContext);
   
   const [inputMessage, setInputMessage] = useState('');
   const [initialQuestionSent, setInitialQuestionSent] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const [isInitialized, setIsInitialized] = useState(false);
   
   const flatListRef = useRef(null);
+  const keyboardListeners = useRef([]);
 
-  // Initialize the conversation when component mounts
+  // Memoized handlers to prevent re-renders
+  const handleSendMessage = useCallback(async (manualQuestion = null) => {
+    const textToSend = manualQuestion || inputMessage;
+    
+    if (!textToSend.trim()) return;
+    
+    setInputMessage('');
+    
+    // Use the context function to send the message
+    await sendMessage(textToSend, currentConversation?.id);
+  }, [inputMessage, sendMessage, currentConversation?.id]);
+
+  // Initialize conversation only once when component becomes visible
   useEffect(() => {
-    if (isVisible) {
+    if (isVisible && !isInitialized) {
+      setIsInitialized(true);
+      setInitialQuestionSent(false);
+      
       if (conversationId) {
         // Load existing conversation if ID is provided
         loadConversation(conversationId);
@@ -39,38 +57,50 @@ const ChatInterface = ({ onClose, isVisible, initialQuestion = null, conversatio
         // Start a new conversation
         startNewConversation();
       }
+    } else if (!isVisible && isInitialized) {
+      // Reset when closing
+      setIsInitialized(false);
+      setInitialQuestionSent(false);
+      setInputMessage('');
+      clearCurrentConversation();
     }
-  }, [isVisible, conversationId]);
+  }, [isVisible, conversationId, isInitialized, loadConversation, startNewConversation, clearCurrentConversation]);
 
-  // Handle keyboard appearance
+  // Handle keyboard listeners with proper cleanup
   useEffect(() => {
-    const keyboardDidShowListener = Keyboard.addListener(
-      'keyboardDidShow',
-      () => setKeyboardVisible(true)
-    );
-    const keyboardDidHideListener = Keyboard.addListener(
-      'keyboardDidHide',
-      () => setKeyboardVisible(false)
-    );
+    if (isVisible) {
+      const keyboardDidShowListener = Keyboard.addListener(
+        'keyboardDidShow',
+        () => setKeyboardVisible(true)
+      );
+      const keyboardDidHideListener = Keyboard.addListener(
+        'keyboardDidHide',
+        () => setKeyboardVisible(false)
+      );
 
-    return () => {
-      keyboardDidShowListener.remove();
-      keyboardDidHideListener.remove();
-    };
-  }, []);
+      keyboardListeners.current = [keyboardDidShowListener, keyboardDidHideListener];
+
+      return () => {
+        keyboardListeners.current.forEach(listener => listener.remove());
+        keyboardListeners.current = [];
+      };
+    }
+  }, [isVisible]);
 
   // Scroll to bottom when new messages are added
   useEffect(() => {
     if (flatListRef.current && currentConversation?.messages?.length > 0) {
-      setTimeout(() => {
-        flatListRef.current.scrollToEnd({ animated: true });
+      const timer = setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
       }, 100);
+      
+      return () => clearTimeout(timer);
     }
-  }, [currentConversation?.messages]);
+  }, [currentConversation?.messages?.length]);
   
-  // Handle pre-filled question if provided
+  // Handle pre-filled question - only once per conversation
   useEffect(() => {
-    if (initialQuestion && !initialQuestionSent && isVisible) {
+    if (initialQuestion && !initialQuestionSent && isVisible && isInitialized && currentConversation) {
       setInputMessage(initialQuestion);
       setInitialQuestionSent(true);
       
@@ -81,19 +111,9 @@ const ChatInterface = ({ onClose, isVisible, initialQuestion = null, conversatio
       
       return () => clearTimeout(timer);
     }
-  }, [initialQuestion, initialQuestionSent, isVisible]);
+  }, [initialQuestion, initialQuestionSent, isVisible, isInitialized, currentConversation, handleSendMessage]);
 
-  const handleSendMessage = async (manualQuestion = null) => {
-    const textToSend = manualQuestion || inputMessage;
-    
-    if (!textToSend.trim()) return;
-    
-    setInputMessage('');
-    
-    // Use the context function to send the message
-    await sendMessage(textToSend, currentConversation?.id);
-  };
-
+  // Don't render if not visible
   if (!isVisible) return null;
 
   return (
@@ -123,7 +143,7 @@ const ChatInterface = ({ onClose, isVisible, initialQuestion = null, conversatio
             <FlatList
               ref={flatListRef}
               data={currentConversation?.messages || []}
-              keyExtractor={item => item.id}
+              keyExtractor={(item, index) => item.id || index.toString()}
               renderItem={({ item }) => (
                 <ChatMessage 
                   text={item.text}
@@ -138,7 +158,12 @@ const ChatInterface = ({ onClose, isVisible, initialQuestion = null, conversatio
               ]}
               showsVerticalScrollIndicator={false}
               bounces={false}
-              removeClippedSubviews={false}
+              removeClippedSubviews={true}
+              maxToRenderPerBatch={10}
+              windowSize={10}
+              getItemLayout={(data, index) => (
+                {length: 60, offset: 60 * index, index} // Approximate item height
+              )}
             />
             
             {loading && (
@@ -152,7 +177,7 @@ const ChatInterface = ({ onClose, isVisible, initialQuestion = null, conversatio
           <ChatInput 
             message={inputMessage}
             setMessage={setInputMessage}
-            handleSend={() => handleSendMessage()}
+            handleSend={handleSendMessage}
             isLoading={loading}
           />
         </SafeAreaView>
