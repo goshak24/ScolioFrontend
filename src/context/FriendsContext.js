@@ -416,7 +416,7 @@ const fetchFreshRequests = async (dispatch, type = null, sinceVersion = null, ca
     // Cache user data from requests (they now come with full user data from backend)
     requests.forEach(request => {
       if (request.user) {
-        userCache.cacheUser(request.user);
+        userCache.cacheUser(request.user); 
       }
     });
     

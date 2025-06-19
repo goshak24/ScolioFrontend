@@ -87,7 +87,10 @@ const Squad = () => {
 
       // Load friend-related data
       if (FriendsState.friendRequests.length === 0) {
+        console.log('🔄 Loading friend requests in Squad screen');
         getFriendRequests();
+      } else {
+        console.log('📋 Friend requests already loaded:', FriendsState.friendRequests.length);
       }
       
       if (!friendsLoaded.current && FriendsState.friends.length === 0) {
@@ -323,7 +326,7 @@ const Squad = () => {
     try {
       // Use cursor-based pagination with the last post
       const lastPost = ForumState.posts[ForumState.posts.length - 1];
-      if (lastPost && lastPost.id && lastPost.createdAt) {
+      if (lastPost && lastPost.id && lastPost.createdAt) { 
         console.log(`🔄 Loading more posts after post ${lastPost.id}...`);
         const result = await loadMorePosts({
           lastPostId: lastPost.id,
@@ -344,10 +347,25 @@ const Squad = () => {
     }
   }, [ForumState.loadingMore, ForumState.hasMore, ForumState.posts, ForumState.error, searchActive, loadMorePosts]);
 
-  // Filter friend requests to show only received ones
+  // Filter friend requests to show only received ones (where current user is the receiver)
+  const currentUserId = AuthState.userId || UserState.user?.uid;
   const incomingRequests = FriendsState.friendRequests.filter(
-    request => request.status === 'pending'
+    request => request.status === 'pending' && request.receiver === currentUserId
   );
+  
+  // Debug logging
+  console.log('🔍 Debug friend requests:', {
+    currentUserId,
+    totalRequests: FriendsState.friendRequests.length,
+    pendingRequests: FriendsState.friendRequests.filter(r => r.status === 'pending').length,
+    incomingRequests: incomingRequests.length,
+    allRequests: FriendsState.friendRequests.map(r => ({ 
+      status: r.status, 
+      sender: r.sender, 
+      receiver: r.receiver,
+      isIncoming: r.receiver === currentUserId
+    }))
+  });
 
   // Navigate to conversation screen with enhanced user data
   const navigateToConversation = (otherUser) => {
@@ -417,14 +435,15 @@ const Squad = () => {
             <Text style={styles.messagePreview} numberOfLines={1}>
               {enhancedItem.lastMessage || 'No messages yet'}
             </Text>
-            <TouchableOpacity style={{position:'absolute', right: moderateScale(0), top: moderateScale(0), padding: moderateScale(0)}} onPress={() => deleteConversation(enhancedItem.id)}>
+            <TouchableOpacity style={{position:'absolute', right: moderateScale(0), top: moderateScale(0), padding: moderateScale(0), flexDirection: 'row', alignItems: 'center'}} onPress={() => deleteConversation(enhancedItem.id)}>
+              {enhancedItem.unreadCount > 0 && (
+                <View style={styles.unreadBadge}>
+                  <Text style={styles.unreadCount}>{enhancedItem.unreadCount}</Text> 
+                </View>
+              )}
               <Ionicons name="trash-outline" size={moderateScale(20)} color="gray" />
             </TouchableOpacity>
-            {enhancedItem.unreadCount > 0 && (
-              <View style={styles.unreadBadge}>
-                <Text style={styles.unreadCount}>{enhancedItem.unreadCount}</Text>
-              </View>
-            )}
+            
           </View>
         </View>
       </TouchableOpacity>
@@ -787,7 +806,7 @@ const styles = StyleSheet.create({
     borderRadius: moderateScale(9),
     justifyContent: 'center',
     alignItems: 'center',
-    marginLeft: moderateScale(8),
+    marginHorizontal: moderateScale(5),
   },
   unreadCount: {
     color: COLORS.white,

@@ -23,7 +23,7 @@ import {
 
 const ChatScreen = ({ route, navigation }) => {
     const { otherUser } = route.params;
-    const { state: messagesState, getMessages, sendMessage, clearCurrentConversation, setupMessageListener, getOlderMessages } = useContext(MessagesContext);
+    const { state: messagesState, getMessages, sendMessage, clearCurrentConversation, setupMessageListener, getOlderMessages, markMessagesAsRead } = useContext(MessagesContext);
     const { state: userState } = useContext(UserContext);
     const [messageText, setMessageText] = useState('');
     const [loading, setLoading] = useState(true);
@@ -81,6 +81,12 @@ const ChatScreen = ({ route, navigation }) => {
                 // Create conversationId manually
                 const conversationId = [userState.user.uid, otherUser.id].sort().join('_');
                 
+                // Mark messages as read when opening the conversation
+                if (isActive && markMessagesAsRead) {
+                    console.log('📖 Marking messages as read for conversation');
+                    markMessagesAsRead(conversationId, userState.user.uid);
+                }
+                
                 // Setup listener with explicit user IDs (if active)
                 if (isActive) {
                     console.log(`📡 Setting up immediate listener for user 1 and other user`);
@@ -119,6 +125,12 @@ const ChatScreen = ({ route, navigation }) => {
                 
                 // Re-establish the listener
                 const conversationId = [userState.user.uid, otherUser.id].sort().join('_');
+                
+                // Mark messages as read when returning to the conversation
+                if (markMessagesAsRead) {
+                    console.log('📖 Marking messages as read on focus');
+                    markMessagesAsRead(conversationId, userState.user.uid);
+                }
                 
                 // First clean up any existing listener
                 if (unsubscribeRef.current && typeof unsubscribeRef.current === 'function') {
@@ -217,13 +229,20 @@ const ChatScreen = ({ route, navigation }) => {
         if (messages.length > 0) {
             console.log(`💬 Messages updated: ${messages.length} messages available, last update: ${new Date(lastMessageUpdate.current).toISOString()}`);
             
+            // Mark messages as read when new messages arrive and user is viewing the conversation
+            if (messages.length > prevMessageCount.current && markMessagesAsRead && userState?.user?.uid) {
+                const conversationId = [userState.user.uid, otherUser.id].sort().join('_');
+                console.log('📖 Marking new messages as read');
+                markMessagesAsRead(conversationId, userState.user.uid);
+            }
+            
             // Track previous count for next comparison
             prevMessageCount.current = messages.length;
             
             // Force a render by updating the last message time
             lastMessageUpdate.current = Date.now();
         }
-    }, [messages.length]);
+    }, [messages.length, markMessagesAsRead, userState?.user?.uid, otherUser.id]);
 
     // Handle loading more messages when user scrolls to top
     const handleLoadMore = async () => {

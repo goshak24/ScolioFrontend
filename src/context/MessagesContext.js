@@ -208,6 +208,15 @@ const messagesReducer = (state, action) => {
         };
       }
       return state;
+    case "MARK_CONVERSATION_AS_READ":
+      return {
+        ...state,
+        conversations: state.conversations.map(conversation =>
+          conversation.id === action.payload.conversationId ? 
+            { ...conversation, unreadCount: 0 } : 
+            conversation
+        )
+      };
     default:
       return state;
   }
@@ -875,6 +884,25 @@ const deleteConversationById = (dispatch) => async (conversationId) => {
   }
 };
 
+// Mark messages as read
+const markMessagesAsRead = (dispatch) => (conversationId, userId) => {
+  try {
+    console.log(`📖 Marking messages as read for conversation: ${conversationId}`);
+    
+    // Update local state to remove unread count immediately
+    dispatch({ 
+      type: "MARK_CONVERSATION_AS_READ", 
+      payload: { conversationId } 
+    });
+    
+    console.log(`✅ Messages marked as read in local state`);
+    return true;
+  } catch (error) {
+    console.error("❌ Error marking messages as read:", error);
+    return false;
+  }
+};
+
 export const { Provider, Context } = createDataContext(
   messagesReducer,
   {
@@ -887,7 +915,8 @@ export const { Provider, Context } = createDataContext(
     getUnreadMessageCount,
     getOlderMessages,
     clearCache,
-    deleteConversationById
+    deleteConversationById,
+    markMessagesAsRead
   },
   {
     conversations: [],

@@ -16,7 +16,7 @@ import COLORS from '../constants/COLORS';
 const NewBadgePopup = ({
   visible = false,
   badge = null,
-  duration = 4000,
+  duration = 8000,
   onAnimationComplete = () => {},
   enableVibration = true,
 }) => { 

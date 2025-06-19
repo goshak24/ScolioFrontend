@@ -638,7 +638,7 @@ const Tracking = () => {
       <StreakExtensionAnimation 
         visible={showStreakAnimation} 
         message="Streak Extended! 🔥" 
-        duration={4000}
+        duration={6000}
         enableVibration={true}
         enableSound={true}
         onAnimationComplete={() => {
