@@ -18,6 +18,8 @@ import ProfileScreen from '../../screens/ProfileScreen';
 import FriendsScreen from '../../screens/FriendsScreen';
 import ChatScreen from '../../screens/ChatScreen';
 
+import FindDoctorsScreen from '../../screens/FindDoctorsScreen';
+
 import PainTracker from '../../screens/PainTracker';
 
 import ForumPostScreen from '../squad/ForumPostScreen';
@@ -47,6 +49,7 @@ const DashboardStackScreens = () => {
       <DashboardStack.Screen name="DashboardMain" component={Dashboard} />
       <DashboardStack.Screen name="Profile" component={ProfileAndSettingsScreens} />
       <DashboardStack.Screen name="PainTracker" component={PainTracker} />
+      <DashboardStack.Screen name="FindDoctors" component={FindDoctorsScreen} />
     </DashboardStack.Navigator>
   );
 };

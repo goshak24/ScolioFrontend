@@ -16,6 +16,7 @@ import PainTrackerSummary from '../components/dashboard/PainTrackerSummary';
 import { Context as UserContext } from '../context/UserContext';
 import { Context as PainTrackingContext } from '../context/PainTrackingContext';
 import Constants from 'expo-constants'
+import DoctorsHubCard from '../components/dashboard/DoctorsHubCard';
 
 const Dashboard = () => {
   const { state: { user, loading } } = useContext(UserContext);
@@ -91,20 +92,23 @@ const Dashboard = () => {
                 <HeightSpacer height={moderateScale(5)} />
               </View>
             )}
-
-            <WorkoutSection />
             
             {/* Show SurgeryProgressCard for surgery accounts */}
             {isSurgeryRelated && <SurgeryProgressCard />}
             
             {/* Only show BraceTimeCard for brace-related accounts */}
-            {isBraceRelated && <BraceTimeCard />}
+            {/*{isBraceRelated && <BraceTimeCard />} */} 
+
+
             
             {/* Only show ProgressTracker for non-surgery accounts */}
             {!isSurgeryRelated && <ProgressTracker physioStreak={user?.streaks} />}
+
+            <DoctorsHubCard />
             
             {/*<TrendingFeed />*/}
             <PainTrackerSummary painLog={getMostRecentPainLog()} />
+            
             <AICompanionCard />
             {/*<DailyTipCard />*/}
             <CommunityCard />

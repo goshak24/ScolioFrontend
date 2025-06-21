@@ -1,5 +1,5 @@
 import React, { useState, useContext, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, Platform, StatusBar, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, Platform, StatusBar, ScrollView, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { moderateScale, verticalScale } from 'react-native-size-matters';
 import COLORS from '../constants/COLORS'; 
@@ -12,8 +12,10 @@ import { Context as AssistantContext } from '../context/AssistantContext';
 
 const AI = () => {
   const { 
-    state: { conversations },
+    state: { conversations, hasShownDisclaimer },
     //loadConversations
+    checkDisclaimerStatus,
+    setDisclaimerShown,
   } = useContext(AssistantContext);
   
   const [showVoicePrompt, setShowVoicePrompt] = useState(false); 
@@ -24,7 +26,24 @@ const AI = () => {
   // Load conversations when component mounts
   useEffect(() => {
     //loadConversations();
+    checkDisclaimerStatus();
   }, []);
+
+  useEffect(() => {
+    if (hasShownDisclaimer === false) {
+      Alert.alert(
+        "Beta Assistant Disclaimer",
+        "You're using a beta version of this mental health assistant. Conversations may be stored temporarily to help us improve the system. Features to view or delete your history aren't available yet — but we're working on them.\n\nPlease avoid sharing sensitive personal information.\nIf you'd like your conversation deleted, just message us directly and we'll take care of it.",
+        [
+          { 
+            text: "Got it!", 
+            onPress: () => setDisclaimerShown() 
+          }
+        ],
+        { cancelable: false }
+      );
+    }
+  }, [hasShownDisclaimer]);
 
   const suggestedQuestions = [
     { id: '1', text: 'How can I make my brace more comfortable?' },
@@ -156,7 +175,9 @@ const AI = () => {
               <Text style={styles.sectionTitle}>About your AI assistant</Text>
             </View>
             <Text style={styles.aboutText}>
-              I'm here to support your scoliosis journey with advice, information, and encouragement.
+              You're using a beta version of this mental health assistant. Conversations may be stored temporarily to help us improve the system. 
+              Features to view or delete your history aren't available yet — but we're working on them. Please avoid sharing sensitive personal information.
+              If you'd like your conversation deleted, just message us directly and we'll take care of it.
             </Text>
           </View>
         </View>

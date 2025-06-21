@@ -112,6 +112,17 @@ const PrivacyPolicyScreen = () => {
             {'\n'}• Allow account deletion
           </Text>
 
+          <Text style={styles.heading}>Beta Mental Health Assistant</Text>
+          <Text style={styles.paragraph}>
+            If you are using the beta version of our mental health assistant, please be aware that conversations may be stored temporarily to help us improve the system and user experience. These conversations are not actively linked to personal identifiers and are used solely for internal testing and development purposes.
+            {'\n\n'}
+            At this stage, features that allow you to view or delete your conversation history are not yet available within the app. However, we are actively working on implementing these features.
+            {'\n\n'}
+            Please avoid sharing sensitive personal information (such as health details, full names, contact information, or other identifiable data) while using the beta version.
+            {'\n\n'}
+            If you would like your conversation data to be manually deleted, you may contact us directly at george@wearerealign.com, and we will process your request as soon as possible.
+          </Text>
+
           <Text style={styles.heading}>Data Retention</Text>
           <Text style={styles.paragraph}>We retain your data only as long as necessary. You can request deletion anytime.</Text>
 

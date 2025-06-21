@@ -6,12 +6,43 @@ import { ProgressBar } from 'react-native-paper';
 import { Ionicons } from '@expo/vector-icons';
 import { Context as UserContext } from '../context/UserContext';
 import { Context as ActivityContext } from '../context/ActivityContext';
+import ReusableButton from '../components/reusable/ReusableButton';  
 
 const ProgressTracker = ({ physioStreak }) => {  
   const { state: { user } } = useContext(UserContext);
   const { state: activityState } = useContext(ActivityContext);
   const accType = user?.acc_type?.toLowerCase() || 'physio';
   const [expectedPhysioSessions, setExpectedPhysioSessions] = useState(30);
+
+  const contentMap = {
+    'brace': {
+      title: "Today's Brace Wear",
+      description: "Ready to track your brace time? 🕒",
+      buttonText: "Log Brace Time",
+      icon: "time-outline",
+      buttonGradient: ["#B15EFF", "#EA6AB5"]
+    },
+    'physio': {
+      title: "Today's Physio",
+      description: "Ready to slay your exercises? 🔥",
+      buttonText: "Start Your Workout",
+      icon: "fitness-outline",
+      buttonGradient: ["#2B60EB", "#6172F6", "#756AF6"]
+    },
+    'brace + physio': {
+      title: "Today's Treatment",
+      description: "Time for your combined treatment plan! 💪",
+      buttonText: "Start Treatment Plan",
+      icon: "medkit-outline",
+      buttonGradient: ["#B15EFF", "#EA6AB5"]
+    },
+  };
+
+  // Fix accType to handle formatting variations
+  const normalizedAccType = accType.replace(/\s+/g, ' ').trim().toLowerCase();
+
+  // Get content for the current account type or use default
+  const content = contentMap[normalizedAccType] || contentMap['physio'];
 
   // Get today's date in YYYY-MM-DD format
   const today = new Date().toISOString().split('T')[0]; 
@@ -103,6 +134,18 @@ const ProgressTracker = ({ physioStreak }) => {
             <Text style={styles.progressText}>
               {completedPhysioSessions} / {expectedPhysioSessions} sessions
             </Text>
+            <HeightSpacer height={moderateScale(10)} />
+            <ReusableButton 
+              onPress={() => navigate("Tracking")}
+              btnText={content.buttonText}
+              textColor="#FFFFFF" 
+              width="100%" 
+              borderWidth={0} 
+              borderRadius={moderateScale(8)} 
+              borderColor="transparent"
+              useGradient={true}
+              gradientColors={content.buttonGradient}
+            />
           </View>
         );
       default:

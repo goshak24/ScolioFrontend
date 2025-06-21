@@ -247,7 +247,8 @@ const AchieveContent = ({ activeTab, streakDays, physioSessions, achievements, u
         return [
           ...metrics,
           { id: 'recovery', label: 'Recovery Tasks', value: surgeryTasks.completed || 0, max: surgeryTasks.total || 5, icon: 'checkbox' },
-          { id: 'walking', label: 'Daily Walking (min)', value: walkingMinutes || 0, max: 30, icon: 'walk' }
+          { id: 'walking', label: 'Daily Walking (min)', value: walkingMinutes || 0, max: 30, icon: 'walk' },
+          { id: 'physio', label: 'Physio Sessions', value: physioSessions || 0, max: 7, icon: 'fitness' }
         ];
       default:
         return [

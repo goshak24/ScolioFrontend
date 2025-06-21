@@ -19,6 +19,43 @@ const SurgeryProgressCard = () => {
     state: { checklistItems, plannedSurgeryDate },
     loadPreSurgeryData
   } = useContext(PreSurgeryContext);
+
+  const contentMap = {
+    'presurgery': {
+      title: "Pre-Surgery Preparation",
+      description: "Complete your pre-op checklist for a successful surgery 🏥",
+      buttonText: "View Pre-Op Checklist",
+      icon: "clipboard-outline",
+      buttonGradient: ["#3E9278", "#56C596"]
+    },
+    'pre-surgery': {
+      title: "Pre-Surgery Preparation",
+      description: "Complete your pre-op checklist for a successful surgery 🏥",
+      buttonText: "View Pre-Op Checklist",
+      icon: "clipboard-outline",
+      buttonGradient: ["#3E9278", "#56C596"]
+    },
+    'postsurgery': {
+      title: "Recovery Progress",
+      description: "Track your healing journey with gentle activities 🌱",
+      buttonText: "View Recovery Plan",
+      icon: "pulse-outline",
+      buttonGradient: ["#3E9278", "#56C596"]
+    },
+    'post-surgery': {
+      title: "Recovery Progress",
+      description: "Track your healing journey with gentle activities 🌱",
+      buttonText: "View Recovery Plan",
+      icon: "pulse-outline",
+      buttonGradient: ["#3E9278", "#56C596"]
+    }
+  };
+
+  // Fix accType to handle formatting variations
+  const normalizedAccType = accType.replace(/\s+/g, ' ').trim().toLowerCase();
+
+  // Get content for the current account type or use default
+  const content = contentMap[normalizedAccType] || contentMap['physio'];
   
   const accType = user?.acc_type?.toLowerCase() || '';
   const isPreSurgery = accType === 'presurgery' || accType === 'pre-surgery';
@@ -196,6 +233,18 @@ const SurgeryProgressCard = () => {
             progress={walkingMinutes / 30}
             color="#56C596"
             style={styles.progressBar}
+          />
+          <HeightSpacer height={moderateScale(10)} />
+          <ReusableButton 
+            onPress={() => navigate("Tracking")}
+            btnText={content.buttonText}
+            textColor="#FFFFFF" 
+            width="100%" 
+            borderWidth={0} 
+            borderRadius={moderateScale(8)} 
+            borderColor="transparent"
+            useGradient={true}
+            gradientColors={content.buttonGradient}
           />
         </View>
       )}

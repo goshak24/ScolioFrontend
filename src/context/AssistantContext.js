@@ -49,6 +49,8 @@ const assistantReducer = (state, action) => {
       return { ...state, loading: action.payload };
     case 'CLEAR_CURRENT_CONVERSATION':
       return { ...state, currentConversation: null };
+    case 'SET_DISCLAIMER_STATUS':
+      return { ...state, hasShownDisclaimer: action.payload };
     default:
       return state;
   }
@@ -183,6 +185,32 @@ const clearError = dispatch => () => {
   dispatch({ type: 'SET_ERROR', payload: null });
 };
 
+// Check if the disclaimer has been shown
+const checkDisclaimerStatus = dispatch => async () => {
+  try {
+    const value = await AsyncStorage.getItem('hasShownAIDisclaimer');
+    if (value === 'true') {
+      dispatch({ type: 'SET_DISCLAIMER_STATUS', payload: true });
+    } else {
+      dispatch({ type: 'SET_DISCLAIMER_STATUS', payload: false });
+    }
+  } catch (error) {
+    console.error('Error reading disclaimer status from AsyncStorage:', error);
+    // Default to not shown if there's an error
+    dispatch({ type: 'SET_DISCLAIMER_STATUS', payload: false });
+  }
+};
+
+// Set that the disclaimer has been shown
+const setDisclaimerShown = dispatch => async () => {
+  try {
+    await AsyncStorage.setItem('hasShownAIDisclaimer', 'true');
+    dispatch({ type: 'SET_DISCLAIMER_STATUS', payload: true });
+  } catch (error) {
+    console.error('Error setting disclaimer status in AsyncStorage:', error);
+  }
+};
+
 // Export the context and provider
 export const { Context, Provider } = createDataContext(
   assistantReducer,
@@ -192,12 +220,15 @@ export const { Context, Provider } = createDataContext(
     loadConversation,
     loadConversations,
     clearCurrentConversation,
-    clearError
+    clearError,
+    checkDisclaimerStatus,
+    setDisclaimerShown
   },
   {
     conversations: [],
     currentConversation: null,
     loading: false,
-    error: null
+    error: null,
+    hasShownDisclaimer: null
   }
 );
