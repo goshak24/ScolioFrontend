@@ -200,12 +200,14 @@ const FindDoctorsScreen = () => {
         </TouchableOpacity>
       </View>
 
-      <ReusableSearchBar 
-        placeholder="Search doctors, specialties..."
-        value={searchText}
-        onChangeText={handleSearchChange}
-        onClear={handleSearchClear}
-      />  
+      <View style={{ marginHorizontal: moderateScale(10) }}>
+        <ReusableSearchBar 
+          placeholder="Search doctors, specialties..."
+          value={searchText}
+          onChangeText={handleSearchChange}
+          onClear={handleSearchClear}
+        />  
+      </View>
 
       {/* View Toggle */}
       <View style={styles.viewToggleContainer}>

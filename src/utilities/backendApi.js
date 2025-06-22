@@ -29,7 +29,7 @@ const auth = initializeAuth(app, {
 });
 const storage = getStorage(app);
 
-const API_BASE_URL = 'https://c5ab-86-30-169-92.ngrok-free.app/api/'; // Remeber to push back notification controller days to not alert people of old notifications 
+const API_BASE_URL = 'https://5f85-86-30-169-92.ngrok-free.app/api/'; // Remeber to push back notification controller days to not alert people of old notifications 
 
 const api = axios.create({
   baseURL: API_BASE_URL,

@@ -34,6 +34,8 @@ import { Image } from "react-native";
 import { getCompleteUserData } from "../components/squad/getUserDataFromFriendsContext";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MDYformatTimestamp } from "../components/timeZoneHelpers";
+import GroupsInterface from "../components/squad/GroupsInterface";
+import ReusableSearchBar from "../components/reusable/ReusableSearchBar";
 
 const Squad = () => {
   const navigation = useNavigation();
@@ -515,10 +517,20 @@ const Squad = () => {
         </View>
 
         {/* Search Bar - Only show for Forums tab */}
-        {activeTab === "Forums" && (
+        {activeTab === "Forums" ? (
           <SearchBar 
             posts={ForumState.posts} 
             onSearchResults={handleSearchResults} 
+          />
+        ) : activeTab === "Messages" ? (
+          <ReusableSearchBar 
+            placeholder="Search messages"
+            onSearchResults={handleSearchResults}
+          />
+        ) : (
+          <ReusableSearchBar 
+            placeholder="Search groups"
+            onSearchResults={handleSearchResults}
           />
         )}
 
@@ -603,14 +615,7 @@ const Squad = () => {
           />
         )
       ) : (
-        // Groups Tab (placeholder)
-        <View style={styles.emptyContainer}>
-          <Ionicons name="people-circle" size={moderateScale(50)} color={COLORS.lightGray} />
-          <HeightSpacer height={10} />
-          <Text style={styles.emptyText}>Groups coming soon</Text>
-          <HeightSpacer height={10} />
-          <Text style={styles.emptySubtext}>This feature is under development</Text>
-        </View>
+        <GroupsInterface /> 
       )}
 
       {/* Create Post Modal */}
@@ -685,7 +690,7 @@ const styles = StyleSheet.create({
   },
   sectionHeader: {
     color: COLORS.white,
-    fontSize: moderateScale(16),
+    fontSize: moderateScale(18),
     fontWeight: "bold",
     marginTop: moderateScale(5),
   },

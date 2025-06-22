@@ -17,6 +17,7 @@ import Achieve from '../../screens/Achieve';
 import ProfileScreen from '../../screens/ProfileScreen'; 
 import FriendsScreen from '../../screens/FriendsScreen';
 import ChatScreen from '../../screens/ChatScreen';
+import GroupChatScreen from '../../screens/GroupChatScreen';
 
 import FindDoctorsScreen from '../../screens/FindDoctorsScreen';
 
@@ -61,6 +62,7 @@ const SquadStackScreens = () => {
       <SquadStack.Screen name="ForumPostScreen" component={ForumPostScreen} />
       <SquadStack.Screen name="FriendsScreen" component={FriendsScreen} />
       <SquadStack.Screen name="ChatScreen" component={ChatScreen} />
+      <SquadStack.Screen name="GroupChatScreen" component={GroupChatScreen} />
     </SquadStack.Navigator> 
   );
 };

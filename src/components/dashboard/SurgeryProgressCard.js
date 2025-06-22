@@ -8,6 +8,7 @@ import { Context as PostSurgeryContext } from '../../context/PostSurgeryContext'
 import { Context as PreSurgeryContext } from '../../context/PreSurgeryContext';
 import { ProgressBar } from 'react-native-paper';
 import HeightSpacer from '../reusable/HeightSpacer'; 
+import ReusableButton from '../reusable/ReusableButton';
 
 const SurgeryProgressCard = () => {
   const { state: { user } } = useContext(UserContext);
@@ -50,6 +51,7 @@ const SurgeryProgressCard = () => {
       buttonGradient: ["#3E9278", "#56C596"]
     }
   };
+  const accType = user?.acc_type?.toLowerCase() || '';
 
   // Fix accType to handle formatting variations
   const normalizedAccType = accType.replace(/\s+/g, ' ').trim().toLowerCase();
@@ -57,7 +59,6 @@ const SurgeryProgressCard = () => {
   // Get content for the current account type or use default
   const content = contentMap[normalizedAccType] || contentMap['physio'];
   
-  const accType = user?.acc_type?.toLowerCase() || '';
   const isPreSurgery = accType === 'presurgery' || accType === 'pre-surgery';
   const isPostSurgery = accType === 'postsurgery' || accType === 'post-surgery';
   

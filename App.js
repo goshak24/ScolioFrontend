@@ -22,6 +22,7 @@ import { configureServerCaching } from './src/utilities/backendApi';
 import { Provider as PainTrackingProvider } from './src/context/PainTrackingContext';
 import { Provider as AssistantProvider } from './src/context/AssistantContext';
 import { Provider as NotificationProvider } from './src/context/NotificationContext';
+import { Provider as GroupsProvider } from './src/context/GroupsContext';
 
 const RootStack = createStackNavigator(); 
 const AuthStack = createStackNavigator(); 
@@ -183,9 +184,11 @@ export default () => {
                     <MessagesProvider>
                       <PainTrackingProvider>
                         <AssistantProvider>
-                          <ContextConnector>
-                            <App />
-                          </ContextConnector>
+                          <GroupsProvider>
+                            <ContextConnector>
+                              <App />
+                            </ContextConnector>
+                          </GroupsProvider>
                         </AssistantProvider>
                       </PainTrackingProvider>
                     </MessagesProvider>

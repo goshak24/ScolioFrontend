@@ -10,8 +10,9 @@ import COLORS from '../../../constants/COLORS';
  * @param {string} messageText - The current message text
  * @param {Function} onChangeText - Function to handle text changes
  * @param {Function} onSendPress - Function to handle send button press
+ * @param {boolean} loading - Whether a message is being sent
  */
-const ChatInput = ({ messageText, onChangeText, onSendPress }) => {
+const ChatInput = ({ messageText, onChangeText, onSendPress, loading = false }) => {
   return (
     <View style={styles.inputContainer}>
       <TextInput
@@ -25,14 +26,14 @@ const ChatInput = ({ messageText, onChangeText, onSendPress }) => {
       <TouchableOpacity 
         style={styles.sendButton}
         onPress={onSendPress}
-        disabled={!messageText.trim()}
+        disabled={!messageText || !messageText.trim() || loading}
       >
         <LinearGradient
-          colors={[COLORS.gradientPurple, COLORS.gradientPink]}
+          colors={loading ? [COLORS.lightGray, COLORS.lightGray] : [COLORS.gradientPurple, COLORS.gradientPink]}
           style={styles.sendButtonGradient}
         >
           <Ionicons 
-            name="send" 
+            name={loading ? "hourglass-outline" : "send"} 
             size={moderateScale(20)} 
             color={COLORS.white} 
           />

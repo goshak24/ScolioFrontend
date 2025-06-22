@@ -66,16 +66,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: COLORS.cardDark,
-    paddingHorizontal: moderateScale(15),
-    paddingVertical: moderateScale(12),
-    borderRadius: moderateScale(12),
-    marginHorizontal: moderateScale(10),
+    padding: moderateScale(10),
+    borderRadius: moderateScale(10),
     marginBottom: moderateScale(15),
   },
   searchInput: {
     flex: 1,
     marginLeft: moderateScale(10),
     color: COLORS.white,
-    fontSize: moderateScale(14),
   },
 }); 
