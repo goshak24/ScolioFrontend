@@ -512,6 +512,46 @@ const sendFriendRequest = (dispatch) => async (receiverId, receiverData = null) 
   }
 };
 
+const sendFriendRequestUsername = (dispatch) => async (receiverUsername) => {
+  try {
+    const idToken = await AsyncStorage.getItem('idToken');
+    dispatch({ type: "SET_LOADING", payload: true });
+    const response = await api.post("/friends/request-name", { username: receiverUsername }, {
+      headers: {
+        'Authorization': `Bearer ${idToken}`
+      }
+    });
+    const { requestId, senderUsername, receiverUsername } = response.data;
+    dispatch({ 
+      type: "ADD_SENT_REQUEST", 
+      payload: { 
+        id: requestId, 
+        status: 'pending',
+        createdAt: new Date().toISOString(),
+        senderUsername, // Include sender username from backend
+        receiverUsername, // Include receiver username from backend
+        type: 'sent' // Explicitly mark as sent request
+      } 
+    });
+    return {
+      success: response.data.success,
+      message: response.data.message,
+      receiverUsername: response.data.receiverUsername, 
+      error: null
+    }
+  } catch (error) {
+    console.error("Error sending friend request by username:", error);
+    const errorMsg = error.response?.data?.error || "Failed to send friend request by username";
+    dispatch({ type: "SET_ERROR", payload: errorMsg });
+    return {
+      success: false,
+      error: errorMsg
+    };
+  } finally {
+    dispatch({ type: "SET_LOADING", payload: false });
+  }
+}
+
 // Respond to a friend request (updated to work with new backend response format)
 const respondToFriendRequest = (dispatch) => async (requestId, action) => {
   try {
@@ -637,6 +677,7 @@ export const { Provider, Context } = createDataContext(
     respondToFriendRequest, 
     removeFriend,
     getUserById,
+    sendFriendRequestUsername,
     clearFriendsCache
   },
   initialState

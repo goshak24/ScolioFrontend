@@ -21,6 +21,7 @@ import { Context as UserContext } from '../context/UserContext';
 import UserProfileModal from '../components/profile/UserProfileModal';
 import DirectMessageButton from '../components/messaging/DirectMessageButton';
 import Constants from 'expo-constants'; 
+import AddFriendModal from '../components/squad/AddFriendModal';
 
 const FriendsScreen = ({ navigation }) => {
     const { 
@@ -36,7 +37,8 @@ const FriendsScreen = ({ navigation }) => {
     const [activeTab, setActiveTab] = useState('friends'); // 'friends' or 'requests'
     const [profileModalVisible, setProfileModalVisible] = useState(false);
     const [selectedUserId, setSelectedUserId] = useState(null);
-    
+    const [showAddFriendModal, setShowAddFriendModal] = useState(false);
+
     // Local state to handle optimistic updates
     const [localFriends, setLocalFriends] = useState([]);
     const [localRequests, setLocalRequests] = useState([]);
@@ -370,7 +372,13 @@ const FriendsScreen = ({ navigation }) => {
                     <Ionicons name="chevron-back" size={moderateScale(24)} color={COLORS.white} />
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>Friends</Text>
-                <View style={styles.placeholderView} />
+                <TouchableOpacity style={styles.addFriendButton} onPress={() => setShowAddFriendModal(true)}>
+                    <Ionicons name="person-add" size={moderateScale(24)} color={COLORS.white} />
+                    <AddFriendModal
+                        visible={showAddFriendModal}
+                        onClose={() => setShowAddFriendModal(false)}
+                    />
+                </TouchableOpacity>
             </View>
 
             {/* Tab Navigation */}
@@ -482,8 +490,13 @@ const styles = StyleSheet.create({
         fontSize: moderateScale(22),
         fontWeight: 'bold',
     },
-    placeholderView: {
-        width: moderateScale(24), // Same width as the back button for alignment
+    addFriendButton: {
+        width: moderateScale(30), // Same width as the back button for alignment
+        height: moderateScale(30),
+        justifyContent: 'center',   
+        alignItems: 'center',
+        borderRadius: moderateScale(15),
+        marginRight: moderateScale(10),
     },
     tabContainer: {
         flexDirection: 'row',

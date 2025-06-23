@@ -27,7 +27,7 @@ import HeightSpacer from '../components/reusable/HeightSpacer';
 const GroupChatScreen = () => {
   const navigation = useNavigation();
   const route = useRoute();
-  const { groupId } = route.params;
+  const { groupId } = route.params; 
   
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -207,6 +207,7 @@ const GroupChatScreen = () => {
     <View style={styles.groupInfoContainer}>
       <Text style={styles.groupName}>{groupDetails?.name}</Text>
       <Text style={styles.groupDescription}>{groupDetails?.description}</Text>
+      <Text style={styles.groupDescription}>Group ID: {groupId}</Text>
       <View style={styles.groupStats}>
         <View style={styles.statItem}>
           <Ionicons name="people" size={moderateScale(16)} color={COLORS.lightGray} />

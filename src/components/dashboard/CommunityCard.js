@@ -11,7 +11,8 @@ const CommunityCard = () => {
     <View style={styles.card}>
       <Text style={styles.title}>💚 Community Vibes</Text>
       <Text style={styles.description}>
-        Jade just hit a 30-day physio streak! Drop her some love in the community tab.
+        Connect with others and share your journey.
+        Featuring New Groups Feature! 
       </Text>
       <HeightSpacer height={moderateScale(5)} />
       <ReusableButton 

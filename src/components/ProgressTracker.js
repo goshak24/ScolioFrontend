@@ -7,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Context as UserContext } from '../context/UserContext';
 import { Context as ActivityContext } from '../context/ActivityContext';
 import ReusableButton from '../components/reusable/ReusableButton';  
+import { navigate } from './navigation/navigationRef';
 
 const ProgressTracker = ({ physioStreak }) => {  
   const { state: { user } } = useContext(UserContext);

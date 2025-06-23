@@ -1,5 +1,5 @@
 import createDataContext from "./createDataContext";
-import { extendStreak, logPhysioSession, updateWornHours, incrementWalkingMinutes } from "./UserFunctionsHelper";
+import { extendStreak, logPhysioSession, updateWornHours, incrementWalkingMinutes, initializeTreatmentData } from "./UserFunctionsHelper";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Instead of importing UserContext, we'll use a reference variable
@@ -302,11 +302,49 @@ const resetDailyBraceHours = (dispatch) => async () => {
     }
 };
 
+// Initialize treatment data function
+const initializeTreatmentDataAction = (dispatch) => async (accountType = 'brace') => {
+    try {
+        dispatch({ type: "SET_LOADING", payload: true });
+        const idToken = await getToken();
+        if (!idToken) {
+            throw new Error('No authentication token found');
+        }
+
+        const result = await initializeTreatmentData(idToken, accountType);
+        
+        if (result.success) {
+            console.log("Treatment data initialized successfully");
+            dispatch({ type: "SET_LOADING", payload: false });
+            return result;
+        } else {
+            dispatch({ type: "SET_ERROR", payload: result.error });
+            return result;
+        }
+    } catch (error) {
+        const errorMessage = error.message || "Failed to initialize treatment data";
+        dispatch({ type: "SET_ERROR", payload: errorMessage });
+        return { success: false, error: errorMessage };
+    }
+};
+
 // Initialize brace tracking on app start 
-const initBraceTracking = (dispatch) => async () => {
+const initBraceTracking = (dispatch) => async (accountType = 'brace') => {
     try {
         // Reset daily brace hours when the app initializes
         await resetDailyBraceHours(dispatch)();
+        
+        // Try to initialize treatment data silently (don't show errors if it already exists)
+        const idToken = await getToken();
+        if (idToken) {
+            try {
+                await initializeTreatmentData(idToken, accountType);
+                console.log("Treatment data initialization attempted");
+            } catch (initError) {
+                // Silently fail - treatment data might already exist
+                console.log("Treatment data might already exist, continuing...");
+            }
+        }
     } catch (error) {
         console.error("Error initializing brace tracking:", error);
     }
@@ -323,7 +361,8 @@ export const { Provider, Context } = createDataContext(
         setUserContextFunctions,
         resetDailyBraceHours,
         initBraceTracking, 
-        incrementDailyWalkingMinutes 
+        incrementDailyWalkingMinutes,
+        initializeTreatmentDataAction
     },
     { 
         streaks: null,

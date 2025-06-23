@@ -34,8 +34,11 @@ const BraceTrackerInterface = ({
   
   // Initialize brace tracking when component mounts
   useEffect(() => {
-    // Reset brace hours in both contexts if it's a new day
-    initBraceTracking();
+    // Determine account type from user data
+    const accountType = UserState.user?.userAccType?.toLowerCase() || UserState.user?.acc_type?.toLowerCase() || 'brace';
+    
+    // Reset brace hours in both contexts if it's a new day and initialize treatment data
+    initBraceTracking(accountType);
     resetDailyBraceHours(); 
   }, []);
 

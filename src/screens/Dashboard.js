@@ -98,20 +98,22 @@ const Dashboard = () => {
             
             {/* Only show BraceTimeCard for brace-related accounts */}
             {/*{isBraceRelated && <BraceTimeCard />} */} 
-
-
             
             {/* Only show ProgressTracker for non-surgery accounts */}
             {!isSurgeryRelated && <ProgressTracker physioStreak={user?.streaks} />}
 
-            <DoctorsHubCard />
+            <CommunityCard />
+
+            <PainTrackerSummary painLog={getMostRecentPainLog()} />
+
+            <AICompanionCard />
             
             {/*<TrendingFeed />*/}
-            <PainTrackerSummary painLog={getMostRecentPainLog()} />
             
-            <AICompanionCard />
+            <DoctorsHubCard />
+            
             {/*<DailyTipCard />*/}
-            <CommunityCard />
+            
           </View>
         </ScrollView>
       </SafeAreaView>
