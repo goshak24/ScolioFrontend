@@ -94,65 +94,10 @@ export const logPhysioSession = async (idToken, date = null) => {
     } catch (error) {
         console.error('Physio log error:', error.response?.data || error.message);
         
-        // If we get a 404 error (treatment data not found), try to initialize treatment data first
-        if (error.response?.status === 404 && error.response?.data?.error?.includes('Treatment data not found')) {
-            console.log('Treatment data not found, attempting to initialize...');
-            try {
-                const initResult = await initializeTreatmentData(idToken, 'physio');
-                if (initResult.success) {
-                    console.log('Treatment data initialized, retrying physio log...');
-                    // Retry the original request
-                    const retryResponse = await api.post(
-                        '/users/log-physio',
-                        requestBody,
-                        {
-                            headers: {
-                                'Authorization': `Bearer ${idToken}`
-                            }
-                        }
-                    );
-                    
-                    return {
-                        success: true,
-                        newPhysioCount: retryResponse.data.newPhysioCount,
-                        achievements: retryResponse.data.badges || {},
-                        newAchievements: retryResponse.data.newBadges || {},
-                        date: retryResponse.data.date,
-                        totalSessionsForDate: retryResponse.data.totalSessionsForDate || 1
-                    };
-                }
-            } catch (initError) {
-                console.error('Failed to initialize treatment data:', initError);
-            }
-        }
-        
         return {
             success: false,
             error: error.response?.data?.error || 'Failed to log physio session'
         };
-    }
-};
-
-export const initializeTreatmentData = async (idToken, accountType = 'brace') => {
-    try {
-        const response = await api.post(
-            "/users/initialize-treatment", 
-            { accountType },
-            {
-                headers: {
-                    'Authorization': `Bearer ${idToken}`
-                }
-            }
-        );
-        
-        return {
-            success: true,
-            message: response.data.message || "Treatment data initialized successfully"
-        };
-    } catch (error) {
-        const errorMessage = error.response?.data?.message || error.message || "Failed to initialize treatment data";
-        console.error('Initialize treatment data error:', errorMessage);
-        return { success: false, error: errorMessage };
     }
 };
 

@@ -33,6 +33,7 @@ import SignIn from "./src/screens/AuthFlow/SignIn/SignIn";
 import SignUp1 from "./src/screens/AuthFlow/SignUp/SignUp1"; 
 import LoadingScreen from "./src/screens/LoadingScreen";
 import SignUp2 from "./src/screens/AuthFlow/SignUp/SignUp2";
+import ForgotPassword from "./src/screens/AuthFlow/ForgotPassword";
 
 import * as Notifications from 'expo-notifications';
 import { registerForPushNotificationsAsync } from "./src/utilities/notifications";
@@ -44,6 +45,7 @@ const AuthStackScreens = () => {
       <AuthStack.Screen name="SignIn" component={SignIn} />
       <AuthStack.Screen name="SignUp1" component={SignUp1} />
       <AuthStack.Screen name="SignUp2" component={SignUp2} />
+      <AuthStack.Screen name="ForgotPassword" component={ForgotPassword} />
     </AuthStack.Navigator>
   );
 };

@@ -9,6 +9,7 @@ import { Context as PreSurgeryContext } from '../../context/PreSurgeryContext';
 import { ProgressBar } from 'react-native-paper';
 import HeightSpacer from '../reusable/HeightSpacer'; 
 import ReusableButton from '../reusable/ReusableButton';
+import { navigate } from '../navigation/navigationRef';
 
 const SurgeryProgressCard = () => {
   const { state: { user } } = useContext(UserContext);

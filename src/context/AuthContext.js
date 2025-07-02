@@ -287,24 +287,10 @@ const resetPassword = (dispatch) => async (email) => {
     try {
         dispatch({ type: "SET_LOADING", payload: true });
         
-        // Get the user's ID token
-        const idToken = await AsyncStorage.getItem("idToken");
-        if (!idToken) {
-            return { 
-                success: false, 
-                error: "Not authenticated. Please log in again." 
-            };
-        }
-        
         // Send request with token in header and email in body
         const response = await api.post(
             "/auth/reset-password", 
             { email },
-            { 
-                headers: { 
-                    Authorization: `Bearer ${idToken}` 
-                } 
-            }
         );
 
         console.log("Password reset email sent:", response.data.message); 

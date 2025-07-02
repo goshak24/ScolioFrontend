@@ -169,6 +169,7 @@ const SignIn = () => {
             onPress={() => navigate("SignUp1")} 
           > Sign Up</Text> 
         </Text> 
+        <Text style={styles.forgotPasswordText} onPress={() => navigate("ForgotPassword")}>Forgot your password?</Text>
           </View>
       </View>
     </SafeAreaView>
@@ -228,5 +229,11 @@ const styles = StyleSheet.create({
     textAlign: 'center', 
     fontSize: moderateScale(14),
     marginBottom: moderateScale(5),
+  },
+  forgotPasswordText: {
+    color: COLORS.pinkButtons,
+    fontSize: moderateScale(14),
+    marginTop: moderateScale(10),
+    textDecorationLine: 'underline',
   },
 });
