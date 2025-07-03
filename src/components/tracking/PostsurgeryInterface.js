@@ -87,13 +87,13 @@ const PostsurgeryInterface = ({ surgeryData = {}, physioData = {}, showSuccess, 
     };
     
     loadData();
-  }, []);
+  }, []); 
   
   // Get surgery date from user data and update days since surgery
   useEffect(() => {
     // Extract surgery date from user data if available
-    if (user?.treatmentData?.surgery?.date) {
-      const surgeryDateFromUser = user.treatmentData.surgery.date;
+    if (user?.treatmentData?.surgery?.surgeryDate || user?.treatmentData?.surgery?.date) {
+      const surgeryDateFromUser = user.treatmentData.surgery.surgeryDate || user.treatmentData.surgery.date;
       
       // Only update if the date has changed
       if (surgeryDateFromUser !== actualSurgeryDate) {

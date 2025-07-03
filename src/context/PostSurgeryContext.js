@@ -15,6 +15,7 @@ const defaultRecoveryTasks = [
 // Storage keys
 const TASKS_STORAGE_KEY = 'recoveryTasks';
 const CUSTOM_TASKS_STORAGE_KEY = 'customRecoveryTasks';
+const DELETED_DEFAULT_TASKS_KEY = 'deletedDefaultTasks'; // NEW: Track deleted default tasks
 const LAST_RESET_DATE_KEY = 'lastRecoveryTasksResetDate';
 const LAST_WALKING_RESET_DATE_KEY = 'lastWalkingResetDate';
 const SURGERY_DATE_KEY = 'surgeryDate';
@@ -70,6 +71,20 @@ const getNextTaskId = async () => {
   } catch (error) {
     console.error('Error getting next task ID:', error);
     return Date.now(); // Fallback to timestamp
+  }
+};
+
+// NEW: Helper function to get active default tasks (excluding deleted ones)
+const getActiveDefaultTasks = async () => {
+  try {
+    const deletedDefaultTasksJSON = await AsyncStorage.getItem(DELETED_DEFAULT_TASKS_KEY);
+    const deletedDefaultTaskIds = deletedDefaultTasksJSON ? JSON.parse(deletedDefaultTasksJSON) : [];
+    
+    // Filter out deleted default tasks
+    return defaultRecoveryTasks.filter(task => !deletedDefaultTaskIds.includes(task.id));
+  } catch (error) {
+    console.error('Error getting active default tasks:', error);
+    return defaultRecoveryTasks; // Fallback to all default tasks
   }
 };
 
@@ -223,7 +238,7 @@ const loadRecoveryData = (dispatch) => async () => {
       }
     }
 
-    // --- Recovery task reset logic ---
+    // --- Recovery task reset logic (MODIFIED) ---
     const lastResetDate = await AsyncStorage.getItem(LAST_RESET_DATE_KEY);
     let recoveryTasks = [];
     
@@ -231,12 +246,15 @@ const loadRecoveryData = (dispatch) => async () => {
       // New day - reset all task completion status
       console.log('New day detected, resetting all task completion status');
       
+      // Get active default tasks (excluding permanently deleted ones)
+      const activeDefaultTasks = await getActiveDefaultTasks();
+      
       // Load custom tasks
       const customTasksJSON = await AsyncStorage.getItem(CUSTOM_TASKS_STORAGE_KEY);
       const customTasks = customTasksJSON ? JSON.parse(customTasksJSON) : [];
       
       // Reset all tasks to uncompleted
-      const resetDefaultTasks = defaultRecoveryTasks.map(task => ({ ...task, completed: false }));
+      const resetDefaultTasks = activeDefaultTasks.map(task => ({ ...task, completed: false }));
       const resetCustomTasks = customTasks.map(task => ({ ...task, completed: false }));
       recoveryTasks = [...resetDefaultTasks, ...resetCustomTasks];
       
@@ -252,9 +270,10 @@ const loadRecoveryData = (dispatch) => async () => {
         // Load from saved tasks (includes completion status)
         recoveryTasks = JSON.parse(savedTasksJSON);
       } else {
-        // Fallback: merge default and custom tasks
+        // Fallback: merge active default and custom tasks
+        const activeDefaultTasks = await getActiveDefaultTasks();
         const customTasks = customTasksJSON ? JSON.parse(customTasksJSON) : [];
-        recoveryTasks = [...defaultRecoveryTasks, ...customTasks];
+        recoveryTasks = [...activeDefaultTasks, ...customTasks];
       }
     }
 
@@ -360,17 +379,29 @@ const deleteCustomTask = (dispatch) => async (taskId) => {
   try {
     dispatch({ type: "SET_LOADING", payload: true });
     
-    // Don't allow deletion of default tasks (IDs 1-5)
+    // MODIFIED: Handle deletion of default tasks by marking them as permanently deleted
     if (taskId <= 5) {
-      defaultTasksJSON = await AsyncStorage.getItem(TASKS_STORAGE_KEY);
-      defaultTasks = defaultTasksJSON ? JSON.parse(defaultTasksJSON) : [];
-      defaultTasks = defaultTasks.filter(task => task.id !== taskId);
-      await AsyncStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(defaultTasks));
+      // Get current deleted default tasks list
+      const deletedDefaultTasksJSON = await AsyncStorage.getItem(DELETED_DEFAULT_TASKS_KEY);
+      const deletedDefaultTasks = deletedDefaultTasksJSON ? JSON.parse(deletedDefaultTasksJSON) : [];
+      
+      // Add this task ID to the deleted list if not already there
+      if (!deletedDefaultTasks.includes(taskId)) {
+        deletedDefaultTasks.push(taskId);
+        await AsyncStorage.setItem(DELETED_DEFAULT_TASKS_KEY, JSON.stringify(deletedDefaultTasks));
+      }
+      
+      // Remove from current tasks
+      const defaultTasksJSON = await AsyncStorage.getItem(TASKS_STORAGE_KEY);
+      const defaultTasks = defaultTasksJSON ? JSON.parse(defaultTasksJSON) : [];
+      const updatedTasks = defaultTasks.filter(task => task.id !== taskId);
+      await AsyncStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(updatedTasks));
 
-      dispatch({ type: "UPDATE_RECOVERY_TASKS", payload: defaultTasks });
+      dispatch({ type: "UPDATE_RECOVERY_TASKS", payload: updatedTasks });
       return { success: true };
     }
     
+    // Handle custom task deletion (unchanged)
     // Get current custom tasks and remove the task
     const customTasksJSON = await AsyncStorage.getItem(CUSTOM_TASKS_STORAGE_KEY);
     const customTasks = customTasksJSON ? JSON.parse(customTasksJSON) : [];
@@ -491,14 +522,18 @@ const isRecoveryChecklistCompleteForDate = (dispatch) => async (date = null) => 
     if (savedTasksJSON) {
       currentTasks = JSON.parse(savedTasksJSON);
     } else {
-      // If no saved tasks, load default and custom tasks
+      // If no saved tasks, load active default and custom tasks
+      const activeDefaultTasks = await getActiveDefaultTasks();
       const customTasksJSON = await AsyncStorage.getItem(CUSTOM_TASKS_STORAGE_KEY);
       const customTasks = customTasksJSON ? JSON.parse(customTasksJSON) : [];
-      currentTasks = [...defaultRecoveryTasks, ...customTasks];
+      currentTasks = [...activeDefaultTasks, ...customTasks];
     }
     
     // Check if all tasks are completed
-    const allTasksCompleted = currentTasks.length > 0 && currentTasks.every(task => task.completed === true);
+    if (currentTasks.length === 0) {
+      return true;
+    }
+    const allTasksCompleted = currentTasks.every(task => task.completed === true);
     
     console.log('Recovery checklist completion check:', {
       targetDate,
@@ -518,6 +553,28 @@ const isRecoveryChecklistCompleteForDate = (dispatch) => async (date = null) => 
   }
 };
 
+// NEW: Function to restore deleted default tasks (optional, for user convenience)
+const restoreDeletedDefaultTasks = (dispatch) => async () => {
+  try {
+    dispatch({ type: "SET_LOADING", payload: true });
+    
+    // Clear the deleted default tasks list
+    await AsyncStorage.removeItem(DELETED_DEFAULT_TASKS_KEY);
+    
+    // Reload recovery data to include all default tasks again
+    await loadRecoveryData(dispatch)();
+    
+    return { success: true };
+  } catch (error) {
+    console.error('Error restoring deleted default tasks:', error);
+    dispatch({ 
+      type: "SET_ERROR", 
+      payload: error.message || "Failed to restore deleted default tasks" 
+    });
+    return { success: false, error: error.message };
+  }
+};
+
 export const { Provider, Context } = createDataContext(
   postSurgeryReducer,
   { 
@@ -529,6 +586,7 @@ export const { Provider, Context } = createDataContext(
     deleteCustomTask,
     editCustomTask,
     isRecoveryChecklistCompleteForDate,
+    restoreDeletedDefaultTasks, // NEW: Optional function to restore deleted defaults
   },
   { 
     recoveryTasks: defaultRecoveryTasks,

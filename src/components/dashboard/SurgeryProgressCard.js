@@ -65,7 +65,7 @@ const SurgeryProgressCard = () => {
   
   const [daysSince, setDaysSince] = useState(0);
   const [daysUntil, setDaysUntil] = useState(0);
-  const [actualSurgeryDate, setActualSurgeryDate] = useState('');
+  const [actualSurgeryDate, setActualSurgeryDate] = useState(''); 
   
   // Calculate days until or since surgery
   const calculateSurgeryDays = () => {
@@ -139,8 +139,8 @@ const SurgeryProgressCard = () => {
   
   // Update days since surgery from user data
   useEffect(() => {
-    if (isPostSurgery && user?.treatmentData?.surgery?.date) {
-      const surgeryDateFromUser = user.treatmentData.surgery.date;
+    if (isPostSurgery && (user?.treatmentData?.surgery?.surgeryDate || user?.treatmentData?.surgery?.date)) {
+      const surgeryDateFromUser = user.treatmentData.surgery.surgeryDate || user.treatmentData.surgery.date;
       // Only update if the date has changed
       if (surgeryDateFromUser !== actualSurgeryDate) {
         setActualSurgeryDate(surgeryDateFromUser);
@@ -153,11 +153,11 @@ const SurgeryProgressCard = () => {
 
   // Update days until surgery when planned surgery date changes
   useEffect(() => {
-    if (isPreSurgery && plannedSurgeryDate) {
-      const calculatedDaysUntil = calculateDaysUntilSurgery(plannedSurgeryDate);
+    if (isPreSurgery && (user?.treatmentData?.surgery?.surgeryDate || user?.treatmentData?.surgery?.date)) {
+      const calculatedDaysUntil = calculateDaysUntilSurgery(user?.treatmentData?.surgery?.surgeryDate || user?.treatmentData?.surgery?.date);
       setDaysUntil(calculatedDaysUntil);
     }
-  }, [isPreSurgery, plannedSurgeryDate]);
+  }, [isPreSurgery, user]);
   
   // Load data from context when component mounts
   useEffect(() => {
@@ -255,7 +255,7 @@ const SurgeryProgressCard = () => {
       {isPreSurgery && (
         <View style={styles.infoSection}>
           <Text style={styles.infoLabel}>
-            Your surgery is scheduled for: <Text style={styles.infoValue}>{plannedSurgeryDate}</Text>
+            Your surgery is scheduled for: <Text style={styles.infoValue}>{user?.treatmentData?.surgery?.surgeryDate || user?.treatmentData?.surgery?.date}</Text>
           </Text>
         </View>
       )} 

@@ -9,6 +9,7 @@ import {
   SurgeryInfo
 } from '../pre-surgery'
 import { Context as PreSurgeryContext } from '../../context/PreSurgeryContext'
+import { Context as UserContext } from '../../context/UserContext'
 
 // Default checklist items
 const defaultChecklistItems = [
@@ -55,6 +56,8 @@ const PresurgeryInterface = ({ surgeryData = {} }) => {
     updateChecklistItems,
     setPlannedSurgeryDate
   } = useContext(PreSurgeryContext);
+
+  const { state: { user } } = useContext(UserContext);
   
   // Get surgery data with defaults if not provided
   const [surgeryTime, setSurgeryTime] = useState(surgeryData?.time || '8:00 AM');
@@ -67,9 +70,9 @@ const PresurgeryInterface = ({ surgeryData = {} }) => {
   
   // Calculate days until surgery and update state
   useEffect(() => {
-    const days = calculateDaysDifference(plannedSurgeryDate);
+    const days = calculateDaysDifference(user?.treatmentData?.surgery?.surgeryDate || user?.treatmentData?.surgery?.date);
     setDaysUntilSurgery(days);
-  }, [plannedSurgeryDate]);
+  }, [user]);
   
   // Load saved data on mount
   useEffect(() => {
@@ -106,7 +109,7 @@ const PresurgeryInterface = ({ surgeryData = {} }) => {
       <HeightSpacer height={moderateScale(15)} />
 
       <SurgeryInfo
-        date={plannedSurgeryDate}
+        date={user?.treatmentData?.surgery?.surgeryDate || user?.treatmentData?.surgery?.date}
         time={surgeryTime}
         hospital={hospital}
         surgeon={surgeon}
