@@ -3,7 +3,7 @@ export default {
   primaryPurple: "#7c3aed", // Violet-600 (slightly deeper)
   gradientPurple: "#7c3aed", // Violet-600 (gradient start)
   backgroundPurple: "#4c1d95", // Purple-900 (darker, more professional)
-  gradientPink: "#06b6d4", // Cyan-500 (replaces pink)
+  gradientPink: "#ec4899", // Cyan-500 (replaces pink)
   darkBackground: "#0f0f23", // Deep navy-purple
   lightPurple: "#a78bfa", // Violet-300 (softer)
   lightGray: "#9ca3af", // Gray-400 (keep same)
@@ -42,7 +42,7 @@ const lightColors = {
   primaryPurple: "#8b5cf6", // Violet-500 (brighter for light backgrounds)
   gradientPurple: "#8b5cf6", // Violet-500 (gradient start)
   backgroundPurple: "#f3f4f6", // Gray-100 (light background)
-  gradientPink: "#0891b2", // Cyan-600 (darker cyan for contrast)
+  gradientPink: "#ec4899", // Cyan-600 (darker cyan for contrast)
   darkBackground: "#ffffff", // White background
   lightPurple: "#ddd6fe", // Violet-200 (very light purple)
   lightGray: "#6b7280", // Gray-500 (darker for contrast)

@@ -21,21 +21,21 @@ const ProgressTracker = ({ physioStreak }) => {
       description: "Ready to track your brace time? 🕒",
       buttonText: "Log Brace Time",
       icon: "time-outline",
-      buttonGradient: ["#B15EFF", "#EA6AB5"]
+      buttonGradient: [COLORS.gradientPurple, COLORS.gradientPink]
     },
     'physio': {
       title: "Today's Physio",
       description: "Ready to slay your exercises? 🔥",
       buttonText: "Start Your Workout",
       icon: "fitness-outline",
-      buttonGradient: ["#2B60EB", "#6172F6", "#756AF6"]
+      buttonGradient: [COLORS.gradientPurple, COLORS.gradientPink]
     },
     'brace + physio': {
       title: "Today's Treatment",
       description: "Time for your combined treatment plan! 💪",
       buttonText: "Start Treatment Plan",
       icon: "medkit-outline",
-      buttonGradient: ["#B15EFF", "#EA6AB5"]
+      buttonGradient: [COLORS.gradientPurple, COLORS.gradientPink]
     },
   };
 
@@ -43,7 +43,7 @@ const ProgressTracker = ({ physioStreak }) => {
   const normalizedAccType = accType.replace(/\s+/g, ' ').trim().toLowerCase();
 
   // Get content for the current account type or use default
-  const content = contentMap[normalizedAccType] || contentMap['physio'];
+  const content = contentMap[normalizedAccType] || contentMap['physio']; 
 
   // Get today's date in YYYY-MM-DD format
   const today = new Date().toISOString().split('T')[0]; 
@@ -109,6 +109,18 @@ const ProgressTracker = ({ physioStreak }) => {
             <Text style={styles.progressText}>
               Physio sessions: {completedPhysioSessions} / {expectedPhysioSessions} sessions
             </Text>
+            <HeightSpacer height={moderateScale(10)} />
+            <ReusableButton 
+              onPress={() => navigate("Tracking")}
+              btnText={content.buttonText}
+              textColor="#FFFFFF" 
+              width="100%" 
+              borderWidth={0} 
+              borderRadius={moderateScale(8)} 
+              borderColor="transparent"
+              useGradient={true}
+              gradientColors={content.buttonGradient}
+            />
           </View>
         );
       case 'brace + physio':

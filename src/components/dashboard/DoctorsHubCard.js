@@ -17,6 +17,7 @@ const DoctorsHubCard = () => {
       <ReusableButton 
         btnText="Find doctors"
         onPress={() => navigate("FindDoctors")}
+        gradientColors={[COLORS.tabActiveStart, COLORS.tabActiveEnd]}
         textColor={COLORS.white}
         width="100%"
         borderWidth={0}

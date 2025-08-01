@@ -239,15 +239,15 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
   metricsContainer: {
-    flexDirection: 'row',
+    flexDirection: 'row', 
+    justifyContent: 'space-between',
     marginBottom: moderateScale(15),
   },
   metricItem: {
-    flex: 1,
+    width: '48%',
     backgroundColor: '#1F2937',
     borderRadius: moderateScale(10),
-    padding: moderateScale(10),
-    marginHorizontal: moderateScale(3),
+    padding: moderateScale(10), 
   },
   metricIcon: {
     marginBottom: moderateScale(5),

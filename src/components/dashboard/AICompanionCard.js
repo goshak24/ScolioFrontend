@@ -16,6 +16,7 @@ const AICompanionCard = () => {
       <HeightSpacer height={moderateScale(5)} />
       <ReusableButton 
         btnText="Spill the tea"
+        gradientColors={[COLORS.tabActiveStart, COLORS.tabActiveEnd]}
         onPress={() => navigate("AI")}
         textColor={COLORS.white}
         width="100%"
