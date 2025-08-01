@@ -1,6 +1,7 @@
 import React, { useState, useContext, useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { moderateScale } from 'react-native-size-matters';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import COLORS from '../../constants/COLORS';
 import HeightSpacer from '../reusable/HeightSpacer';
 import ReusableButton from '../reusable/ReusableButton';
@@ -18,9 +19,11 @@ const BraceTrackerInterface = ({
   isStreakAnimationActive = false,
   onNewBadgeEarned = () => {} // Keep for compatibility but handle locally
 }) => {
-  const { state, updateBraceWornHours, initBraceTracking } = useContext(ActivityContext); 
+  const { state, updateBraceWornHours, initBraceTracking, getPersistentTimerStatus, clearPersistentTimerData } = useContext(ActivityContext); 
   const { state: UserState, resetDailyBraceHours } = useContext(UserContext); 
   const [timerOn, setTimerOn] = useState(false);
+  const [timerPersistentlyRunning, setTimerPersistentlyRunning] = useState(false);
+  const [persistentTimerData, setPersistentTimerData] = useState(null);
   const [progressColor, setProgressColor] = useState(COLORS.primaryPurple);
   const goalAchievedToday = useRef(false);
   
@@ -32,6 +35,11 @@ const BraceTrackerInterface = ({
   // Get today's date in YYYY-MM-DD format
   const today = new Date().toISOString().split('T')[0];
   
+  // Check if timer is persistently running on mount
+  useEffect(() => {
+    checkPersistentTimerState();
+  }, []);
+  
   // Initialize brace tracking when component mounts
   useEffect(() => {
     // Determine account type from user data
@@ -41,6 +49,34 @@ const BraceTrackerInterface = ({
     initBraceTracking(accountType);
     resetDailyBraceHours(); 
   }, []);
+
+  // Check if timer is running persistently using context function
+  const checkPersistentTimerState = async () => {
+    try {
+      const timerStatus = await getPersistentTimerStatus();
+      
+      console.log('Persistent timer status:', timerStatus);
+      
+      if (timerStatus.isToday) {
+        if (timerStatus.isRunning) {
+          setTimerPersistentlyRunning(true);
+          setTimerOn(true); // Show timer if it's running
+          console.log('Timer is actively running');
+        } else if (timerStatus.totalElapsed > 0) {
+          setTimerPersistentlyRunning(false);
+          console.log('Timer has paused session with', timerStatus.totalElapsed, 'seconds elapsed');
+          // Could show timer here too if user wants to continue session
+        }
+        setPersistentTimerData(timerStatus);
+      } else {
+        setTimerPersistentlyRunning(false);
+        setPersistentTimerData(null);
+        console.log('No persistent timer found for today');
+      }
+    } catch (error) {
+      console.error('Error checking persistent timer state:', error);
+    }
+  };
 
   // Handle showing pending badges when streak animation completes
   useEffect(() => {
@@ -112,6 +148,15 @@ const BraceTrackerInterface = ({
         goalAchievedToday.current = true;
         onActivityComplete('brace');
       }
+
+      // Reset persistent timer state since time was saved
+      setTimerPersistentlyRunning(false);
+      setPersistentTimerData(null);
+      
+      // Re-check timer state after save
+      setTimeout(() => {
+        checkPersistentTimerState();
+      }, 500);
     } catch (error) {
       console.error('Error in handleTimeSaved:', error);
     }
@@ -176,6 +221,17 @@ const BraceTrackerInterface = ({
 
   const recentHistory = getRecentHistory();
 
+  // Handle timer toggle with persistent state awareness
+  const handleTimerToggle = async () => {
+    if (timerOn) {
+      setTimerOn(false);
+    } else {
+      setTimerOn(true);
+      // Re-check timer state when showing
+      await checkPersistentTimerState();
+    }
+  };
+
   return (
     <View style={styles.container}>
       {/* Success Message */}
@@ -209,6 +265,34 @@ const BraceTrackerInterface = ({
       <View style={styles.card}>
         <Text style={styles.headerText}>Brace Tracker</Text>
 
+        {/* Show persistent timer indicator */}
+        {timerPersistentlyRunning && !timerOn && (
+          <View style={styles.persistentTimerIndicator}>
+            <Text style={styles.persistentTimerText}>⏱️ Timer is running in background</Text>
+            <TouchableOpacity 
+              style={styles.showTimerBtn}
+              onPress={() => setTimerOn(true)}
+            >
+              <Text style={styles.showTimerBtnText}>Show Timer</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Show paused session indicator */}
+        {!timerPersistentlyRunning && !timerOn && persistentTimerData?.totalElapsed > 0 && (
+          <View style={styles.pausedSessionIndicator}>
+            <Text style={styles.pausedSessionText}>
+              ⏸️ Paused session: {(persistentTimerData.totalElapsed / 3600).toFixed(2)} hours
+            </Text>
+            <TouchableOpacity 
+              style={styles.resumeSessionBtn}
+              onPress={() => setTimerOn(true)}
+            >
+              <Text style={styles.resumeSessionBtnText}>Resume</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         <Text style={styles.progressText}>Daily Brace Wear</Text>
         <ProgressBar
           progress={wornTodayHours / expectedWearingHours}
@@ -231,14 +315,23 @@ const BraceTrackerInterface = ({
         <HeightSpacer height={moderateScale(10)} />
 
         <ReusableButton
-          btnText={timerOn ? "Hide Timer" : "▶ Start Timer"}
-          backgroundColor={COLORS.primaryPurple}
+          btnText={
+            timerOn ? "Hide Timer" : 
+            timerPersistentlyRunning ? "Show Timer" : 
+            persistentTimerData?.totalElapsed > 0 ? "Resume Timer" : 
+            "▶ Start Timer"
+          }
+          backgroundColor={
+            timerPersistentlyRunning && !timerOn ? COLORS.accentOrange : 
+            persistentTimerData?.totalElapsed > 0 && !timerOn ? COLORS.accentGreen :
+            COLORS.primaryPurple
+          }
           textColor={COLORS.white}
           useGradient={false}
           width="100%"
           borderWidth={0}
           borderColor="transparent"
-          onPress={() => setTimerOn(prev => !prev)}
+          onPress={handleTimerToggle}
         />
       </View>
 
@@ -309,6 +402,62 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     fontSize: moderateScale(16),
     fontWeight: 'bold',
+  },
+  persistentTimerIndicator: {
+    backgroundColor: COLORS.accentOrange + '20',
+    borderColor: COLORS.accentOrange,
+    borderWidth: 1,
+    borderRadius: moderateScale(8),
+    padding: moderateScale(10),
+    marginBottom: moderateScale(15),
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  persistentTimerText: {
+    color: COLORS.accentOrange,
+    fontSize: moderateScale(14),
+    fontWeight: '600',
+    flex: 1,
+  },
+  showTimerBtn: {
+    backgroundColor: COLORS.accentOrange,
+    paddingHorizontal: moderateScale(12),
+    paddingVertical: moderateScale(6),
+    borderRadius: moderateScale(6),
+  },
+  showTimerBtnText: {
+    color: COLORS.white,
+    fontSize: moderateScale(12),
+    fontWeight: '600',
+  },
+  pausedSessionIndicator: {
+    backgroundColor: COLORS.accentGreen + '20',
+    borderColor: COLORS.accentGreen,
+    borderWidth: 1,
+    borderRadius: moderateScale(8),
+    padding: moderateScale(10),
+    marginBottom: moderateScale(15),
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  pausedSessionText: {
+    color: COLORS.accentGreen,
+    fontSize: moderateScale(14),
+    fontWeight: '600',
+    flex: 1,
+  },
+  resumeSessionBtn: {
+    backgroundColor: COLORS.accentGreen,
+    paddingHorizontal: moderateScale(12),
+    paddingVertical: moderateScale(6),
+    borderRadius: moderateScale(6),
+  },
+  resumeSessionBtnText: {
+    color: COLORS.white,
+    fontSize: moderateScale(12),
+    fontWeight: '600',
   },
   progressText: {
     color: COLORS.text,

@@ -350,6 +350,59 @@ const initBraceTracking = (dispatch) => async (accountType = 'brace') => {
     }
 };
 
+// Get persistent timer status
+const getPersistentTimerStatus = (dispatch) => async () => {
+    try {
+        const [isRunning, sessionDate, startTimestamp, totalElapsed] = await Promise.all([
+            AsyncStorage.getItem('braceTimer_isRunning'),
+            AsyncStorage.getItem('braceTimer_sessionDate'),
+            AsyncStorage.getItem('braceTimer_startTimestamp'),
+            AsyncStorage.getItem('braceTimer_totalElapsed')
+        ]);
+        
+        const today = new Date().toISOString().split('T')[0];
+        
+        return {
+            isRunning: isRunning === 'true',
+            sessionDate,
+            isToday: sessionDate === today,
+            startTimestamp: startTimestamp ? parseInt(startTimestamp) : null,
+            totalElapsed: totalElapsed ? parseInt(totalElapsed) : 0,
+            currentElapsed: (isRunning === 'true' && startTimestamp) ? 
+                Math.floor((Date.now() - parseInt(startTimestamp)) / 1000) : 
+                (totalElapsed ? parseInt(totalElapsed) : 0)
+        };
+    } catch (error) {
+        console.error('Error getting persistent timer status:', error);
+        return {
+            isRunning: false,
+            sessionDate: null,
+            isToday: false,
+            startTimestamp: null,
+            totalElapsed: 0,
+            currentElapsed: 0
+        };
+    }
+};
+
+// Clear persistent timer data
+const clearPersistentTimerData = (dispatch) => async () => {
+    try {
+        await Promise.all([
+            AsyncStorage.removeItem('braceTimer_startTimestamp'),
+            AsyncStorage.removeItem('braceTimer_totalElapsed'),
+            AsyncStorage.removeItem('braceTimer_isRunning'),
+            AsyncStorage.removeItem('braceTimer_sessionDate'),
+            AsyncStorage.removeItem('braceTimer_lastSaveTime')
+        ]);
+        console.log('Persistent timer data cleared');
+        return { success: true };
+    } catch (error) {
+        console.error('Error clearing persistent timer data:', error);
+        return { success: false, error: error.message };
+    }
+};
+
 export const { Provider, Context } = createDataContext(
     activityReducer,
     { 
@@ -362,7 +415,9 @@ export const { Provider, Context } = createDataContext(
         resetDailyBraceHours,
         initBraceTracking, 
         incrementDailyWalkingMinutes,
-        initializeTreatmentDataAction
+        initializeTreatmentDataAction,
+        getPersistentTimerStatus,
+        clearPersistentTimerData
     },
     { 
         streaks: null,

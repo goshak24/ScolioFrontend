@@ -13,6 +13,7 @@ const PhysioTimerComponent = ({
   const [isRunning, setIsRunning] = useState(false);
   const [isCompleted, setIsCompleted] = useState(false);
   const [ready, setReady] = useState(false);
+  const [hasBeenStarted, setHasBeenStarted] = useState(false); // Track if timer has been started
 
   const animatedProgress = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -45,13 +46,13 @@ const PhysioTimerComponent = ({
     };
     }, [totalTime]);
 
-  // Update currentTime when totalTime prop changes (when workouts are selected/deselected)
+  // Update currentTime when totalTime prop changes - but only if timer hasn't been started yet
   useEffect(() => {
-    if (!isRunning) {
+    if (!hasBeenStarted && !isRunning) {
       setCurrentTime(totalTime);
       setIsCompleted(false);
     }
-  }, [totalTime, isRunning]);
+  }, [totalTime, hasBeenStarted, isRunning]);
 
   // Notify parent of timer state changes
   useEffect(() => {
@@ -157,20 +158,23 @@ const PhysioTimerComponent = ({
   const handleStart = () => {
     if (currentTime > 0 && !isRunning) {
       setIsRunning(true);
+      setHasBeenStarted(true); // Mark that timer has been started
       setIsCompleted(false);
     }
   };
 
-  // Stop timer
+  // Stop timer (pause - keeps current time)
   const handleStop = () => {
     setIsRunning(false);
+    // Don't reset hasBeenStarted - keep the current time
   };
 
-  // Reset timer
+  // Reset timer (back to original totalTime)
   const handleReset = () => {
     setIsRunning(false);
     setIsCompleted(false);
-    setCurrentTime(totalTime);
+    setHasBeenStarted(false); // Reset the started flag
+    setCurrentTime(totalTime); // Reset to original time
   };
 
   // Don't render if no total time is set
@@ -254,7 +258,7 @@ const PhysioTimerComponent = ({
             isRunning && styles.timerLabelActive,
             isCompleted && styles.timerLabelCompleted
           ]}>
-            {isCompleted ? 'COMPLETED!' : isRunning ? 'IN PROGRESS' : 'READY TO START'}
+            {isCompleted ? 'COMPLETED!' : isRunning ? 'IN PROGRESS' : hasBeenStarted ? 'PAUSED' : 'READY TO START'}
           </Text>
         </View>
       </Animated.View>
@@ -271,14 +275,14 @@ const PhysioTimerComponent = ({
             onPress={handleStart}
             disabled={currentTime <= 0}
           >
-            <Text style={styles.controlButtonText}>▶ Start</Text>
+            <Text style={styles.controlButtonText}>▶ {hasBeenStarted ? 'Resume' : 'Start'}</Text>
           </TouchableOpacity>
         ) : (
           <TouchableOpacity 
             style={[styles.controlButton, styles.stopButton]} 
             onPress={handleStop}
           >
-            <Text style={styles.controlButtonText}>⏹ Stop</Text>
+            <Text style={styles.controlButtonText}>⏸ Pause</Text>
           </TouchableOpacity>
         )}
         
@@ -295,9 +299,9 @@ const PhysioTimerComponent = ({
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: COLORS.timerBackground,
+    backgroundColor: COLORS.progressBackground,
     borderRadius: moderateScale(15),
-    padding: moderateScale(20),
+    padding: moderateScale(25),
     marginBottom: moderateScale(15),
     alignItems: 'center',
   },

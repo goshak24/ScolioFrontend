@@ -272,9 +272,7 @@ const ProfileScreen = () => {
   );
 };
 
-export default ProfileScreen;
-
-const styles = StyleSheet.create({
+export default ProfileScreen;const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.backgroundPurple,
@@ -315,3 +313,4 @@ const styles = StyleSheet.create({
     marginTop: moderateScale(10),
   },
 });
+
