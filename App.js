@@ -23,6 +23,7 @@ import { Provider as PainTrackingProvider } from './src/context/PainTrackingCont
 import { Provider as AssistantProvider } from './src/context/AssistantContext';
 import { Provider as NotificationProvider } from './src/context/NotificationContext';
 import { Provider as GroupsProvider } from './src/context/GroupsContext';
+import { ThemeProvider } from './src/context/ThemeContext';
 
 const RootStack = createStackNavigator(); 
 const AuthStack = createStackNavigator(); 
@@ -175,32 +176,34 @@ const styles = StyleSheet.create({
 
 export default () => {
   return (
-    <ForumProvider>
-      <AuthProvider>
-        <UserProvider>
-          <ActivityProvider>
-            <PostSurgeryProvider>
-              <PreSurgeryProvider>
-                <FriendsProvider>
-                  <NotificationProvider>
-                    <MessagesProvider>
-                      <PainTrackingProvider>
-                        <AssistantProvider>
-                          <GroupsProvider>
-                            <ContextConnector>
-                              <App />
-                            </ContextConnector>
-                          </GroupsProvider>
-                        </AssistantProvider>
-                      </PainTrackingProvider>
-                    </MessagesProvider>
-                  </NotificationProvider>
-                </FriendsProvider>
-              </PreSurgeryProvider>
-            </PostSurgeryProvider>
-          </ActivityProvider>
-        </UserProvider>
-      </AuthProvider>
-    </ForumProvider>
+    <ThemeProvider>
+      <ForumProvider>
+        <AuthProvider>
+          <UserProvider>
+            <ActivityProvider>
+              <PostSurgeryProvider>
+                <PreSurgeryProvider>
+                  <FriendsProvider>
+                    <NotificationProvider>
+                      <MessagesProvider>
+                        <PainTrackingProvider>
+                          <AssistantProvider>
+                            <GroupsProvider>
+                              <ContextConnector>
+                                <App />
+                              </ContextConnector>
+                            </GroupsProvider>
+                          </AssistantProvider>
+                        </PainTrackingProvider>
+                      </MessagesProvider>
+                    </NotificationProvider>
+                  </FriendsProvider>
+                </PreSurgeryProvider>
+              </PostSurgeryProvider>
+            </ActivityProvider>
+          </UserProvider>
+        </AuthProvider>
+      </ForumProvider>
+    </ThemeProvider>
   );
 }; 

@@ -1,75 +1,151 @@
-export default {
-  // New color scheme (updated to match new palette)
-  primaryPurple: "#7c3aed", // Violet-600 (slightly deeper)
-  gradientPurple: "#7c3aed", // Violet-600 (gradient start)
-  backgroundPurple: "#4c1d95", // Purple-900 (darker, more professional)
-  gradientPink: "#06b6d4", // Cyan-500 (replaces pink)
-  darkBackground: "#0f0f23", // Deep navy-purple
-  lightPurple: "#a78bfa", // Violet-300 (softer)
-  lightGray: "#9ca3af", // Gray-400 (keep same)
-  pinkButtons: "#06b6d4", // Cyan-500 (replaces pink)
-  accentOrange: "#f59e0b", // Amber-500 (warmer)
-  accentGreen: "#10b981", // Emerald-500 (more vibrant)
-  white: "#ffffff", // White
-  cardDark: "#1a1a2e", // Dark purple-gray
-  red: '#ef4444', // Red-500 (more standard)
+// Dark theme colors - Gender-neutral, accessible, beautiful
+const darkColors = {
+  // Primary colors (Deep Indigo - professional and gender-neutral)
+  primary: "#1e40af", // Blue-800 (main brand color)
+  primaryLight: "#3b82f6", // Blue-500 (lighter variant)
+  primaryDark: "#1e3a8a", // Blue-900 (darker variant)
   
-  // Existing colors mapping to new palette
-  workoutOption: "#1e1e2e",
-  background: "#1a1a2e", // Dark purple-gray
-  text: "#ffffff", // White
-  header: "#1a1a2e", // Dark purple-gray
-  button: "#06b6d4", // Cyan-500 (replaces pink)
-  tabInactive: "#9ca3af", // Gray-400
-  tabActiveStart: "#7c3aed", // Violet-600
-  tabActiveEnd: "#06b6d4", // Cyan-500 (replaces pink)
-  badgeBackground: "#4c1d95", // Purple-900
-  progressBackground: "#1a1a2e", // Dark purple-gray
-  progressIndicatorStart: "#7c3aed", // Violet-600
-  progressIndicatorEnd: "#06b6d4", // Cyan-500 (replaces pink)
-  flame: "#f59e0b", // Amber-500
-  leaderboardFirst: "#facc15", // Yellow-400
-  leaderboardSecond: "#d1d5db", // Gray-300
-  leaderboardThird: "#06b6d4", // Cyan-500 (replaces pink)
-  leaderboardDefault: "#1a1a2e", // Dark purple-gray
-  timerBackground: '#1e1e2e',
-  streakOrange: '#f59e0b'
- }
-
- // Light mode colors
-const lightColors = {
-  // New color scheme (light mode versions)
-  primaryPurple: "#8b5cf6", // Violet-500 (brighter for light backgrounds)
-  gradientPurple: "#8b5cf6", // Violet-500 (gradient start)
-  backgroundPurple: "#f3f4f6", // Gray-100 (light background)
-  gradientPink: "#0891b2", // Cyan-600 (darker cyan for contrast)
-  darkBackground: "#ffffff", // White background
-  lightPurple: "#ddd6fe", // Violet-200 (very light purple)
-  lightGray: "#6b7280", // Gray-500 (darker for contrast)
-  pinkButtons: "#0891b2", // Cyan-600 (darker for contrast)
-  accentOrange: "#ea580c", // Orange-600 (darker for contrast)
-  accentGreen: "#059669", // Emerald-600 (darker for contrast)
-  white: "#000000", // Black text on light backgrounds
-  cardDark: "#f9fafb", // Gray-50 (light card background)
-  red: '#dc2626', // Red-600 (darker for contrast)
-  // Existing colors mapping to light palette
-  workoutOption: "#f3f4f6", // Gray-100
-  background: "#ffffff", // White background
-  text: "#111827", // Gray-900 (dark text)
-  header: "#f9fafb", // Gray-50
-  button: "#0891b2", // Cyan-600
-  tabInactive: "#6b7280", // Gray-500
-  tabActiveStart: "#8b5cf6", // Violet-500
-  tabActiveEnd: "#0891b2", // Cyan-600
-  badgeBackground: "#ede9fe", // Violet-100
-  progressBackground: "#f3f4f6", // Gray-100
-  progressIndicatorStart: "#8b5cf6", // Violet-500
-  progressIndicatorEnd: "#0891b2", // Cyan-600
-  flame: "#ea580c", // Orange-600
-  leaderboardFirst: "#eab308", // Yellow-500
-  leaderboardSecond: "#9ca3af", // Gray-400
-  leaderboardThird: "#0891b2", // Cyan-600
-  leaderboardDefault: "#f3f4f6", // Gray-100
-  timerBackground: '#f3f4f6', // Gray-100
-  streakOrange: '#ea580c' // Orange-600
+  // Secondary colors (Teal - calming and neutral)
+  secondary: "#0891b2", // Cyan-600 (secondary brand color)
+  secondaryLight: "#06b6d4", // Cyan-500 (lighter variant)
+  secondaryDark: "#0e7490", // Cyan-700 (darker variant)
+  
+  // Surface and background colors
+  background: "#0f172a", // Slate-900 (main background)
+  surface: "#1e293b", // Slate-800 (card backgrounds)
+  surfaceVariant: "#334155", // Slate-700 (elevated surfaces)
+  
+  // Text colors
+  onPrimary: "#ffffff", // White text on primary
+  onSecondary: "#ffffff", // White text on secondary
+  onBackground: "#f1f5f9", // Slate-100 (main text)
+  onSurface: "#e2e8f0", // Slate-200 (secondary text)
+  onSurfaceVariant: "#94a3b8", // Slate-400 (tertiary text)
+  
+  // Accent colors
+  accent: "#f59e0b", // Amber-500 (warm accent)
+  accentLight: "#fbbf24", // Amber-400 (lighter variant)
+  success: "#10b981", // Emerald-500 (success states)
+  warning: "#f59e0b", // Amber-500 (warning states)
+  error: "#ef4444", // Red-500 (error states)
+  
+  // Gradient colors
+  gradientStart: "#1e40af", // Primary
+  gradientEnd: "#0891b2", // Secondary
+  gradientAccent: ["#f59e0b", "#fb923c"], // Warm gradient
+  
+  // Legacy mappings (for backward compatibility)
+  primaryPurple: "#1e40af",
+  gradientPurple: "#1e40af",
+  backgroundPurple: "#334155",
+  gradientPink: "#0891b2",
+  darkBackground: "#0f172a",
+  lightPurple: "#3b82f6",
+  lightGray: "#94a3b8",
+  pinkButtons: "#0891b2",
+  accentOrange: "#f59e0b",
+  accentGreen: "#10b981",
+  white: "#ffffff",
+  cardDark: "#1e293b",
+  red: "#ef4444",
+  
+  // Specific use cases
+  workoutOption: "#1e293b",
+  background: "#0f172a",
+  text: "#f1f5f9",
+  header: "#1e293b",
+  button: "#0891b2",
+  tabInactive: "#94a3b8",
+  tabActiveStart: "#1e40af",
+  tabActiveEnd: "#0891b2",
+  badgeBackground: "#334155",
+  progressBackground: "#1e293b",
+  progressIndicatorStart: "#1e40af",
+  progressIndicatorEnd: "#0891b2",
+  flame: "#f59e0b",
+  leaderboardFirst: "#fbbf24",
+  leaderboardSecond: "#94a3b8",
+  leaderboardThird: "#0891b2",
+  leaderboardDefault: "#1e293b",
+  timerBackground: "#1e293b",
+  streakOrange: "#f59e0b"
 };
+
+// Export dark theme as default
+export default darkColors;
+
+ // Light theme colors - Gender-neutral, accessible, beautiful
+const lightColors = {
+  // Primary colors (Deep Indigo variants for light theme)
+  primary: "#1d4ed8", // Blue-700 (main brand color)
+  primaryLight: "#3b82f6", // Blue-500 (lighter variant)
+  primaryDark: "#1e3a8a", // Blue-900 (darker variant)
+  
+  // Secondary colors (Teal variants for light theme)
+  secondary: "#0e7490", // Cyan-700 (secondary brand color)
+  secondaryLight: "#0891b2", // Cyan-600 (lighter variant)
+  secondaryDark: "#155e75", // Cyan-800 (darker variant)
+  
+  // Surface and background colors
+  background: "#ffffff", // White (main background)
+  surface: "#f8fafc", // Slate-50 (card backgrounds)
+  surfaceVariant: "#f1f5f9", // Slate-100 (elevated surfaces)
+  
+  // Text colors
+  onPrimary: "#ffffff", // White text on primary
+  onSecondary: "#ffffff", // White text on secondary
+  onBackground: "#0f172a", // Slate-900 (main text)
+  onSurface: "#1e293b", // Slate-800 (secondary text)
+  onSurfaceVariant: "#64748b", // Slate-500 (tertiary text)
+  
+  // Accent colors
+  accent: "#d97706", // Amber-600 (warm accent)
+  accentLight: "#f59e0b", // Amber-500 (lighter variant)
+  success: "#059669", // Emerald-600 (success states)
+  warning: "#d97706", // Amber-600 (warning states)
+  error: "#dc2626", // Red-600 (error states)
+  
+  // Gradient colors
+  gradientStart: "#1d4ed8", // Primary
+  gradientEnd: "#0e7490", // Secondary
+  gradientAccent: ["#d97706", "#ea580c"], // Warm gradient
+  
+  // Legacy mappings (for backward compatibility)
+  primaryPurple: "#1d4ed8",
+  gradientPurple: "#1d4ed8",
+  backgroundPurple: "#f1f5f9",
+  gradientPink: "#0e7490",
+  darkBackground: "#ffffff",
+  lightPurple: "#3b82f6",
+  lightGray: "#64748b",
+  pinkButtons: "#0e7490",
+  accentOrange: "#d97706",
+  accentGreen: "#059669",
+  white: "#0f172a",
+  cardDark: "#f8fafc",
+  red: "#dc2626",
+  
+  // Specific use cases
+  workoutOption: "#f8fafc",
+  background: "#ffffff",
+  text: "#0f172a",
+  header: "#f8fafc",
+  button: "#0e7490",
+  tabInactive: "#64748b",
+  tabActiveStart: "#1d4ed8",
+  tabActiveEnd: "#0e7490",
+  badgeBackground: "#f1f5f9",
+  progressBackground: "#f8fafc",
+  progressIndicatorStart: "#1d4ed8",
+  progressIndicatorEnd: "#0e7490",
+  flame: "#d97706",
+  leaderboardFirst: "#eab308",
+  leaderboardSecond: "#94a3b8",
+  leaderboardThird: "#0e7490",
+  leaderboardDefault: "#f8fafc",
+  timerBackground: "#f8fafc",
+  streakOrange: "#d97706"
+};
+
+// Export light colors for theme switching
+export { lightColors };

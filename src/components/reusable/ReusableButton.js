@@ -14,8 +14,8 @@ const ReusableButton = ({
     borderWidth = 0, 
     borderColor = 'transparent', 
     useGradient = true, 
-    gradientColors = ["#9B34EF", "#E9338A"], 
-    backgroundColor = '#9B34EF', 
+    gradientColors = ["#1e40af", "#0891b2"], // Updated to new primary-secondary gradient
+    backgroundColor = '#1e40af', // Updated to new primary color 
     start = { x: 0, y: 0 }, 
     end = { x: 1, y: 1 }, 
     ...props 

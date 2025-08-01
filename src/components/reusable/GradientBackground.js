@@ -11,7 +11,7 @@ const GradientBackground = ({
   children, 
   isActive = false,
   style,
-  gradientColors = [COLORS.accentOrange, '#FF5733'], // Default orange gradient
+  gradientColors = [COLORS.gradientStart, COLORS.gradientEnd], // Use systematic gradient colors
   gradientStart = { x: 0, y: 0 },
   gradientEnd = { x: 1, y: 0 }
 }) => {

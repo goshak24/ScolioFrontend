@@ -3,6 +3,7 @@ import { View, StyleSheet } from 'react-native';
 import { moderateScale } from 'react-native-size-matters';
 import SettingsSection from './SettingsSection';
 import SettingItem from './SettingsItem';
+import { useTheme } from '../../context/ThemeContext';
 
 const ProfileSettings = ({ 
   notificationsEnabled, 
@@ -13,6 +14,7 @@ const ProfileSettings = ({
   changePassword, 
   goToPrivacyPolicy
 }) => {
+  const { theme, toggleTheme } = useTheme();
   return (
     <View style={styles.settingsContainer}>
       <SettingsSection title="Account Settings">
@@ -44,6 +46,13 @@ const ProfileSettings = ({
       </SettingsSection>
       
       <SettingsSection title="App Settings">
+        <SettingItem 
+          icon={theme === 'light' ? 'moon-outline' : 'sunny-outline'} 
+          label={`${theme === 'light' ? 'Dark' : 'Light'} Mode`}
+          isSwitch={true}
+          switchValue={theme === 'dark'}
+          onToggle={toggleTheme}
+        />
         <SettingItem 
           icon="help-circle-outline" 
           label="Help Center" 

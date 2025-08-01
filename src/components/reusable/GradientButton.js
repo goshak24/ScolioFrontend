@@ -21,7 +21,7 @@ const GradientButton = ({
   icon, 
   style,
   textStyle,
-  gradientColors = [COLORS.accentOrange, '#FF5733'], // Default orange gradient
+  gradientColors = [COLORS.gradientStart, COLORS.gradientEnd], // Use systematic gradient colors
   gradientStart = { x: 0, y: 0 },
   gradientEnd = { x: 1, y: 0 }
 }) => {
@@ -69,7 +69,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
   },
   unselectedButton: {
-    backgroundColor: COLORS.darkBackground,
+    backgroundColor: COLORS.surface,
     paddingVertical: moderateScale(12),
     paddingHorizontal: moderateScale(20),
     alignItems: 'center',
@@ -77,12 +77,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
   },
   selectedButtonText: {
-    color: COLORS.white,
+    color: COLORS.onPrimary,
     fontWeight: '600',
     fontSize: moderateScale(14),
   },
   unselectedButtonText: {
-    color: COLORS.lightGray,
+    color: COLORS.onSurfaceVariant,
     fontSize: moderateScale(14),
   },
   iconContainer: {
