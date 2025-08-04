@@ -4,6 +4,7 @@ import { initializeAuth, getReactNativePersistence } from "firebase/auth";
 import { getStorage } from "firebase/storage";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants"; 
+import { onAuthStateChanged, signInAnonymously, signOut } from "firebase/auth"; 
 
 const {
   FIREBASE_API_KEY,
@@ -27,6 +28,83 @@ const app = initializeApp(firebaseConfig);
 const auth = initializeAuth(app, {
   persistence: getReactNativePersistence(AsyncStorage),
 });
+
+// Track Firebase Auth state
+let isFirebaseAuthReady = false;
+let currentBackendUserId = null;
+
+// Firebase Auth state listener  
+onAuthStateChanged(auth, (user) => {
+  isFirebaseAuthReady = true;
+  if (user) {
+    console.log("🔥 Firebase Auth ready");
+  }
+});
+
+// Function to verify backend token and setup Firebase Auth
+export const verifyBackendTokenAndSetupFirebase = async () => {
+  try {
+    // Get current token from AsyncStorage
+    const idToken = await AsyncStorage.getItem("idToken");
+    if (!idToken) {
+      return { success: false, error: "No backend token" };
+    }
+    
+    // Verify token with backend
+    const verifyResponse = await api.get("/auth/verify-token", {
+      headers: { Authorization: `Bearer ${idToken}` }
+    });
+    
+    if (!verifyResponse.data.userId) {
+      return { success: false, error: "Token verification failed" };
+    }
+    
+    const backendUserId = verifyResponse.data.userId;
+    
+    // If already signed in to Firebase for this user, we're good
+    if (auth.currentUser && currentBackendUserId === backendUserId) {
+      return { success: true, user: auth.currentUser, backendUserId };
+    }
+    
+    // If different user, sign out first
+    if (auth.currentUser && currentBackendUserId !== backendUserId) {
+      await signOut(auth);
+    }
+    
+    // Sign in anonymously to Firebase to enable Firestore access
+    const userCredential = await signInAnonymously(auth);
+    currentBackendUserId = backendUserId;
+    
+    console.log("✅ Firebase Auth ready for Firestore");
+    return { 
+      success: true, 
+      user: userCredential.user, 
+      backendUserId 
+    };
+    
+  } catch (error) {
+    console.error("❌ Firebase Auth setup failed:", error.message);
+    return { success: false, error: error.message };
+  }
+};
+
+// Function to clear Firebase Auth when backend user logs out
+export const clearFirebaseAuth = async () => {
+  try {
+    if (auth.currentUser) {
+      await signOut(auth);
+      currentBackendUserId = null;
+    }
+  } catch (error) {
+    console.error("❌ Error clearing Firebase Auth:", error);
+  }
+};
+
+// Simple function to check if Firebase Auth exists (for Firestore access)
+export const hasFirebaseAuth = () => {
+  return auth?.currentUser !== null;
+};
+
 const storage = getStorage(app);
 
 const API_BASE_URL = 'https://scoliobackend.ew.r.appspot.com/api/'; // Remeber to push back notification controller days to not alert people of old notifications 
@@ -110,7 +188,6 @@ api.interceptors.request.use(async (config) => {
     const asyncStorageToken = await AsyncStorage.getItem('idToken');
     
     if (asyncStorageToken) {
-      console.log("Using token from AsyncStorage");
       config.headers.Authorization = `Bearer ${asyncStorageToken}`;
       
       // Check if token is about to expire
@@ -134,10 +211,7 @@ api.interceptors.request.use(async (config) => {
     const user = auth.currentUser;
     if (user) {
       const token = await user.getIdToken();
-      console.log("Using Firebase Token:", token);
       config.headers.Authorization = `Bearer ${token}`;
-    } else {
-      console.log("No authentication token found - user must sign in");
     }
     
     return config;
@@ -226,5 +300,5 @@ api.interceptors.response.use(
   }
 );
 
-export { storage, refreshAuthToken };
+export { auth, storage, refreshAuthToken };
 export default api; 

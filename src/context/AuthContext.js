@@ -1,6 +1,6 @@
 import createDataContext from "./createDataContext";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import api from "../utilities/backendApi";
+import api, { clearFirebaseAuth } from "../utilities/backendApi";
 import TokenManager from "../utilities/tokenManager";
 
 const authReducer = (state, action) => {
@@ -120,12 +120,6 @@ const signIn = (dispatch) => async ({ email, password }) => {
         dispatch({ type: "SET_LOADING", payload: true });
         const response = await api.post("/auth/signin", { email, password });
         
-        // Log the response to debug
-        console.log("Sign-in response data:", {
-            hasUserId: !!response.data.userId,
-            userId: response.data.userId
-        });
-        
         await storeAuthTokens(response.data.idToken, response.data.refreshToken);
 
         // Ensure userId is included in the dispatch
@@ -227,21 +221,47 @@ const tryLocalSignIn = (dispatch) => async () => {
     }
 };
 
+// Clear all user-related cached data
+const clearAllUserCache = async () => {
+    try {
+        const cacheKeys = [
+            'friends_data_v2',
+            'friend_ids_data_v2', 
+            'friend_requests_data_v2',
+            'conversations_data',
+            'app_user_cache',
+            'forum_posts_cache',
+            'forum_pagination_cache'
+        ];
+        
+        // Also get all message cache keys
+        const allKeys = await AsyncStorage.getAllKeys();
+        const messageCacheKeys = allKeys.filter(key => key.startsWith('messages_conversation_'));
+        
+        // Remove all cache keys
+        await AsyncStorage.multiRemove([...cacheKeys, ...messageCacheKeys]);
+        
+        console.log("✅ All user cache cleared");
+    } catch (error) {
+        console.error("❌ Error clearing user cache:", error);
+    }
+};
+
 const logout = (dispatch) => async () => {
     try {
         dispatch({ type: "SET_LOADING", payload: true });
         
-        // Log current state before logout
-        console.log("Auth state before logout");
-        
         // First remove tokens from AsyncStorage
         await removeAuthTokens();
         
+        // Clear Firebase Auth
+        await clearFirebaseAuth();
+        
+        // Clear ALL cached data on logout
+        await clearAllUserCache();
+        
         // Then dispatch the LOGOUT action to reset state
         dispatch({ type: "LOGOUT" });
-        
-        // Log state after logout to confirm it was reset
-        console.log("Auth state after logout - userId should be null");
         
         return { success: true };
     } catch (error) {

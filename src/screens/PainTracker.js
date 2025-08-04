@@ -203,8 +203,8 @@ const PainTracker = ({ navigation }) => {
       if (result.success) {
         // Show confirmation to the user
         Alert.alert(
-          'Data Saved',
-          `Pain data recorded for ${selectedAreas.length} body parts with intensity ${painIntensity}/10`,
+          'Logged and Noted',
+          "You're one step closer to managing this!",
           [{ text: 'OK' }]
         );
         
@@ -259,7 +259,7 @@ const PainTracker = ({ navigation }) => {
             <Ionicons name="arrow-back" size={moderateScale(24)} color={COLORS.white} />
           </TouchableOpacity>
           <View style={styles.headerTextContainer}>
-            <Text style={styles.headerTitle}>Pain Heat Map</Text>
+            <Text style={styles.headerTitle}>Track Your Pain</Text>
             <Text style={styles.headerSubtitle}>Track and visualize your discomfort</Text>
           </View>
         </View>

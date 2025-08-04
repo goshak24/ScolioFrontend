@@ -87,7 +87,7 @@ const Squad = () => {
         console.error("❌ Error loading initial data:", error);
       }
 
-      // Load friend-related data
+      // Load friend-related data - THIS IS CRITICAL for Messages tab
       if (FriendsState.friendRequests.length === 0) {
         console.log('🔄 Loading friend requests in Squad screen');
         getFriendRequests();
@@ -95,9 +95,13 @@ const Squad = () => {
         console.log('📋 Friend requests already loaded:', FriendsState.friendRequests.length);
       }
       
+      // Always load friends if not already loaded - needed for user names in Messages tab
       if (!friendsLoaded.current && FriendsState.friends.length === 0) {
+        console.log('🔄 Loading friends data for user names in Messages tab');
         friendsLoaded.current = true;
         getFriends();
+      } else if (FriendsState.friends.length > 0) {
+        console.log(`📋 Friends already loaded: ${FriendsState.friends.length} friends`);
       }
     };
 
@@ -155,8 +159,14 @@ const Squad = () => {
   useEffect(() => {
     // Load appropriate data when tab changes
     if (activeTab === "Messages" && !initialDataLoaded.current.Messages) {
-      loadConversations(false); // Don't force refresh by default
-      initialDataLoaded.current.Messages = true;
+      // When switching to Messages tab, ensure friends are loaded first
+      const loadMessagesData = async () => {
+        console.log("🔄 Switching to Messages tab - loading data");
+        await loadConversations(false); // Don't force refresh by default
+        initialDataLoaded.current.Messages = true;
+      };
+      
+      loadMessagesData();
     } else if (activeTab === "Forums" && !initialDataLoaded.current.Forums) {
       // Check if we need to refresh the forum posts
       const now = new Date().getTime();
@@ -202,59 +212,71 @@ const Squad = () => {
     try {
       if (!UserState?.user?.uid) {
         console.warn("No user ID available in Squad screen");
-      } else {
-        console.log("Loading conversations for user");
-        
-        // First check if conversations already exist in state
-        const hasExistingConversations = MessagesState.conversations.length > 0;
-        
-        // Check how long since the last refresh
-        const now = new Date().getTime();
-        const lastRefreshKey = 'last_conv_refresh_time';
-        let lastRefreshTime = 0;
-        
+        return;
+      }
+
+      console.log("🔄 Loading Messages tab data...");
+      
+      // CRITICAL: Always ensure friends data is loaded first 
+      // This is needed to match user IDs to names in conversations
+      if (FriendsState.friends.length === 0) {
+        console.log("📋 No friends data found - loading friends first");
         try {
-          const storedTime = await AsyncStorage.getItem(lastRefreshKey);
-          if (storedTime) {
-            lastRefreshTime = parseInt(storedTime, 10);
-          }
+          await getFriends(false); // Load friends without forcing refresh
+          console.log(`✅ Friends loaded: ${FriendsState.friends.length} friends`);
+        } catch (error) {
+          console.error("❌ Failed to load friends:", error);
+          // Continue anyway - conversations might still work
+        }
+      } else {
+        console.log(`📋 Friends already loaded: ${FriendsState.friends.length} friends`);
+      }
+      
+      // Check if conversations already exist in state
+      const hasExistingConversations = MessagesState.conversations.length > 0;
+      
+      // Check how long since the last refresh
+      const now = new Date().getTime();
+      const lastRefreshKey = 'last_conv_refresh_time';
+      let lastRefreshTime = 0;
+      
+      try {
+        const storedTime = await AsyncStorage.getItem(lastRefreshKey);
+        if (storedTime) {
+          lastRefreshTime = parseInt(storedTime, 10);
+        }
+      } catch (e) {
+        console.error("Error getting last refresh time:", e);
+      }
+      
+      const timeSinceLastRefresh = now - lastRefreshTime;
+      const refreshInterval = 5 * 60 * 1000; // 5 minutes
+      
+      // Determine if we need to refresh
+      const needsRefresh = forceRefresh || 
+                           !hasExistingConversations || 
+                           timeSinceLastRefresh > refreshInterval;
+      
+      if (needsRefresh) {
+        console.log(`🔄 ${forceRefresh ? "Force refreshing" : "Loading"} conversations`);
+        
+        // Load conversations 
+        await getConversations(UserState.user.uid, forceRefresh);
+        
+        // Save last refresh time
+        try {
+          await AsyncStorage.setItem(lastRefreshKey, now.toString());
         } catch (e) {
-          console.error("Error getting last refresh time:", e);
+          console.error("Error saving last refresh time:", e);
         }
         
-        const timeSinceLastRefresh = now - lastRefreshTime;
-        const refreshInterval = 5 * 60 * 1000; // 5 minutes
-        
-        // Determine if we need to refresh
-        const needsRefresh = forceRefresh || 
-                             !hasExistingConversations || 
-                             timeSinceLastRefresh > refreshInterval;
-        
-        if (needsRefresh) {
-          console.log(`${forceRefresh ? "Force refreshing" : "Loading"} conversations`);
-          
-          // Make sure friends data is loaded first if needed
-          if (FriendsState.friends.length === 0 && !FriendsState.loading) {
-            console.log("Loading friends data first");
-            await getFriends(false); // Don't force refresh friends
-          }
-          
-          // Now load conversations - pass force refresh flag if explicitly requested
-          await getConversations(UserState.user.uid, forceRefresh);
-          
-          // Save last refresh time
-          try {
-            await AsyncStorage.setItem(lastRefreshKey, now.toString());
-          } catch (e) {
-            console.error("Error saving last refresh time:", e);
-          }
-        } else {
-          console.log("Using existing conversations data from state, no refresh needed");
-          setMessagesLoading(false);
-        }
+        console.log(`✅ Conversations loaded: ${MessagesState.conversations.length} conversations`);
+      } else {
+        console.log("📋 Using existing conversations data from state");
+        setMessagesLoading(false);
       }
     } catch (error) {
-      console.error("Error loading conversations:", error);
+      console.error("❌ Error loading conversations:", error);
     } finally {
       setMessagesLoading(false);
     }
@@ -405,31 +427,36 @@ const Squad = () => {
     // Enhance user data with friends context data
     const enhancedUser = getCompleteUserData(item.user, FriendsState, getUserById);
     
+    // If user data is still incomplete, show a loading placeholder
+    if (!enhancedUser || (!enhancedUser.username && !enhancedUser.displayName)) {
+      console.log("⚠️ User data incomplete for conversation:", item.id);
+    }
+    
     // Update the item with enhanced user data
     const enhancedItem = {
       ...item,
-      user: enhancedUser
+      user: enhancedUser || item.user || { id: item.otherUserId, username: 'Loading...' }
     }; 
 
     return (
       <TouchableOpacity 
         style={styles.conversationItem}
-        onPress={() => navigateToConversation(enhancedUser)}
+        onPress={() => navigateToConversation(enhancedUser || item.user)}
       >
         <View style={styles.avatarContainer}>
           <Image 
-            source={{ uri: enhancedUser.avatar || 'https://randomuser.me/api/portraits/lego/1.jpg' }} 
+            source={{ uri: enhancedUser?.avatar || item.user?.avatar || 'https://randomuser.me/api/portraits/lego/1.jpg' }} 
             style={styles.avatar} 
           />
           {/* Online indicator - will need to be implemented with real data */}
-          {enhancedUser.isOnline && (
+          {enhancedUser?.isOnline && (
             <View style={styles.onlineIndicator} />
           )}
         </View>
         <View style={styles.conversationInfo}>
           <View style={styles.conversationHeader}>
             <Text style={styles.username}>
-              {enhancedUser.username || enhancedUser.displayName || 'Unknown User'}
+              {enhancedUser?.username || enhancedUser?.displayName || item.user?.username || 'Loading...'}
             </Text>
             <Text style={styles.timestamp}>{MDYformatTimestamp(enhancedItem.lastMessageTime)}</Text>
           </View>
@@ -595,6 +622,9 @@ const Squad = () => {
         messagesLoading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={COLORS.gradientPink} />
+            <Text style={styles.loadingText}>
+              {FriendsState.loading ? "Loading friends and conversations..." : "Loading conversations..."}
+            </Text>
           </View>
         ) : (
           <FlatList

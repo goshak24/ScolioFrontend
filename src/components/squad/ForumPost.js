@@ -125,8 +125,7 @@ const ForumPost = ({
           />
         </TouchableOpacity>
         <View style={styles.userInfoContainer}>
-          <Text style={styles.username}>{username}</Text>
-          <Text style={styles.userTitle}>• Member</Text>
+          <Text style={styles.username}>{username}</Text> 
         </View>
         <Text style={styles.time}>{getFormattedTime()}</Text>
       </View>

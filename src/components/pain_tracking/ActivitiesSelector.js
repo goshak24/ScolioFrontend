@@ -11,6 +11,8 @@ const ActivitiesSelector = ({ selectedActivities, onToggleActivity }) => {
     { id: 'walking', label: 'Walking' },
     { id: 'exercise', label: 'Exercise' },
     { id: 'brace-wear', label: 'Brace Wear' },
+    { id: 'work', label: 'Work' },
+    { id: 'menstruation', label: 'Menstruation' },
     { id: 'computer', label: 'Computer' },
     { id: 'carrying-bag', label: 'Carrying Bag' },
   ];

@@ -1,6 +1,22 @@
 import createDataContext from "./createDataContext";
-import api, { auth } from "../utilities/backendApi";
-import { getFirestore, collection, query, where, orderBy, onSnapshot, limit, getDocs, startAfter, startAt, Timestamp, enableIndexedDbPersistence, CACHE_SIZE_UNLIMITED } from "firebase/firestore";
+import api, { auth, verifyBackendTokenAndSetupFirebase } from "../utilities/backendApi";
+import { 
+  getFirestore, 
+  collection, 
+  query, 
+  where, 
+  orderBy, 
+  onSnapshot, 
+  limit, 
+  getDocs, 
+  startAfter, 
+  startAt, 
+  Timestamp, 
+  enableIndexedDbPersistence, 
+  CACHE_SIZE_UNLIMITED,
+  and
+} from "firebase/firestore";
+import { onAuthStateChanged } from "firebase/auth";
 import { getApp } from "firebase/app";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import userCache from "../utilities/userCache";
@@ -81,9 +97,13 @@ const messagesReducer = (state, action) => {
         error: null
       };
     case "SET_MESSAGES":
-      // Ensure we don't cause re-renders if the messages array is the same
-      if (JSON.stringify(state.messages) === JSON.stringify(action.payload)) {
-        console.log(`⏭️ SET_MESSAGES: Skipping update, messages unchanged (${action.payload.length})`);
+      // Only skip update if the message count AND the last message ID are exactly the same
+      const lastOldMessage = state.messages[state.messages.length - 1];
+      const lastNewMessage = action.payload[action.payload.length - 1];
+      
+      if (state.messages.length === action.payload.length && 
+          lastOldMessage?.id === lastNewMessage?.id) {
+        console.log(`⏭️ SET_MESSAGES: Skipping update, same message count and last message (${action.payload.length})`);
         return state; // Return the same state reference to prevent re-render
       }
       console.log(`🔄 SET_MESSAGES: Updated with ${action.payload.length} messages`);
@@ -282,7 +302,9 @@ const getConversations = (dispatch) => async (userId, forceFetch = false) => {
       console.log("Force refreshing conversations data");
     }
     
+    console.log("🔄 Fetching conversations from backend...");
     const response = await api.get("/messages/conversations");
+    console.log("✅ Conversations fetched successfully");
     const conversations = response.data.conversations || [];
     
     // Cache user data from conversations
@@ -319,7 +341,7 @@ const getConversations = (dispatch) => async (userId, forceFetch = false) => {
   }
 };
 
-// Get messages for a specific conversation
+// Get initial messages for a conversation (used for backwards compatibility and initial loading)
 const getMessages = (dispatch) => async (otherUserId, forceFetch = false, offset = 0, limit = MESSAGES_PER_PAGE, currentUserId = null) => {
   try {
     dispatch({ type: "SET_LOADING", payload: true });
@@ -363,7 +385,7 @@ const getMessages = (dispatch) => async (otherUserId, forceFetch = false, offset
     
     const now = new Date().getTime();
     
-    // Check if we have cached data that's valid
+    // Check if we have cached data that's valid (only if not force fetching)
     if (!forceFetch) {
       const cacheKey = `${MESSAGES_CACHE_PREFIX}${otherUserId}`;
       const cachedData = await AsyncStorage.getItem(cacheKey);
@@ -374,29 +396,46 @@ const getMessages = (dispatch) => async (otherUserId, forceFetch = false, offset
           
           // Only use cache if it's still valid
           if (now - timestamp < MESSAGES_TTL) {
-            console.log(`Using cached messages for conversation with ${otherUserId}`);
+            console.log(`📋 Using cached messages for conversation with ${otherUserId}`);
+            
+            // Process cached messages to add isOwn flag
+            const processedMessages = messages.map(message => ({
+              ...message,
+              isOwn: message.senderId === currentUserId,
+              status: 'sent'
+            }));
             
             // Update message cache
-            messageCache[conversationId] = messages;
+            messageCache[conversationId] = processedMessages;
             
-            dispatch({ type: "SET_MESSAGES", payload: messages });
-            dispatch({ type: "SET_HAS_MORE_MESSAGES", payload: messages.length >= MESSAGES_PER_PAGE });
+            dispatch({ type: "SET_MESSAGES", payload: processedMessages });
+            dispatch({ type: "SET_HAS_MORE_MESSAGES", payload: processedMessages.length >= MESSAGES_PER_PAGE });
             
-            return messages;
+            console.log(`✅ Loaded ${processedMessages.length} cached messages`);
+            
+            // Setup Firebase listener after loading cached data - only if not already set up
+            if (!activeListeners[conversationId]) {
+              console.log(`🔄 Setting up Firebase listener for cached data`);
+              setupMessageListener(dispatch, () => ({}))(conversationId, currentUserId);
+            } else {
+              console.log(`♻️ Firebase listener already active for this conversation`);
+            }
+            
+            return processedMessages;
           } else {
-            console.log(`Messages cache expired, fetching fresh data`);
+            console.log(`🕐 Messages cache expired, will fetch fresh data`);
           }
         } catch (e) {
-          console.error("Error parsing cached messages:", e);
+          console.error("❌ Error parsing cached messages:", e);
           // Continue to fetch from server if cache parsing fails
         }
       }
     } else {
-      console.log("Force refreshing messages data");
+      console.log("🔄 Force refreshing messages data");
     }
     
-    // Fetch messages from API (still needed for initial state)
-    console.log(`Fetching initial messages from API for conversation with other user`);
+    // Fetch initial messages from API (this provides the base data for Firebase listener)
+    console.log(`🔄 Fetching initial messages from API for conversation`);
     const response = await api.get(`/messages/conversation/${otherUserId}?limit=${limit}&offset=${offset}`);
     const messages = response.data.messages || [];
     
@@ -410,26 +449,34 @@ const getMessages = (dispatch) => async (otherUserId, forceFetch = false, offset
     // Update the cache
     messageCache[conversationId] = processedMessages;
     
+    // Cache the messages
     try {
       const cacheKey = `${MESSAGES_CACHE_PREFIX}${otherUserId}`;
       await AsyncStorage.setItem(cacheKey, JSON.stringify({
-        messages,
+        messages: processedMessages,
         timestamp: now
       }));
     } catch (e) {
-      console.error("Error caching messages:", e);
+      console.error("❌ Error caching messages:", e);
       // Continue even if caching fails
     }
     
     dispatch({ type: "SET_MESSAGES", payload: processedMessages });
     dispatch({ type: "SET_HAS_MORE_MESSAGES", payload: processedMessages.length >= MESSAGES_PER_PAGE });
     
-    // Setup Firebase listener for this conversation
-    setupMessageListener(dispatch, () => ({}))(conversationId, currentUserId);
+    console.log(`✅ Loaded ${processedMessages.length} initial messages`);
+    
+    // Setup Firebase listener for real-time updates - only if not already set up
+    if (!activeListeners[conversationId]) {
+      console.log(`🔄 Setting up Firebase listener for real-time updates`);
+      setupMessageListener(dispatch, () => ({}))(conversationId, currentUserId);
+    } else {
+      console.log(`♻️ Firebase listener already active for this conversation`);
+    }
     
     return processedMessages;
   } catch (error) {
-    console.error("Error fetching messages:", error);
+    console.error("❌ Error fetching messages:", error);
     dispatch({
       type: "SET_ERROR",
       payload: error.response?.data?.message || "Failed to fetch messages"
@@ -610,7 +657,7 @@ const setupMessageListener = (dispatch, getState) => async (conversationId, user
       });
       return () => {};
     }
-    
+
     // Extract the other user ID from the conversation ID
     const otherUserId = conversationId.split('_').find(id => id !== userId);
     
@@ -622,129 +669,170 @@ const setupMessageListener = (dispatch, getState) => async (conversationId, user
       });
       return () => {};
     }
+
+    // CRITICAL: Verify backend token and setup Firebase Auth for Firestore
+    const authResult = await verifyBackendTokenAndSetupFirebase();
+    
+    if (!authResult.success) {
+      console.error("❌ Auth verification failed:", authResult.error);
+      dispatch({
+        type: "SET_ERROR",
+        payload: "Authentication required for real-time updates"
+      });
+      return () => {};
+    }
+    
+    // Verify the backend user matches the expected user
+    if (authResult.backendUserId !== userId) {
+      console.error(`❌ User ID mismatch`);
+      dispatch({
+        type: "SET_ERROR",
+        payload: "User authentication mismatch"
+      });
+      return () => {};
+    }
     
     // IMPORTANT: Track this as the active conversation
     setActiveConversation(conversationId);
     
-    console.log(`🔄 Setting up message listener for conversation`);
-    
     // Check if there's already an active listener for this conversation
     if (activeListeners[conversationId]) {
-      console.log(`♻️ Reusing existing listener for conversation`);
+      console.log(`♻️ Reusing existing listener`);
       
-      // Return a cleanup function that will properly clear this listener
       return () => {
-        console.log(`❌ Stopping listener for conversation`);
         if (activeListeners[conversationId]) {
           activeListeners[conversationId]();
           delete activeListeners[conversationId];
-          console.log(`✅ Listener removed`);
         }
       };
     }
     
-    try {
-      // Instead of using the firestore listener directly, use REST API calls on an interval
-      // This avoids the Firestore permissions issues while still providing updates
-      console.log(`🔄 Setting up polling-based message updates for conversation`);
-      
-      // Create a polling interval that fetches messages every 7.5 seconds
-      const pollingInterval = setInterval(async () => {
+    console.log(`🚀 Setting up Firestore listener for conversation: ${conversationId}`);
+    
+    // Create a Firestore query for messages in this conversation
+    // ORDER BY DESC to get newest messages first, then we'll reverse for display
+    const messagesRef = collection(db, 'messages');
+    const messagesQuery = query(
+      messagesRef,
+      where('conversationId', '==', conversationId),
+      orderBy('timestamp', 'desc'),
+      limit(50)  // Get most recent 50 messages for real-time updates
+    );
+    
+    console.log(`📋 Query configured: conversation=${conversationId}, user=${userId}`);
+    
+    // Set up the real-time listener
+    const unsubscribe = onSnapshot(
+      messagesQuery,
+      {
+        includeMetadataChanges: true // Include all changes for real-time updates
+      },
+      (snapshot) => {
         try {
+          // Check if this is from server or cache
+          const source = snapshot.metadata.fromCache ? "cache" : "server";
+          console.log(`🔔 Firebase listener triggered! ${snapshot.docs.length} messages from ${source}`);
+          
           // Only continue if this is still the active conversation
           if (listenerDetails.currentConversationId !== conversationId) {
+            console.log(`⏭️ Skipping update - different conversation active`);
             return;
           }
           
-          console.log(`📊 Polling for updates to conversation`);
+          // Process all messages from the snapshot and reverse for chronological order
+          const allMessages = snapshot.docs.map(doc => {
+            const data = doc.data();
+            return {
+              id: doc.id,
+              ...data,
+              isOwn: data.senderId === userId,
+              status: 'sent',
+              // Convert Firestore timestamp to expected format
+              timestamp: data.timestamp?.seconds ? {
+                _seconds: data.timestamp.seconds,
+                _nanoseconds: data.timestamp.nanoseconds || 0
+              } : data.timestamp
+            };
+          }).reverse(); // Reverse because Firestore query is DESC, but we want ASC for display
           
-          // Fetch only the last 5 messages from the API
-          const response = await api.get(`/messages/conversation/${otherUserId}?limit=3&offset=0`);
-          const fetchedMessages = response.data.messages || [];
+          // Always update messages in real-time (don't check against cache)
+          // This ensures we get immediate updates when new messages arrive
+          console.log(`📨 Firebase listener: ${allMessages.length} messages from Firestore`);
           
-          // Process messages
-          const processedMessages = fetchedMessages.map(message => ({
-            ...message,
-            isOwn: message.senderId === userId,
-            status: 'sent'
-          }));
+          // Update the message cache with all messages
+          messageCache[conversationId] = allMessages;
           
-          // Get existing messages from state
-          const existingMessages = messageCache[conversationId] || [];
-          const existingIds = new Set(existingMessages.map(msg => msg.id));
-          
-          // Filter out messages we already have
-          const newMessages = processedMessages.filter(msg => !existingIds.has(msg.id));
-          
-          if (newMessages.length > 0) {
-            console.log(`📨 Found ${newMessages.length} new messages!`);
-            
-            // Combine new messages with existing ones
-            const combinedMessages = [...existingMessages, ...newMessages];
-            
-            // Update the message cache
-            messageCache[conversationId] = combinedMessages;
-            
-            // Update AsyncStorage cache
-            try {
-              const cacheKey = `${MESSAGES_CACHE_PREFIX}${otherUserId}`;
-              AsyncStorage.setItem(cacheKey, JSON.stringify({
-                messages: combinedMessages,
-                timestamp: Date.now()
-              }));
-            } catch (e) {
-              console.error("❌ Error updating cache:", e);
-            }
-            
-            // Update the messages in state
-            dispatch({ type: "SET_MESSAGES", payload: combinedMessages });
-          } else {
-            console.log(`📊 No new messages found during poll`);
+          // Update AsyncStorage cache
+          try {
+            const cacheKey = `${MESSAGES_CACHE_PREFIX}${otherUserId}`;
+            AsyncStorage.setItem(cacheKey, JSON.stringify({
+              messages: allMessages,
+              timestamp: Date.now()
+            }));
+          } catch (e) {
+            console.error("❌ Cache error:", e);
           }
+          
+          // ALWAYS update the messages in state for real-time updates
+          console.log(`🚀 Dispatching ${allMessages.length} messages to React state`);
+          dispatch({ type: "SET_MESSAGES", payload: allMessages });
         } catch (error) {
-          console.error("❌ Error during message poll:", error);
-          // Don't crash the polling loop on one error
+          console.error("❌ Snapshot error:", error);
         }
-      }, 5000); // Poll every 5 seconds
+      },
+      (error) => {
+        console.error("❌ Firestore listener error:", error);
+        dispatch({
+          type: "SET_ERROR",
+          payload: "Real-time message updates temporarily unavailable"
+        });
+      }
+    );
+    
+    // Store the unsubscribe function
+    activeListeners[conversationId] = unsubscribe;
+    
+    console.log(`✅ Firebase real-time listener ACTIVE for conversation: ${conversationId}`);
+    
+    // Return the cleanup function
+    return () => {
+      if (activeListeners[conversationId]) {
+        activeListeners[conversationId]();
+        delete activeListeners[conversationId];
+      }
+    };
       
-      // Store the clear interval function as our "unsubscribe"
-      activeListeners[conversationId] = () => {
-        console.log(`⏹️ Stopping polling for conversation`);
-        clearInterval(pollingInterval);
-      };
-      
-      // Return the cleanup function
-      return () => {
-        console.log(`❌ Stopping polling for conversation`);
-        if (activeListeners[conversationId]) {
-          activeListeners[conversationId]();
-          delete activeListeners[conversationId];
-          console.log(`✅ Polling stopped`);
-        }
-      };
-      
-    } catch (error) {
-      console.error("❌ Error setting up message polling:", error);
-      dispatch({
-        type: "SET_ERROR",
-        payload: "Failed to setup real-time message updates"
-      });
-      return () => {}; // Return an empty function as fallback
-    }
   } catch (error) {
-    console.error("❌ Error in setupMessageListener:", error);
+    console.error("❌ Setup error:", error);
     dispatch({
       type: "SET_ERROR",
       payload: "Failed to setup real-time message updates"
     });
-    return () => {}; // Return an empty function as fallback
+    return () => {}; // Return empty cleanup function
   }
 };
+
+
 
 // Clear current conversation
 const clearCurrentConversation = (dispatch) => () => {
   try {
     console.log("Clearing current conversation state");
+    
+    // Get the current conversation ID before clearing it
+    const currentConversationId = listenerDetails.currentConversationId;
+    
+    // Clean up Firebase listener for the current conversation
+    if (currentConversationId && activeListeners[currentConversationId]) {
+      console.log(`🧹 Cleaning up Firebase listener for conversation: ${currentConversationId}`);
+      try {
+        activeListeners[currentConversationId]();
+        delete activeListeners[currentConversationId];
+        console.log(`✅ Firebase listener cleaned up successfully`);
+      } catch (cleanupError) {
+        console.error("❌ Error cleaning up Firebase listener:", cleanupError);
+      }
+    }
     
     // Clear the current conversation ID
     listenerDetails.currentConversationId = null;
@@ -842,9 +930,19 @@ const stopAllActiveListeners = () => {
   });
 };
 
-// Clear all caches
-const clearCache = (dispatch) => async () => {
+// Clear all caches and optionally stop listeners
+const clearCache = (dispatch) => async (clearListeners = false) => {
   try {
+    // If requested, stop all active listeners first
+    if (clearListeners || clearListeners === 'all_listeners') {
+      console.log("🧹 Stopping all active Firebase listeners");
+      stopAllActiveListeners();
+      
+      // Clear conversation tracking
+      listenerDetails.currentConversationId = null;
+      listenerDetails.lastNavigateTime = 0;
+    }
+    
     // Clear AsyncStorage caches
     const keys = await AsyncStorage.getAllKeys();
     const messageCacheKeys = keys.filter(key => 
@@ -863,11 +961,11 @@ const clearCache = (dispatch) => async () => {
       delete paginationState[key];
     });
     
-    console.log(`Cleared ${messageCacheKeys.length} cache items`);
+    console.log(`✅ Cleared ${messageCacheKeys.length} cache items and ${clearListeners ? 'stopped listeners' : 'kept listeners active'}`);
     
     return true;
   } catch (error) {
-    console.error("Error clearing cache:", error);
+    console.error("❌ Error clearing cache:", error);
     return false;
   }
 };

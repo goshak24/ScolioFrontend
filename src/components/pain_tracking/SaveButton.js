@@ -18,7 +18,7 @@ const SaveButton = ({ onPress, isLoading = false }) => {
         ) : (
           <Ionicons name="save-outline" size={moderateScale(18)} color={COLORS.white} style={styles.icon} />
         )}
-        <Text style={styles.text}>{isLoading ? 'Saving...' : 'Save Pain Log'}</Text>
+        <Text style={styles.text}>{isLoading ? 'Saving...' : 'Save'}</Text>
       </TouchableOpacity>
     </GradientBackground>
   );

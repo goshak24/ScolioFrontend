@@ -29,10 +29,8 @@ const ChatScreen = ({ route, navigation }) => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null); 
     const flatListRef = useRef(null);
-    const unsubscribeRef = useRef(null);
     const prevMessageCount = useRef(0);
     const lastMessageUpdate = useRef(Date.now());
-    const pollTimerRef = useRef(null);
     
     // Memoize the messages array to prevent unnecessary re-renders
     const messages = useMemo(() => {
@@ -73,35 +71,20 @@ const ChatScreen = ({ route, navigation }) => {
                     // Continue anyway - we have the ID in memory
                 }
                 
-                // Get initial messages
-                if (isActive) {
-                    console.log('💬 Initial messages loaded');
-                }
+                // Load initial messages (from cache or API) and setup Firebase listener
+                console.log('📥 Loading initial messages and setting up Firebase listener');
+                await getMessages(otherUser.id, false, 0, 20, userState.user.uid);
                 
-                // Create conversationId manually
+                // getMessages internally sets up the Firebase listener
+                // The listener cleanup is handled by the MessagesContext
+                
+                // Create conversationId manually  
                 const conversationId = [userState.user.uid, otherUser.id].sort().join('_');
                 
                 // Mark messages as read when opening the conversation
                 if (isActive && markMessagesAsRead) {
                     console.log('📖 Marking messages as read for conversation');
                     markMessagesAsRead(conversationId, userState.user.uid);
-                }
-                
-                // Setup listener with explicit user IDs (if active)
-                if (isActive) {
-                    console.log(`📡 Setting up immediate listener for user 1 and other user`);
-                    
-                    // Setup listener with explicit user IDs
-                    const unsubscribe = setupMessageListener(
-                        conversationId,
-                        userState.user.uid
-                    );
-                    
-                    // Save unsubscribe function for cleanup
-                    if (typeof unsubscribe === 'function') {
-                        unsubscribeRef.current = unsubscribe;
-                        console.log('📲 Message listener setup complete');
-                    }
                 }
             } catch (error) {
                 console.error("❌ Error initializing chat:", error);
@@ -118,37 +101,15 @@ const ChatScreen = ({ route, navigation }) => {
 
         // Set up focus handler to refresh messages when returning to the screen
         const refreshOnFocus = () => {
-            console.log("🔍 Screen focused - refreshing messages");
+            console.log("🔍 Screen focused - marking messages as read");
             if (userState?.user?.uid && otherUser?.id) {
-                // Force a refresh when returning to the screen
-                getMessages(otherUser.id, true, 0, 20, userState.user.uid);
-                
-                // Re-establish the listener
                 const conversationId = [userState.user.uid, otherUser.id].sort().join('_');
                 
                 // Mark messages as read when returning to the conversation
+                // The Firebase listener is already active from initial setup
                 if (markMessagesAsRead) {
                     console.log('📖 Marking messages as read on focus');
                     markMessagesAsRead(conversationId, userState.user.uid);
-                }
-                
-                // First clean up any existing listener
-                if (unsubscribeRef.current && typeof unsubscribeRef.current === 'function') {
-                    unsubscribeRef.current();
-                    unsubscribeRef.current = null;
-                }
-                
-                console.log(`🔄 Setting up fresh listener on focus for users 1 and other user`);
-                
-                // Setup fresh listener with both user IDs explicitly passed
-                const unsubscribe = setupMessageListener(
-                    conversationId,
-                    userState.user.uid
-                );
-                
-                // Save unsubscribe function for cleanup
-                if (typeof unsubscribe === 'function') {
-                    unsubscribeRef.current = unsubscribe;
                 }
             }
         };
@@ -163,27 +124,10 @@ const ChatScreen = ({ route, navigation }) => {
             isActive = false; // Mark as inactive first
             console.log("🧹 ChatScreen unmounting, cleaning up listeners");
             
-            // Clean up polling if active
-            if (pollTimerRef.current) {
-                clearInterval(pollTimerRef.current);
-                pollTimerRef.current = null;
-            }
-            
-            // First try to use the stored unsubscribe function
-            if (unsubscribeRef.current && typeof unsubscribeRef.current === 'function') {
-                console.log("🗑️ Calling stored unsubscribe function");
-                try {
-                    unsubscribeRef.current();
-                    unsubscribeRef.current = null; // Clear the ref after unsubscribing
-                } catch (err) {
-                    console.error("❌ Error calling unsubscribe function:", err);
-                }
-            }
-            
             // Remove focus listener
             unsubscribeFocus();
             
-            // Then call clearCurrentConversation to ensure proper cleanup
+            // Clear current conversation - this will cleanup Firebase listeners in MessagesContext
             clearCurrentConversation();
         };
     }, [otherUser.id, userState.user?.uid]);
