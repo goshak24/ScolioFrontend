@@ -43,12 +43,13 @@ const MessageList = forwardRef(({
     );
   };
   
-  // Render loading indicator for pagination
+  // Render loading indicator for pagination (at the top)
   const renderLoadingMoreIndicator = () => {
     if (loadingMore && hasMoreMessages) {
       return (
         <View style={styles.loadingMoreContainer}>
           <ActivityIndicator size="small" color={COLORS.gradientPink} />
+          <Text style={styles.loadingText}>Loading older messages...</Text>
         </View>
       );
     }
@@ -62,7 +63,7 @@ const MessageList = forwardRef(({
       <Text style={styles.emptySubtext}>Start a conversation!</Text>
     </View>
   );
-  
+
   return (
     <FlatList
       ref={ref}
@@ -72,13 +73,12 @@ const MessageList = forwardRef(({
       data={messages}
       extraData={lastUpdate}
       keyExtractor={(item, index) => 
-        item.id ? `${item.id}-${item.status || 'unknown'}-${lastUpdate}` : `msg-${index}-${Date.now()}`
+        item.id ? `msg-${item.id}` : `temp-msg-${index}-${item.clientMessageId || Date.now()}`
       }
       renderItem={renderMessageItem}
       contentContainerStyle={styles.messagesContent}
       ListHeaderComponent={renderLoadingMoreIndicator}
       ListEmptyComponent={renderEmptyComponent}
-      onEndReachedThreshold={0.1}
       onRefresh={onLoadMore}
       refreshing={loadingMore}
       removeClippedSubviews={false}
@@ -89,7 +89,10 @@ const MessageList = forwardRef(({
       onContentSizeChange={onContentSizeChange}
       onLayout={onLayout}
       scrollEnabled={true}
-      maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+      maintainVisibleContentPosition={{ 
+        minIndexForVisible: 0,
+        autoscrollToTopThreshold: 10
+      }}
       scrollEventThrottle={16}
     />
   );
@@ -100,11 +103,16 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     paddingHorizontal: moderateScale(15),
     paddingVertical: moderateScale(10),
-    minHeight: '100%',
   },
   loadingMoreContainer: {
-    paddingVertical: moderateScale(10),
+    paddingVertical: moderateScale(15),
     alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingText: {
+    color: COLORS.lightGray,
+    fontSize: moderateScale(12),
+    marginTop: moderateScale(5),
   },
   emptyMessages: {
     flex: 1,

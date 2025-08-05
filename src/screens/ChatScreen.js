@@ -61,7 +61,7 @@ const ChatScreen = ({ route, navigation }) => {
                     return;
                 }
 
-                console.log(`🔐 ChatScreen initializing with user 1 and other user`);
+                console.log(`🔐 ChatScreen initializing with user and other user`);
                 
                 // Store userId in AsyncStorage for future reference
                 try {
@@ -71,9 +71,8 @@ const ChatScreen = ({ route, navigation }) => {
                     // Continue anyway - we have the ID in memory
                 }
                 
-                // Load initial messages (from cache or API) and setup Firebase listener
-                console.log('📥 Loading initial messages and setting up Firebase listener');
-                await getMessages(otherUser.id, false, 0, 20, userState.user.uid);
+                // Load initial messages ONCE (cached for 48 hours, Firebase handles new ones)
+                await getMessages(otherUser.id, false, 0, 10, userState.user.uid);
                 
                 // getMessages internally sets up the Firebase listener
                 // The listener cleanup is handled by the MessagesContext
@@ -132,65 +131,39 @@ const ChatScreen = ({ route, navigation }) => {
         };
     }, [otherUser.id, userState.user?.uid]);
 
-    // Scroll to bottom when messages change, but only when loading is complete
+    // Handle message updates and scrolling (WhatsApp-style)
     useEffect(() => {
-        // Don't scroll while initial loading or loading older messages
-        if (loading || messagesState.loadingOlderMessages) {
-            console.log("⏳ Skip auto-scroll during loading");
-            return;
+        if (loading) {
+            return; // Don't process during initial loading
         }
         
-        // Only auto-scroll when a new message arrives
-        if (flatListRef.current && messages.length > 0) {
-            // Check if message count has increased - we have a new message
-            if (messages.length > prevMessageCount.current) {
-                console.log(`📜 Auto-scrolling to bottom - messages increased from ${prevMessageCount.current} to ${messages.length}`);
-                
-                // Add a small delay to ensure render is complete
-                const scrollTimer = setTimeout(() => {
-                    if (flatListRef.current) {
-                        flatListRef.current.scrollToEnd({ animated: true });
-                        console.log("📜 Scrolled to end");
-                    }
-                }, 100);
-                
-                // Track the last time we updated to help debug
-                lastMessageUpdate.current = Date.now();
-                
-                // Clean up timer
-                return () => clearTimeout(scrollTimer);
-            } else {
-                console.log(`📚 No auto-scroll needed - message count unchanged at ${messages.length}`);
-            }
-            
-            // Update the previous count
-            prevMessageCount.current = messages.length;
-        }
-    }, [messages.length, loading, messagesState.loadingOlderMessages]);
-
-    // Monitor message changes 
-    useEffect(() => {
-        if (messages.length > 0) {
-            console.log(`💬 Messages updated: ${messages.length} messages available, last update: ${new Date(lastMessageUpdate.current).toISOString()}`);
-            
-            // Mark messages as read when new messages arrive and user is viewing the conversation
-            if (messages.length > prevMessageCount.current && markMessagesAsRead && userState?.user?.uid) {
+        const currentMessageCount = messages.length;
+        const hadNewMessage = currentMessageCount > prevMessageCount.current;
+        
+        // Update previous count
+        prevMessageCount.current = currentMessageCount;
+        
+        // Handle new messages - auto-scroll to bottom for new messages only
+        if (hadNewMessage && flatListRef.current && currentMessageCount > 0 && !messagesState.loadingOlderMessages) {
+            // Mark messages as read for new messages
+            if (markMessagesAsRead && userState?.user?.uid) {
                 const conversationId = [userState.user.uid, otherUser.id].sort().join('_');
-                console.log('📖 Marking new messages as read');
                 markMessagesAsRead(conversationId, userState.user.uid);
             }
             
-            // Track previous count for next comparison
-            prevMessageCount.current = messages.length;
-            
-            // Force a render by updating the last message time
-            lastMessageUpdate.current = Date.now();
+            // Scroll to bottom for new messages
+            requestAnimationFrame(() => {
+                if (flatListRef.current && !messagesState.loadingOlderMessages) {
+                    flatListRef.current.scrollToEnd({ animated: true });
+                }
+            });
         }
-    }, [messages.length, markMessagesAsRead, userState?.user?.uid, otherUser.id]);
+    }, [messages.length, loading, messagesState.loadingOlderMessages, markMessagesAsRead, userState?.user?.uid, otherUser.id]);
 
-    // Handle loading more messages when user scrolls to top
+    // Handle loading more messages when user pulls to refresh (scrolls to top)
     const handleLoadMore = async () => {
-        if (messagesState.loadingOlderMessages || !messagesState.hasMoreMessages) {
+        if (messagesState.loadingOlderMessages || !messagesState.hasMoreMessages || loading) {
+            console.log(`⏭️ Skipping load more: loading=${messagesState.loadingOlderMessages}, hasMore=${messagesState.hasMoreMessages}, initialLoading=${loading}`);
             return;
         }
         
@@ -200,16 +173,16 @@ const ChatScreen = ({ route, navigation }) => {
                 throw new Error("User authentication required to load messages");
             }
             
+            console.log(`📤 Loading older messages for conversation with ${otherUser.username || otherUser.id}`);
             await getOlderMessages(otherUser.id, userState.user.uid);
+            
         } catch (error) {
-            console.error("Error loading more messages:", error);
+            console.error("❌ Error loading more messages:", error);
             setError(error.message || "Failed to load older messages");
         }
     };
 
-    // We're now using the formatMessageTime utility function imported from '../components/ai/chat'
-
-    // Handle sending a new message
+    // Handle sending a new message (WhatsApp-style)
     const handleSendMessage = async () => {
         if (!messageText.trim()) return;
         
@@ -222,53 +195,32 @@ const ChatScreen = ({ route, navigation }) => {
                 throw new Error("User authentication required to send messages");
             }
             
-            // Optimistically scroll to bottom immediately (feels more responsive)
-            setTimeout(() => {
-                if (flatListRef.current) {
-                    flatListRef.current.scrollToEnd({ animated: false });
-                }
-            }, 10);
-            
-            // Send the message
+            // Send the message - the useEffect will handle scrolling to show the new message
             await sendMessage(otherUser.id, trimmedMessage, userState.user.uid);
             
-            // Firebase listener will handle the update, but we'll scroll again after a delay
-            // just to ensure the new message is visible
-            setTimeout(() => {
-                if (flatListRef.current) {
-                    flatListRef.current.scrollToEnd({ animated: true });
-                }
-            }, 300);
         } catch (error) {
             console.error("Error sending message:", error);
             setError(error.message || "Failed to send message");
         }
     };
 
-    // Handle content size change for scrolling
-    const handleContentSizeChange = () => {
-        // Scroll to bottom when content size changes (only if not loading older messages)
-        if (flatListRef.current && messages.length > 0 && !messagesState.loadingOlderMessages) {
-            requestAnimationFrame(() => {
+    // Content size change handler
+    const handleContentSizeChange = (contentWidth, contentHeight) => {
+        // Auto-scroll to bottom on initial load
+        if (messages.length > 0 && flatListRef.current && !messagesState.loadingOlderMessages) {
+            setTimeout(() => {
                 if (flatListRef.current) {
                     flatListRef.current.scrollToEnd({ animated: false });
-                    console.log("📜 Scrolled to end on content size change");
                 }
-            });
+            }, 100);
         }
     };
     
-    // Handle layout change for scrolling
-    const handleLayout = () => {
-        // Scroll to bottom when layout changes
-        if (flatListRef.current && messages.length > 0 && !messagesState.loadingOlderMessages) {
-            requestAnimationFrame(() => {
-                if (flatListRef.current) {
-                    flatListRef.current.scrollToEnd({ animated: false });
-                    console.log("📜 Scrolled to end on layout change");
-                }
-            });
-        }
+    // Layout handler
+    const handleLayout = (event) => {
+        // Handle layout changes if needed
+        const { height } = event.nativeEvent.layout;
+        console.log(`📐 MessageList layout height: ${height}`);
     };
 
     // Handle retry/go back when error occurs

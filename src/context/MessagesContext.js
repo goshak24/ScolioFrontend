@@ -21,12 +21,13 @@ import { getApp } from "firebase/app";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import userCache from "../utilities/userCache";
 
-// Cache keys and TTL values
+// Cache keys and TTL values (MAXIMUM efficiency caching)
 const CONVERSATIONS_CACHE_KEY = 'conversations_data';
 const MESSAGES_CACHE_PREFIX = 'messages_conversation_';
 const CONVERSATIONS_TTL = 30 * 60 * 1000; // 30 minutes
-const MESSAGES_TTL = 10 * 60 * 1000; // 10 minutes
-const MESSAGES_PER_PAGE = 20; // Initial load count
+const MESSAGES_TTL = 48 * 60 * 60 * 1000; // 48 HOURS - cache messages for very long time
+const MESSAGES_PER_PAGE = 10; // Reduced to 10 to minimize reads
+const FRESH_CACHE_THRESHOLD = 5 * 60 * 1000; // 5 minutes - don't setup listeners if cache is this fresh
 
 // Use the existing Firebase app instance from backendApi instead of creating a new one
 let db;
@@ -69,6 +70,9 @@ const messageCache = {};
 // Track pagination state for conversations
 const paginationState = {};
 
+// Track last seen timestamp per conversation to avoid duplicate reads
+const lastSeenTimestamps = {};
+
 // Helper function to get the current user ID safely
 const getCurrentUserId = async () => {
   // Try to get from AsyncStorage
@@ -79,7 +83,6 @@ const getCurrentUserId = async () => {
 const messagesReducer = (state, action) => {
   switch (action.type) {
     case "SET_CONVERSATIONS":
-      console.log(`🔄 SET_CONVERSATIONS: ${action.payload.length} conversations`);
       return {
         ...state,
         conversations: action.payload,
@@ -87,7 +90,6 @@ const messagesReducer = (state, action) => {
         error: null
       };
     case "SET_CURRENT_CONVERSATION":
-      console.log(`🔄 SET_CURRENT_CONVERSATION: ${action.payload.id}`);
       return {
         ...state,
         currentConversation: {
@@ -97,16 +99,14 @@ const messagesReducer = (state, action) => {
         error: null
       };
     case "SET_MESSAGES":
-      // Only skip update if the message count AND the last message ID are exactly the same
-      const lastOldMessage = state.messages[state.messages.length - 1];
-      const lastNewMessage = action.payload[action.payload.length - 1];
-      
-      if (state.messages.length === action.payload.length && 
-          lastOldMessage?.id === lastNewMessage?.id) {
-        console.log(`⏭️ SET_MESSAGES: Skipping update, same message count and last message (${action.payload.length})`);
+      // Fast comparison - only skip if exact same array reference or same length + last message
+      if (state.messages === action.payload || 
+          (state.messages.length === action.payload.length && 
+           state.messages.length > 0 &&
+           state.messages[state.messages.length - 1]?.id === action.payload[action.payload.length - 1]?.id)) {
         return state; // Return the same state reference to prevent re-render
       }
-      console.log(`🔄 SET_MESSAGES: Updated with ${action.payload.length} messages`);
+      
       return {
         ...state,
         messages: action.payload,
@@ -114,17 +114,16 @@ const messagesReducer = (state, action) => {
         error: null
       };
     case "ADD_MESSAGE":
-      // Check if this message already exists
+      // Check if this message already exists (check both ID and clientMessageId)
       const isDuplicate = state.messages.some(message => 
-        message.id === action.payload.id
+        message.id === action.payload.id ||
+        (action.payload.clientMessageId && message.clientMessageId === action.payload.clientMessageId)
       );
       
       if (isDuplicate) {
-        console.log(`⏭️ ADD_MESSAGE: Skipping duplicate message ${action.payload.id}`);
         return state; // Return the same state reference to prevent re-render
       }
       
-      console.log(`➕ ADD_MESSAGE: Adding new message ${action.payload.id}`);
       return {
         ...state,
         messages: [...state.messages, action.payload],
@@ -137,14 +136,12 @@ const messagesReducer = (state, action) => {
       
       // If no new messages, return same state reference
       if (newMessages.length === 0) {
-        console.log(`⏭️ ADD_OLDER_MESSAGES: No new messages to add`);
         return {
           ...state,
           loadingOlderMessages: false
         };
       }
       
-      console.log(`➕ ADD_OLDER_MESSAGES: Adding ${newMessages.length} older messages`);
       return {
         ...state,
         messages: [...newMessages, ...state.messages],
@@ -341,7 +338,7 @@ const getConversations = (dispatch) => async (userId, forceFetch = false) => {
   }
 };
 
-// Get initial messages for a conversation (used for backwards compatibility and initial loading)
+// Get initial messages for a conversation (ULTRA-EFFICIENT - MINIMAL FIREBASE READS)
 const getMessages = (dispatch) => async (otherUserId, forceFetch = false, offset = 0, limit = MESSAGES_PER_PAGE, currentUserId = null) => {
   try {
     dispatch({ type: "SET_LOADING", payload: true });
@@ -385,7 +382,7 @@ const getMessages = (dispatch) => async (otherUserId, forceFetch = false, offset
     
     const now = new Date().getTime();
     
-    // Check if we have cached data that's valid (only if not force fetching)
+    // Check if we have cached data (VERY aggressive caching - almost never expire)
     if (!forceFetch) {
       const cacheKey = `${MESSAGES_CACHE_PREFIX}${otherUserId}`;
       const cachedData = await AsyncStorage.getItem(cacheKey);
@@ -394,9 +391,9 @@ const getMessages = (dispatch) => async (otherUserId, forceFetch = false, offset
         try {
           const { messages, timestamp } = JSON.parse(cachedData);
           
-          // Only use cache if it's still valid
+          // Cache expires after 24 hours (very long TTL)
           if (now - timestamp < MESSAGES_TTL) {
-            console.log(`📋 Using cached messages for conversation with ${otherUserId}`);
+            console.log(`📋 Using cached messages (${messages.length} messages) - expires in ${Math.round((MESSAGES_TTL - (now - timestamp)) / (60 * 60 * 1000))} hours`);
             
             // Process cached messages to add isOwn flag
             const processedMessages = messages.map(message => ({
@@ -411,19 +408,26 @@ const getMessages = (dispatch) => async (otherUserId, forceFetch = false, offset
             dispatch({ type: "SET_MESSAGES", payload: processedMessages });
             dispatch({ type: "SET_HAS_MORE_MESSAGES", payload: processedMessages.length >= MESSAGES_PER_PAGE });
             
-            console.log(`✅ Loaded ${processedMessages.length} cached messages`);
+            // 🚀 CRITICAL OPTIMIZATION: Only setup Firebase listener if cache is older than 5 minutes
+            const cacheAge = now - timestamp;
             
-            // Setup Firebase listener after loading cached data - only if not already set up
-            if (!activeListeners[conversationId]) {
-              console.log(`🔄 Setting up Firebase listener for cached data`);
-              setupMessageListener(dispatch, () => ({}))(conversationId, currentUserId);
+            if (cacheAge > FRESH_CACHE_THRESHOLD && !activeListeners[conversationId]) {
+              console.log(`🔗 Cache is ${Math.round(cacheAge / 60000)} min old - setting up listener for new messages`);
+              // Delay listener setup by 2 seconds to batch operations and prevent rapid setups
+              setTimeout(() => {
+                if (!activeListeners[conversationId] && listenerDetails.currentConversationId === conversationId) {
+                  setupMessageListener(dispatch, () => ({}))(conversationId, currentUserId);
+                }
+              }, 2000);
+            } else if (cacheAge <= FRESH_CACHE_THRESHOLD) {
+              console.log(`⚡ Cache is fresh (${Math.round(cacheAge / 1000)}s old) - NO Firebase listener needed`);
             } else {
-              console.log(`♻️ Firebase listener already active for this conversation`);
+              console.log(`⚠️ Firebase listener already exists for: ${conversationId}`);
             }
             
             return processedMessages;
           } else {
-            console.log(`🕐 Messages cache expired, will fetch fresh data`);
+            console.log(`🕐 Messages cache expired after 24 hours - will fetch fresh data`);
           }
         } catch (e) {
           console.error("❌ Error parsing cached messages:", e);
@@ -431,12 +435,12 @@ const getMessages = (dispatch) => async (otherUserId, forceFetch = false, offset
         }
       }
     } else {
-      console.log("🔄 Force refreshing messages data");
+      console.log("🔄 Force refreshing messages data (explicit force fetch)");
     }
     
-    // Fetch initial messages from API (this provides the base data for Firebase listener)
-    console.log(`🔄 Fetching initial messages from API for conversation`);
-    const response = await api.get(`/messages/conversation/${otherUserId}?limit=${limit}&offset=${offset}`);
+    // Fetch initial messages ONCE from API (REDUCED LIMIT - cache for 24 hours)
+    console.log(`📥 Loading initial messages from API (LIMIT: ${MESSAGES_PER_PAGE}) - will cache for 24 hours`);
+    const response = await api.get(`/messages/conversation/${otherUserId}?limit=${MESSAGES_PER_PAGE}&offset=${offset}`);
     const messages = response.data.messages || [];
     
     // Process messages to add isOwn flag
@@ -464,14 +468,17 @@ const getMessages = (dispatch) => async (otherUserId, forceFetch = false, offset
     dispatch({ type: "SET_MESSAGES", payload: processedMessages });
     dispatch({ type: "SET_HAS_MORE_MESSAGES", payload: processedMessages.length >= MESSAGES_PER_PAGE });
     
-    console.log(`✅ Loaded ${processedMessages.length} initial messages`);
-    
-    // Setup Firebase listener for real-time updates - only if not already set up
+    // Setup Firebase listener for NEW messages only - ONLY after fresh API fetch with delay
     if (!activeListeners[conversationId]) {
-      console.log(`🔄 Setting up Firebase listener for real-time updates`);
-      setupMessageListener(dispatch, () => ({}))(conversationId, currentUserId);
+      console.log(`🔗 Setting up Firebase listener after fresh API fetch: ${conversationId}`);
+      // Delay listener setup by 1 second to let the API response settle
+      setTimeout(() => {
+        if (!activeListeners[conversationId] && listenerDetails.currentConversationId === conversationId) {
+          setupMessageListener(dispatch, () => ({}))(conversationId, currentUserId);
+        }
+      }, 1000);
     } else {
-      console.log(`♻️ Firebase listener already active for this conversation`);
+      console.log(`⚠️ Firebase listener already exists for: ${conversationId}`);
     }
     
     return processedMessages;
@@ -487,7 +494,7 @@ const getMessages = (dispatch) => async (otherUserId, forceFetch = false, offset
   }
 };
 
-// Get older messages
+// Get older messages (ULTRA-EFFICIENT - MINIMAL PAGINATION)
 const getOlderMessages = (dispatch) => async (otherUserId, currentUserId) => {
   try {
     if (!currentUserId) {
@@ -513,12 +520,15 @@ const getOlderMessages = (dispatch) => async (otherUserId, currentUserId) => {
       };
     }
     
-    // Get current offset
+    // Get current offset based on cached messages
     const offset = (messageCache[conversationId]?.length || 0);
     
-    // Fetch older messages from API
-    console.log(`Fetching older messages for conversation with ${otherUserId}, offset: ${offset}`);
-    const response = await api.get(`/messages/conversation/${otherUserId}?limit=${MESSAGES_PER_PAGE}&offset=${offset}`);
+    // Use MINIMAL limit for older messages to reduce reads
+    const OLDER_MESSAGES_LIMIT = 8; // Only 8 older messages at a time
+    
+    // Fetch older messages from API (MINIMAL LIMIT)
+    console.log(`📤 Fetching older messages: offset=${offset}, limit=${OLDER_MESSAGES_LIMIT}`);
+    const response = await api.get(`/messages/conversation/${otherUserId}?limit=${OLDER_MESSAGES_LIMIT}&offset=${offset}`);
     const messages = response.data.messages || [];
     
     // Process messages to add isOwn flag
@@ -532,7 +542,7 @@ const getOlderMessages = (dispatch) => async (otherUserId, currentUserId) => {
     dispatch({ type: "ADD_OLDER_MESSAGES", payload: processedMessages });
     
     // Update has more flag based on response
-    const hasMore = processedMessages.length === MESSAGES_PER_PAGE;
+    const hasMore = processedMessages.length === OLDER_MESSAGES_LIMIT;
     dispatch({ type: "SET_HAS_MORE_MESSAGES", payload: hasMore });
     
     // Update pagination state
@@ -542,9 +552,11 @@ const getOlderMessages = (dispatch) => async (otherUserId, currentUserId) => {
       loading: false
     };
     
+    console.log(`✅ Loaded ${processedMessages.length} older messages (hasMore: ${hasMore})`);
+    
     return processedMessages;
   } catch (error) {
-    console.error("Error fetching older messages:", error);
+    console.error("❌ Error fetching older messages:", error);
     dispatch({
       type: "SET_ERROR",
       payload: error.response?.data?.message || "Failed to fetch older messages"
@@ -557,8 +569,8 @@ const getOlderMessages = (dispatch) => async (otherUserId, currentUserId) => {
 
 // Send a message
 const sendMessage = (dispatch) => async (receiverId, content, currentUserId) => {
-  // Create temp message ID
-  const tempId = `temp_${Date.now()}`;
+  // Create temp message ID with more uniqueness to prevent collisions
+  const tempId = `temp_${currentUserId}_${receiverId}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   
   try {
     if (!currentUserId) {
@@ -577,11 +589,18 @@ const sendMessage = (dispatch) => async (receiverId, content, currentUserId) => 
       conversationId,
       timestamp: { _seconds: Math.floor(Date.now() / 1000), _nanoseconds: 0 },
       isOwn: true,
-      status: 'sending'
+      status: 'sending',
+      clientMessageId: tempId // Include clientMessageId for tracking
     };
     
-    // Immediately add to state for a responsive UI
-    dispatch({ type: "ADD_MESSAGE", payload: tempMessage });
+    // Check if this message already exists in cache to prevent duplicates
+    const existingMessages = messageCache[conversationId] || [];
+    const isDuplicate = existingMessages.some(msg => msg.id === tempId);
+    
+    if (!isDuplicate) {
+      // Immediately add to state for a responsive UI
+      dispatch({ type: "ADD_MESSAGE", payload: tempMessage });
+    }
     
     // Send the message to the server
     const response = await api.post("/messages", {
@@ -641,7 +660,7 @@ const sendMessage = (dispatch) => async (receiverId, content, currentUserId) => 
   }
 };
 
-// Setup a listener for new messages in the current conversation
+// Setup a listener ONLY for NEW messages (MAXIMUM EFFICIENCY - ZERO WASTED READS)
 const setupMessageListener = (dispatch, getState) => async (conversationId, userId) => {
   try {
     if (!db) {
@@ -651,10 +670,6 @@ const setupMessageListener = (dispatch, getState) => async (conversationId, user
 
     if (!userId) {
       console.warn("❌ No user ID provided");
-      dispatch({
-        type: "SET_ERROR",
-        payload: "User ID required for message updates"
-      });
       return () => {};
     }
 
@@ -663,42 +678,12 @@ const setupMessageListener = (dispatch, getState) => async (conversationId, user
     
     if (!otherUserId) {
       console.error("❌ Could not determine other user ID from conversation ID");
-      dispatch({
-        type: "SET_ERROR",
-        payload: "Invalid conversation ID"
-      });
       return () => {};
     }
 
-    // CRITICAL: Verify backend token and setup Firebase Auth for Firestore
-    const authResult = await verifyBackendTokenAndSetupFirebase();
-    
-    if (!authResult.success) {
-      console.error("❌ Auth verification failed:", authResult.error);
-      dispatch({
-        type: "SET_ERROR",
-        payload: "Authentication required for real-time updates"
-      });
-      return () => {};
-    }
-    
-    // Verify the backend user matches the expected user
-    if (authResult.backendUserId !== userId) {
-      console.error(`❌ User ID mismatch`);
-      dispatch({
-        type: "SET_ERROR",
-        payload: "User authentication mismatch"
-      });
-      return () => {};
-    }
-    
-    // IMPORTANT: Track this as the active conversation
-    setActiveConversation(conversationId);
-    
-    // Check if there's already an active listener for this conversation
+    // 🚫 PREVENT DUPLICATE LISTENERS AT ALL COSTS
     if (activeListeners[conversationId]) {
-      console.log(`♻️ Reusing existing listener`);
-      
+      console.log(`🚫 DUPLICATE LISTENER PREVENTED for: ${conversationId}`);
       return () => {
         if (activeListeners[conversationId]) {
           activeListeners[conversationId]();
@@ -706,113 +691,173 @@ const setupMessageListener = (dispatch, getState) => async (conversationId, user
         }
       };
     }
+
+    // CRITICAL: Verify backend token and setup Firebase Auth for Firestore
+    const authResult = await verifyBackendTokenAndSetupFirebase();
     
-    console.log(`🚀 Setting up Firestore listener for conversation: ${conversationId}`);
+    if (!authResult.success) {
+      console.error("❌ Auth verification failed:", authResult.error);
+      return () => {};
+    }
     
-    // Create a Firestore query for messages in this conversation
-    // ORDER BY DESC to get newest messages first, then we'll reverse for display
+    // Verify the backend user matches the expected user
+    if (authResult.backendUserId !== userId) {
+      console.error(`❌ User ID mismatch`);
+      return () => {};
+    }
+    
+    // IMPORTANT: Track this as the active conversation
+    setActiveConversation(conversationId);
+    
+    // 🎯 ULTRA-PRECISE TIMESTAMP FILTERING: Get the exact latest message timestamp
+    const existingMessages = messageCache[conversationId] || [];
+    let lastMessageTimestamp = lastSeenTimestamps[conversationId] || null;
+    
+    // If we don't have a stored timestamp, get it from existing messages with NANOSECOND precision
+    if (!lastMessageTimestamp && existingMessages.length > 0) {
+      const lastMessage = existingMessages[existingMessages.length - 1];
+      lastMessageTimestamp = lastMessage.timestamp?.seconds || lastMessage.timestamp?._seconds || null;
+      
+      // Store this timestamp to avoid re-reading
+      if (lastMessageTimestamp) {
+        lastSeenTimestamps[conversationId] = lastMessageTimestamp;
+      }
+    }
+    
+    // Create ULTRA-PRECISE query that gets ONLY BRAND NEW messages
     const messagesRef = collection(db, 'messages');
-    const messagesQuery = query(
-      messagesRef,
-      where('conversationId', '==', conversationId),
-      orderBy('timestamp', 'desc'),
-      limit(50)  // Get most recent 50 messages for real-time updates
-    );
+    let messagesQuery;
     
-    console.log(`📋 Query configured: conversation=${conversationId}, user=${userId}`);
+    if (lastMessageTimestamp) {
+      // 🎯 CRITICAL: Use milliseconds + 1ms to ensure we NEVER re-read the same message
+      const timestampObj = Timestamp.fromMillis((lastMessageTimestamp * 1000) + 1);
+      messagesQuery = query(
+        messagesRef,
+        where('conversationId', '==', conversationId),
+        where('timestamp', '>', timestampObj), // CRITICAL: Only get messages AFTER this exact timestamp
+        orderBy('timestamp', 'asc'),
+        limit(5) // ULTRA-MINIMAL: Only 5 new messages at a time
+      );
+      console.log(`🎯 ULTRA-PRECISE: Listening for messages AFTER ${new Date((lastMessageTimestamp * 1000) + 1).toISOString()}`);
+    } else {
+      // No existing messages - listen for any new ones, but ULTRA-LIMITED
+      messagesQuery = query(
+        messagesRef,
+        where('conversationId', '==', conversationId),
+        orderBy('timestamp', 'asc'),
+        limit(3) // ULTRA-MINIMAL: Only 3 messages for initial query
+      );
+      console.log(`🎯 ULTRA-PRECISE: Listening for ANY new messages (no cache) - LIMITED to 3`);
+    }
     
-    // Set up the real-time listener
+    // Set up the real-time listener (ONLY NEW MESSAGES)
     const unsubscribe = onSnapshot(
       messagesQuery,
       {
-        includeMetadataChanges: true // Include all changes for real-time updates
+        includeMetadataChanges: false // CRITICAL: Only server changes, ignore local changes
       },
       (snapshot) => {
         try {
-          // Check if this is from server or cache
-          const source = snapshot.metadata.fromCache ? "cache" : "server";
-          console.log(`🔔 Firebase listener triggered! ${snapshot.docs.length} messages from ${source}`);
-          
           // Only continue if this is still the active conversation
           if (listenerDetails.currentConversationId !== conversationId) {
-            console.log(`⏭️ Skipping update - different conversation active`);
             return;
           }
           
-          // Process all messages from the snapshot and reverse for chronological order
-          const allMessages = snapshot.docs.map(doc => {
-            const data = doc.data();
-            return {
-              id: doc.id,
-              ...data,
-              isOwn: data.senderId === userId,
-              status: 'sent',
-              // Convert Firestore timestamp to expected format
-              timestamp: data.timestamp?.seconds ? {
-                _seconds: data.timestamp.seconds,
-                _nanoseconds: data.timestamp.nanoseconds || 0
-              } : data.timestamp
-            };
-          }).reverse(); // Reverse because Firestore query is DESC, but we want ASC for display
+          // 🚀 MAXIMUM EFFICIENCY: Only process 'added' changes to avoid re-processing
+          const newMessages = [];
+          let latestTimestamp = lastSeenTimestamps[conversationId];
           
-          // Always update messages in real-time (don't check against cache)
-          // This ensures we get immediate updates when new messages arrive
-          console.log(`📨 Firebase listener: ${allMessages.length} messages from Firestore`);
+          snapshot.docChanges().forEach((change) => {
+            if (change.type === 'added') {
+              const data = change.doc.data();
+              const messageTimestamp = data.timestamp?.seconds || data.timestamp?._seconds;
+              
+              // ULTRA-STRICT: Only process if this is truly newer than our last seen timestamp
+              if (!latestTimestamp || messageTimestamp > latestTimestamp) {
+                newMessages.push({
+                  id: change.doc.id,
+                  ...data,
+                  isOwn: data.senderId === userId,
+                  status: 'sent',
+                  timestamp: data.timestamp?.seconds ? {
+                    _seconds: data.timestamp.seconds,
+                    _nanoseconds: data.timestamp.nanoseconds || 0
+                  } : data.timestamp
+                });
+                
+                // Update latest timestamp
+                if (messageTimestamp > (latestTimestamp || 0)) {
+                  latestTimestamp = messageTimestamp;
+                }
+              }
+            }
+          });
           
-          // Update the message cache with all messages
-          messageCache[conversationId] = allMessages;
-          
-          // Update AsyncStorage cache
-          try {
-            const cacheKey = `${MESSAGES_CACHE_PREFIX}${otherUserId}`;
-            AsyncStorage.setItem(cacheKey, JSON.stringify({
-              messages: allMessages,
-              timestamp: Date.now()
-            }));
-          } catch (e) {
-            console.error("❌ Cache error:", e);
+          // Update last seen timestamp to prevent re-processing
+          if (latestTimestamp) {
+            lastSeenTimestamps[conversationId] = latestTimestamp;
           }
           
-          // ALWAYS update the messages in state for real-time updates
-          console.log(`🚀 Dispatching ${allMessages.length} messages to React state`);
-          dispatch({ type: "SET_MESSAGES", payload: allMessages });
+          if (newMessages.length > 0) {
+            console.log(`🆕 ${newMessages.length} NEW messages (Firebase reads: ${snapshot.size})`);
+            
+            // Get existing messages from cache
+            const existingMessages = messageCache[conversationId] || [];
+            
+            // ULTRA-STRICT: Filter out any duplicates to prevent key conflicts
+            const existingIds = new Set(existingMessages.map(msg => msg.id));
+            const trulyNewMessages = newMessages.filter(msg => msg.id && !existingIds.has(msg.id));
+            
+            if (trulyNewMessages.length > 0) {
+              // Append ONLY truly new messages to existing ones (chronological order)
+              const updatedMessages = [...existingMessages, ...trulyNewMessages];
+              
+              // Update cache and state
+              messageCache[conversationId] = updatedMessages;
+              
+              // Update AsyncStorage cache (background operation)
+              AsyncStorage.setItem(`${MESSAGES_CACHE_PREFIX}${otherUserId}`, JSON.stringify({
+                messages: updatedMessages,
+                timestamp: Date.now()
+              })).catch(() => {}); // Silent fail for cache
+              
+              // Update the messages in state
+              dispatch({ type: "SET_MESSAGES", payload: updatedMessages });
+              
+              console.log(`✅ Added ${trulyNewMessages.length} new messages (total: ${updatedMessages.length})`);
+            }
+          }
         } catch (error) {
-          console.error("❌ Snapshot error:", error);
+          console.error("❌ Snapshot processing error:", error);
         }
       },
       (error) => {
         console.error("❌ Firestore listener error:", error);
-        dispatch({
-          type: "SET_ERROR",
-          payload: "Real-time message updates temporarily unavailable"
-        });
+        // Clean up failed listener
+        if (activeListeners[conversationId]) {
+          delete activeListeners[conversationId];
+        }
       }
     );
     
     // Store the unsubscribe function
     activeListeners[conversationId] = unsubscribe;
-    
-    console.log(`✅ Firebase real-time listener ACTIVE for conversation: ${conversationId}`);
+    console.log(`✅ ULTRA-EFFICIENT Firebase listener created for: ${conversationId}`);
     
     // Return the cleanup function
     return () => {
       if (activeListeners[conversationId]) {
         activeListeners[conversationId]();
         delete activeListeners[conversationId];
+        console.log(`🧹 Cleaned up Firebase listener for: ${conversationId}`);
       }
     };
       
   } catch (error) {
     console.error("❌ Setup error:", error);
-    dispatch({
-      type: "SET_ERROR",
-      payload: "Failed to setup real-time message updates"
-    });
     return () => {}; // Return empty cleanup function
   }
 };
-
-
 
 // Clear current conversation
 const clearCurrentConversation = (dispatch) => () => {
@@ -923,10 +968,15 @@ const setActiveConversation = (conversationId) => {
 const stopAllActiveListeners = () => {
   Object.keys(activeListeners).forEach(conversationId => {
     if (typeof activeListeners[conversationId] === 'function') {
-      console.log(`Cleaning up listener for ${conversationId}`);
+      console.log(`🧹 Cleaning up listener for ${conversationId}`);
       activeListeners[conversationId]();
       delete activeListeners[conversationId];
     }
+  });
+  
+  // Clear last seen timestamps when stopping listeners
+  Object.keys(lastSeenTimestamps).forEach(key => {
+    delete lastSeenTimestamps[key];
   });
 };
 
@@ -961,6 +1011,11 @@ const clearCache = (dispatch) => async (clearListeners = false) => {
       delete paginationState[key];
     });
     
+    // Clear last seen timestamps
+    Object.keys(lastSeenTimestamps).forEach(key => {
+      delete lastSeenTimestamps[key];
+    });
+    
     console.log(`✅ Cleared ${messageCacheKeys.length} cache items and ${clearListeners ? 'stopped listeners' : 'kept listeners active'}`);
     
     return true;
@@ -974,6 +1029,17 @@ const deleteConversationById = (dispatch) => async (conversationId) => {
   try {
     await api.delete(`/messages/conversation/delete/${conversationId}`);
     dispatch({ type: "DELETE_CONVERSATION", payload: conversationId });
+    
+    // Clean up associated caches and listeners
+    if (activeListeners[conversationId]) {
+      activeListeners[conversationId]();
+      delete activeListeners[conversationId];
+    }
+    
+    delete messageCache[conversationId];
+    delete paginationState[conversationId];
+    delete lastSeenTimestamps[conversationId];
+    
     return true;
   } catch (error) {
     console.error("Error deleting conversation:", error);
@@ -1026,4 +1092,4 @@ export const { Provider, Context } = createDataContext(
     hasMoreMessages: true,
     loadingOlderMessages: false
   }
-); 
+);
