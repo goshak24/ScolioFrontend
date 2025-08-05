@@ -373,7 +373,7 @@ const getTemporaryUrlFromBackend = async (filePath, providedToken) => {
  * @param {string} [idToken] - Optional ID token for authentication
  * @returns {Promise<string>} The profile picture URL
  */
-export const getProfilePictureUrl = async (user, idToken) => {
+export const getUserProfilePictureUrl = async (user, idToken) => {
   if (!user) return null;
   
   // If the user has a direct profilePicture URL (legacy), use it

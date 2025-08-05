@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useContext, useCallback } from 'react';
+import React, { useEffect, useState, useContext, useCallback, useRef } from 'react';
 import { 
     View, 
     Text, 
@@ -18,10 +18,13 @@ import COLORS from '../constants/COLORS';
 import HeightSpacer from '../components/reusable/HeightSpacer';
 import { Context as FriendsContext } from '../context/FriendsContext';
 import { Context as UserContext } from '../context/UserContext';
+import { Context as AuthContext } from '../context/AuthContext';
 import UserProfileModal from '../components/profile/UserProfileModal';
 import DirectMessageButton from '../components/messaging/DirectMessageButton';
 import Constants from 'expo-constants'; 
 import AddFriendModal from '../components/squad/AddFriendModal';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import useProfilePictures from '../hooks/useProfilePictures';
 
 const FriendsScreen = ({ navigation }) => {
     const { 
@@ -31,6 +34,10 @@ const FriendsScreen = ({ navigation }) => {
         respondToFriendRequest, 
         removeFriend 
     } = useContext(FriendsContext);
+    
+    const { state: userState } = useContext(UserContext);
+    const { state: authState } = useContext(AuthContext);
+    const { fetchProfilePictures, getProfilePictureUrlFor, extractUsernames } = useProfilePictures();
     
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -75,6 +82,50 @@ const FriendsScreen = ({ navigation }) => {
 
         loadInitialData();
     }, []); // Empty dependency array - only run on mount
+
+    // Track fetched usernames to prevent infinite loops
+    const fetchedUsernames = useRef(new Set());
+
+    // Fetch profile pictures for friends and requests
+    useEffect(() => {
+        const fetchPictures = async () => {
+            try {
+                // Check if we have the necessary functions available
+                if (!extractUsernames || !fetchProfilePictures) {
+                    return;
+                }
+
+                // Extract usernames from friends and requests
+                const friendUsernames = extractUsernames(localFriends, 'username');
+                const requestUsernames = extractUsernames(localRequests, 'user.username');
+                
+                // Combine all usernames
+                const allUsernames = [...friendUsernames, ...requestUsernames];
+                
+                // Filter out usernames we've already fetched
+                const unfetchedUsernames = allUsernames.filter(username => 
+                    username && !fetchedUsernames.current.has(username)
+                );
+                
+                if (unfetchedUsernames.length > 0) {
+                    console.log(`📷 FriendsScreen: Fetching profile pictures for ${unfetchedUsernames.length} users`);
+                    
+                    // Mark usernames as being fetched to prevent duplicate requests
+                    unfetchedUsernames.forEach(username => fetchedUsernames.current.add(username));
+                    
+                    await fetchProfilePictures(unfetchedUsernames);
+                }
+            } catch (error) {
+                console.warn('FriendsScreen: Error fetching profile pictures:', error);
+            }
+        };
+
+        // Only fetch if we have data to work with and functions are available
+        if ((localFriends.length > 0 || localRequests.length > 0) && 
+            extractUsernames && fetchProfilePictures) {
+            fetchPictures();
+        }
+    }, [localFriends, localRequests]);
 
     // Separate function for refresh
     const handleRefresh = useCallback(async () => {
@@ -273,12 +324,41 @@ const FriendsScreen = ({ navigation }) => {
                     style={styles.requestAvatarContainer}
                     onPress={() => openUserProfile(request.user.id)}
                 >
-                    <Image 
-                        source={{ 
-                            uri: request.user.avatar || 'https://randomuser.me/api/portraits/lego/1.jpg' 
-                        }} 
-                        style={styles.requestAvatar} 
-                    />
+                                    <Image 
+                    source={{ 
+                        uri: (() => {
+                            const username = request.user?.username;
+                            
+                            // Ensure we have a valid username before processing
+                            if (!username || typeof username !== 'string') {
+                                console.warn(`⚠️ FriendsScreen: Invalid request username:`, request.user);
+                                return 'https://randomuser.me/api/portraits/lego/1.jpg';
+                            }
+                            
+                            const profilePictureUrl = getProfilePictureUrlFor ? getProfilePictureUrlFor(username) : null;
+                            const finalUrl = request.user.avatar || 
+                                           (profilePictureUrl && profilePictureUrl !== 'https://randomuser.me/api/portraits/lego/1.jpg' 
+                                            ? profilePictureUrl 
+                                            : 'https://randomuser.me/api/portraits/lego/1.jpg');
+                            
+                            // Debug logging for FriendsScreen request avatars
+                            if (finalUrl !== 'https://randomuser.me/api/portraits/lego/1.jpg') {
+                                console.log(`🖼️ FriendsScreen request avatar for ${username}:`, finalUrl);
+                            }
+                            
+                            return finalUrl;
+                        })()
+                    }} 
+                    style={styles.requestAvatar}
+                    onError={(error) => {
+                        const username = request.user?.username || 'unknown';
+                        console.warn(`❌ Failed to load request avatar for ${username}:`, error.nativeEvent.error);
+                    }}
+                    onLoad={() => {
+                        const username = request.user?.username || 'unknown';
+                        console.log(`✅ Loaded request avatar for ${username}`);
+                    }}
+                />
                 </TouchableOpacity>
                 <View style={styles.requestInfo}>
                     <Text style={styles.requestUsername}>
@@ -331,9 +411,38 @@ const FriendsScreen = ({ navigation }) => {
             >
                 <Image 
                     source={{ 
-                        uri: friend.avatar || 'https://randomuser.me/api/portraits/lego/1.jpg' 
+                        uri: (() => {
+                            const username = friend?.username;
+                            
+                            // Ensure we have a valid username before processing
+                            if (!username || typeof username !== 'string') {
+                                console.warn(`⚠️ FriendsScreen: Invalid friend username:`, friend);
+                                return 'https://randomuser.me/api/portraits/lego/1.jpg';
+                            }
+                            
+                            const profilePictureUrl = getProfilePictureUrlFor ? getProfilePictureUrlFor(username) : null;
+                            const finalUrl = friend.avatar || 
+                                           (profilePictureUrl && profilePictureUrl !== 'https://randomuser.me/api/portraits/lego/1.jpg' 
+                                            ? profilePictureUrl 
+                                            : 'https://randomuser.me/api/portraits/lego/1.jpg');
+                            
+                            // Debug logging for FriendsScreen friend avatars
+                            if (finalUrl !== 'https://randomuser.me/api/portraits/lego/1.jpg') {
+                                console.log(`🖼️ FriendsScreen friend avatar for ${username}:`, finalUrl);
+                            }
+                            
+                            return finalUrl;
+                        })()
                     }} 
-                    style={styles.friendAvatar} 
+                    style={styles.friendAvatar}
+                    onError={(error) => {
+                        const username = friend?.username || 'unknown';
+                        console.warn(`❌ Failed to load friend avatar for ${username}:`, error.nativeEvent.error);
+                    }}
+                    onLoad={() => {
+                        const username = friend?.username || 'unknown';
+                        console.log(`✅ Loaded friend avatar for ${username}`);
+                    }}
                 />
                 <View style={styles.friendInfo}>
                     <Text style={styles.friendUsername}>
@@ -563,6 +672,7 @@ const styles = StyleSheet.create({
         width: moderateScale(50),
         height: moderateScale(50),
         borderRadius: moderateScale(25),
+        backgroundColor: COLORS.cardDark, // Add background color for debugging
     },
     requestInfo: {
         flex: 1,
@@ -605,6 +715,7 @@ const styles = StyleSheet.create({
         width: moderateScale(50),
         height: moderateScale(50),
         borderRadius: moderateScale(25),
+        backgroundColor: COLORS.cardDark, // Add background color for debugging
         marginRight: moderateScale(12),
     },
     friendInfo: {

@@ -4,12 +4,14 @@ import { moderateScale } from "react-native-size-matters";
 import { format } from "date-fns";  
 import COLORS from "../../constants/COLORS";
 import HeightSpacer from "../reusable/HeightSpacer";
+import useProfilePictures from "../../hooks/useProfilePictures";
 
 const ForumPost = ({ 
   post,
   navigation,
   onAvatarPress
 }) => {
+  const { getProfilePictureUrlFor } = useProfilePictures();
   // Extract post properties with defaults for safety
   const {
     id,
@@ -120,8 +122,33 @@ const ForumPost = ({
       <View style={styles.userRow}>
         <TouchableOpacity onPress={handleAvatarPress}>
           <Image 
-            source={{ uri: avatar }} 
-            style={styles.avatar} 
+            source={{ 
+              uri: (() => {
+                // Ensure username exists before processing
+                if (!username || typeof username !== 'string') {
+                  console.warn(`⚠️ ForumPost: Invalid username:`, username);
+                  return 'https://randomuser.me/api/portraits/lego/1.jpg';
+                }
+                
+                // Try to get profile picture from cache first
+                const profilePictureUrl = getProfilePictureUrlFor ? getProfilePictureUrlFor(username) : null;
+                
+                // Priority: cached profile picture > post avatar > fallback
+                const finalUrl = profilePictureUrl && profilePictureUrl !== 'https://randomuser.me/api/portraits/lego/1.jpg' 
+                  ? profilePictureUrl 
+                  : avatar;
+                
+                // Debug logging for ForumPost avatars
+                if (finalUrl !== 'https://randomuser.me/api/portraits/lego/1.jpg') {
+                  console.log(`🖼️ ForumPost avatar for ${username}:`, finalUrl);
+                }
+                
+                return finalUrl;
+              })()
+            }} 
+            style={styles.avatar}
+            onError={(error) => console.warn(`❌ Failed to load ForumPost avatar for ${username || 'unknown'}:`, error.nativeEvent.error)}
+            onLoad={() => console.log(`✅ Loaded ForumPost avatar for ${username || 'unknown'}`)}
           />
         </TouchableOpacity>
         <View style={styles.userInfoContainer}>
@@ -187,6 +214,7 @@ const styles = StyleSheet.create({
     height: moderateScale(24),
     borderRadius: moderateScale(12),
     marginRight: moderateScale(8),
+    backgroundColor: COLORS.cardDark, // Add background color for debugging
   },
   userInfoContainer: {
     flexDirection: "row",

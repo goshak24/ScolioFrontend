@@ -1,6 +1,6 @@
 import createDataContext from "./createDataContext";
 import api, { auth } from "../utilities/backendApi";
-import { updateUserProfile, addPhysioWorkout, uploadProfilePicture, getProfilePictureUrl } from "./UserFunctionsHelper";
+import { updateUserProfile, addPhysioWorkout, uploadProfilePicture, getUserProfilePictureUrl, getFileDownloadUrl } from "./UserFunctionsHelper";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Context as MessagesContext } from './MessagesContext';
 import { useContext } from 'react';
@@ -174,8 +174,22 @@ const userReducer = (state, action) => {
                 ...state,
                 badges: action.payload
             };
+        case "SET_PROFILE_PICTURES":
+            console.log('🔄 UserContext: Setting profile pictures:', Object.keys(action.payload));
+            return {
+                ...state,
+                profilePictures: {
+                    ...state.profilePictures,
+                    ...action.payload
+                }
+            };
         case "SIGN_OUT":
-            return { user: null, loading: false, error: null };
+            return { 
+                user: null, 
+                loading: false, 
+                error: null,
+                profilePictures: {} // Clear cached profile pictures on sign out
+            };
         default:
             return state;
     }
@@ -209,7 +223,7 @@ const fetchUserData = (dispatch) => async (idToken) => {
         if (userData.profilePicturePath) {
             try {
                 // Get the profile picture URL using the utility function and pass the idToken
-                const profilePictureUrl = await getProfilePictureUrl(userData, idToken);
+                const profilePictureUrl = await getUserProfilePictureUrl(userData, idToken);
                 
                 // Update the user data with the profile picture URL
                 if (profilePictureUrl) {
@@ -500,6 +514,14 @@ const signOut = (dispatch) => async () => {
         await AsyncStorage.removeItem('idToken');
         await AsyncStorage.removeItem('refreshToken');
         
+        // Clear cached profile picture URLs
+        try {
+            await AsyncStorage.removeItem('profilePictureUrls');
+            console.log("🧹 Cleared cached profile picture URLs");
+        } catch (error) {
+            console.warn("⚠️ Error clearing cached profile picture URLs:", error);
+        }
+        
         // Sign out from Firebase
         await auth.signOut();
         
@@ -574,6 +596,137 @@ const getUserBadges = (dispatch) => async (idToken) => {
     }
 };
 
+const getProfilePictures = (dispatch) => async (usernames, idToken) => {
+    try {
+        // Filter out usernames we already have cached
+        // This would need access to state, so we'll skip caching for now and always fetch
+        
+        if (!usernames || !Array.isArray(usernames) || usernames.length === 0) {
+            return {};
+        }
+
+        // Remove duplicates and limit to 50 usernames as per backend limit
+        const uniqueUsernames = [...new Set(usernames)].slice(0, 50);
+
+        console.log(`📷 Fetching profile pictures for ${uniqueUsernames.length} users`);
+
+        const response = await api.post("/users/profile-pictures", {
+            usernames: uniqueUsernames
+        }, {
+            headers: { Authorization: `Bearer ${idToken}` }
+        });
+
+        const { profilePictures } = response.data;
+        
+        // Process the profile pictures to create downloadable URLs
+        const processedPictures = {};
+        
+        // Get cached URLs from AsyncStorage to avoid repeated Firebase calls
+        let cachedUrls = {};
+        try {
+            const cached = await AsyncStorage.getItem('profilePictureUrls');
+            if (cached) {
+                cachedUrls = JSON.parse(cached);
+                console.log(`📱 Loaded ${Object.keys(cachedUrls).length} cached profile picture URLs`);
+            }
+        } catch (error) {
+            console.warn('Error loading cached profile picture URLs:', error);
+        }
+        
+        const newCachedUrls = { ...cachedUrls };
+        
+        // Process each username and convert profilePicturePath to downloadable URL
+        for (const username of Object.keys(profilePictures)) {
+            const data = profilePictures[username];
+            let url = null;
+            
+            if (data.profilePicturePath) {
+                // Check if we have this URL cached
+                const cacheKey = data.profilePicturePath;
+                if (cachedUrls[cacheKey]) {
+                    url = cachedUrls[cacheKey];
+                    console.log(`💾 Using cached URL for ${username}: ${url.substring(0, 100)}...`);
+                } else {
+                    try {
+                        // Convert Firebase Storage path to downloadable URL
+                        console.log(`🔄 Converting profile picture path for ${username}: ${data.profilePicturePath}`);
+                        url = await getFileDownloadUrl(data.profilePicturePath, idToken);
+                        
+                        if (url) {
+                            console.log(`✅ Successfully converted profile picture for ${username}: ${url.substring(0, 100)}...`);
+                            // Cache the URL for future use
+                            newCachedUrls[cacheKey] = url;
+                        } else {
+                            console.log(`⚠️ Failed to get download URL for ${username}, using null`);
+                        }
+                    } catch (error) {
+                        console.warn(`❌ Error converting profile picture path for ${username}:`, error.message);
+                        url = null;
+                    }
+                }
+            }
+            
+            processedPictures[username] = {
+                ...data,
+                // Use the converted download URL or null
+                url: url,
+                profilePicturePath: data.profilePicturePath,
+                hasValidUrl: !!url
+            };
+            
+            // Debug logging to see what's being processed
+            if (url) {
+                console.log(`✅ Processing valid download URL for ${username}: ${url.substring(0, 100)}...`);
+            } else {
+                console.log(`❌ No valid download URL for ${username} (profilePicturePath: ${data.profilePicturePath})`);
+            }
+        }
+        
+        // Save updated cached URLs to AsyncStorage
+        if (Object.keys(newCachedUrls).length > Object.keys(cachedUrls).length) {
+            try {
+                await AsyncStorage.setItem('profilePictureUrls', JSON.stringify(newCachedUrls));
+                console.log(`💾 Cached ${Object.keys(newCachedUrls).length} profile picture URLs to AsyncStorage`);
+            } catch (error) {
+                console.warn('Error caching profile picture URLs:', error);
+            }
+        }
+
+        // Cache the results
+        dispatch({ type: "SET_PROFILE_PICTURES", payload: processedPictures });
+        
+        console.log(`✅ Cached profile pictures for ${Object.keys(processedPictures).length} users`);
+        return processedPictures;
+        
+    } catch (error) {
+        console.error("Error fetching profile pictures:", error);
+        // Don't dispatch error for profile pictures as it's not critical
+        return {};
+    }
+};
+
+// Helper function to get profile picture URL for a username
+const getProfilePictureUrl = (dispatch) => (state, username) => {
+    // Add comprehensive null checks
+    if (!username || !state || !state.profilePictures || typeof username !== 'string') {
+        console.log(`🔍 getProfilePictureUrl: Invalid input - username: ${username}, state: ${!!state}, profilePictures: ${!!state?.profilePictures}`);
+        return 'https://randomuser.me/api/portraits/lego/1.jpg';
+    }
+    
+    const cached = state.profilePictures[username];
+    
+    if (cached && cached.url) { 
+        return cached.url;
+    }
+    
+    if (cached) { 
+    } else {
+        console.log(`❌ getProfilePictureUrl: No cached data found for ${username}`);
+    }
+    
+    return 'https://randomuser.me/api/portraits/lego/1.jpg';
+};
+
 export const { Provider, Context } = createDataContext(
     userReducer,
     { 
@@ -592,7 +745,9 @@ export const { Provider, Context } = createDataContext(
         addUserPhysioWorkout,
         signOut,
         updateProfilePicture,
-        getUserBadges
+        getUserBadges,
+        getProfilePictures,
+        getProfilePictureUrl
     },
-    { user: null, loading: false, error: null }
+    { user: null, loading: false, error: null, profilePictures: {} }
 );

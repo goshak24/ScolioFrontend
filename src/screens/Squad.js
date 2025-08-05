@@ -36,6 +36,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MDYformatTimestamp } from "../components/timeZoneHelpers";
 import GroupsInterface from "../components/squad/GroupsInterface";
 import ReusableSearchBar from "../components/reusable/ReusableSearchBar";
+import useProfilePictures from "../hooks/useProfilePictures";
 
 const Squad = () => {
   const navigation = useNavigation();
@@ -51,6 +52,7 @@ const Squad = () => {
   const { state: UserState } = useContext(UserContext); 
   const { state: FriendsState, getFriends, getFriendRequests, getUserById } = useContext(FriendsContext);
   const { state: MessagesState, getConversations, clearCache, clearConversationCache, deleteConversationById } = useContext(MessagesContext);
+  const { fetchProfilePictures, getProfilePictureUrlFor, extractUsernames } = useProfilePictures();
   const [showCreatePostModal, setShowCreatePostModal] = useState(false);
   const [filteredPosts, setFilteredPosts] = useState([]);
   const [profileModalVisible, setProfileModalVisible] = useState(false);
@@ -206,6 +208,50 @@ const Squad = () => {
       setFilteredPosts(ForumState.posts || []);
     }
   }, [ForumState.posts, searchActive]);
+
+  // Track fetched usernames to prevent infinite loops
+  const fetchedUsernames = useRef(new Set());
+  
+  // Fetch profile pictures for forum posts and conversations
+  useEffect(() => {
+    const fetchPictures = async () => {
+      try {
+        // Check if we have the necessary functions available
+        if (!extractUsernames || !fetchProfilePictures) {
+          return;
+        }
+
+        // Extract usernames from forum posts and conversations
+        const forumUsernames = extractUsernames(ForumState.posts, 'username');
+        const conversationUsernames = extractUsernames(MessagesState.conversations, 'user.username');
+        
+        // Combine all usernames
+        const allUsernames = [...forumUsernames, ...conversationUsernames];
+        
+        // Filter out usernames we've already fetched
+        const unfetchedUsernames = allUsernames.filter(username => 
+          username && !fetchedUsernames.current.has(username)
+        );
+        
+        if (unfetchedUsernames.length > 0) {
+          console.log(`📷 Squad: Fetching profile pictures for ${unfetchedUsernames.length} users`);
+          
+          // Mark usernames as being fetched to prevent duplicate requests
+          unfetchedUsernames.forEach(username => fetchedUsernames.current.add(username));
+          
+          await fetchProfilePictures(unfetchedUsernames);
+        }
+      } catch (error) {
+        console.warn('Squad: Error fetching profile pictures:', error);
+      }
+    };
+
+    // Only fetch if we have data to work with and functions are available
+    if ((ForumState.posts.length > 0 || MessagesState.conversations.length > 0) && 
+        extractUsernames && fetchProfilePictures) {
+      fetchPictures();
+    }
+  }, [ForumState.posts, MessagesState.conversations]);
 
   const loadConversations = async (forceRefresh = false) => {
     setMessagesLoading(true);
@@ -445,8 +491,40 @@ const Squad = () => {
       >
         <View style={styles.avatarContainer}>
           <Image 
-            source={{ uri: enhancedUser?.avatar || item.user?.avatar || 'https://randomuser.me/api/portraits/lego/1.jpg' }} 
-            style={styles.avatar} 
+            source={{ 
+              uri: (() => {
+                const username = enhancedUser?.username || item.user?.username;
+                
+                // Ensure we have a valid username before processing
+                if (!username || typeof username !== 'string') {
+                  console.warn(`⚠️ Squad: Invalid conversation username:`, { enhancedUser, itemUser: item.user });
+                  return 'https://randomuser.me/api/portraits/lego/1.jpg';
+                }
+                
+                const profilePictureUrl = getProfilePictureUrlFor ? getProfilePictureUrlFor(username) : null;
+                const avatarUrl = enhancedUser?.avatar || 
+                               item.user?.avatar || 
+                               (profilePictureUrl && profilePictureUrl !== 'https://randomuser.me/api/portraits/lego/1.jpg' 
+                                ? profilePictureUrl 
+                                : 'https://randomuser.me/api/portraits/lego/1.jpg');
+                
+                // Debug logging for Squad conversation avatars
+                if (avatarUrl !== 'https://randomuser.me/api/portraits/lego/1.jpg') {
+                  console.log(`🖼️ Squad conversation avatar for ${username}:`, avatarUrl);
+                }
+                
+                return avatarUrl;
+              })()
+            }} 
+            style={styles.avatar}
+            onError={(error) => {
+              const username = enhancedUser?.username || item.user?.username || 'unknown';
+              console.warn(`❌ Failed to load Squad conversation avatar for ${username}:`, error.nativeEvent.error);
+            }}
+            onLoad={() => {
+              const username = enhancedUser?.username || item.user?.username || 'unknown';
+              console.log(`✅ Loaded Squad conversation avatar for ${username}`);
+            }}
           />
           {/* Online indicator - will need to be implemented with real data */}
           {enhancedUser?.isOnline && (
@@ -791,6 +869,7 @@ const styles = StyleSheet.create({
     width: moderateScale(50),
     height: moderateScale(50),
     borderRadius: moderateScale(25),
+    backgroundColor: COLORS.cardDark, // Add background color for debugging
   },
   onlineIndicator: {
     position: 'absolute',
