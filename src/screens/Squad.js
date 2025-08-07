@@ -64,6 +64,7 @@ const Squad = () => {
   
   // Track if friends data is already loaded
   const friendsLoaded = useRef(false);
+  const justLeftForChat = useRef(false);
   
   // Track if initial data load happened for the current tab
   const initialDataLoaded = useRef({
@@ -105,22 +106,10 @@ const Squad = () => {
   // Refactored focus effect to be more reliable
   useFocusEffect(
     useCallback(() => {
-      const now = new Date().getTime();
-
-      if (activeTab === "Messages") {
-        console.log("🔄 Refreshing messages and friends on focus");
-        // Force refresh conversations and friends data to get latest messages and profile pictures
+      if (activeTab === "Messages" && justLeftForChat.current) {
+        console.log("🔄 Refreshing messages after returning from chat");
         loadConversations(true);
-      } else if (activeTab === "Forums") {
-        // Refresh forum posts if it's been a while
-        const timeSinceLastForumFetch = now - lastForumFetchTime.current;
-        const shouldRefreshForums = timeSinceLastForumFetch > 5 * 60 * 1000; // 5 minutes
-        
-        if (shouldRefreshForums) {
-          console.log("🔄 Refreshing forum posts after returning to screen");
-          fetchPosts({ forceFetch: true, page: 1 });
-          lastForumFetchTime.current = now;
-        }
+        justLeftForChat.current = false; // Reset the flag after refreshing
       }
     }, [activeTab])
   );
@@ -416,8 +405,20 @@ const Squad = () => {
 
   // Navigate to conversation screen with already enhanced user data
   const navigateToConversation = (otherUser) => {
-    // The user object is already enhanced, so we can navigate directly
-    navigation.navigate('ChatScreen', { otherUser });
+    // Set a flag to indicate we're navigating to a chat
+    justLeftForChat.current = true;
+
+    // Ensure the user object passed to the chat screen has the best available avatar URL
+    const username = otherUser?.username;
+    const profilePictureUrl = getProfilePictureUrlFor ? getProfilePictureUrlFor(username) : null;
+    const finalAvatarUrl = otherUser?.avatar || profilePictureUrl;
+
+    const userToPass = {
+        ...otherUser,
+        avatar: finalAvatarUrl, // Ensure the avatar property has the final, correct URL
+    };
+
+    navigation.navigate('ChatScreen', { otherUser: userToPass });
   };
 
   const deleteConversation = (conversationId) => { 
