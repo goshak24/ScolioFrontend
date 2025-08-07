@@ -36,7 +36,7 @@ const Tracking = () => {
   const [isInitialized, setIsInitialized] = useState(false);
   const [showNewBadgePopup, setShowNewBadgePopup] = useState(false);
   const [newBadgePopupData, setNewBadgePopupData] = useState(null);
-  const [pendingBadge, setPendingBadge] = useState(null);
+  const [pendingBadges, setPendingBadges] = useState([]); // queue of badges to display
 
   // Centralized streak state
   const [showStreakAnimation, setShowStreakAnimation] = useState(false);
@@ -47,6 +47,32 @@ const Tracking = () => {
   const [successMessage, setSuccessMessage] = useState('');
   const streakUpdatedToday = useRef(false);
   const activityInProgress = useRef(false);
+
+  // Normalize new badges from various backend response shapes
+  const extractNewBadges = useCallback((result) => {
+    if (!result) return [];
+    if (Array.isArray(result.newBadges) && result.newBadges.length > 0) return result.newBadges;
+    if (Array.isArray(result.newAchievements) && result.newAchievements.length > 0) return result.newAchievements;
+    if (result.badge) return [result.badge];
+    return [];
+  }, []);
+
+  // Push badges into queue
+  const enqueueBadges = useCallback((badges) => {
+    if (!badges || badges.length === 0) return;
+    setPendingBadges(prev => [...prev, ...badges]);
+  }, []);
+
+  // Show next badge if allowed (no streak anim and popup not visible)
+  const maybeShowNextBadge = useCallback(() => {
+    setPendingBadges(prev => {
+      if (showStreakAnimation || showNewBadgePopup || prev.length === 0) return prev;
+      const [nextBadge, ...rest] = prev;
+      setNewBadgePopupData(nextBadge);
+      setShowNewBadgePopup(true);
+      return rest;
+    });
+  }, [showStreakAnimation, showNewBadgePopup]);
 
   // Get today's date and check if streak was already updated
   const today = getFormattedDate();
@@ -280,10 +306,11 @@ const Tracking = () => {
         setShowSuccess(true);
         setTimeout(() => setShowSuccess(false), 2000);
 
-        // Handle badges - store for later if needed
-        if (activityResult.newAchievements && activityResult.newAchievements.length > 0) {
-          console.log("New achievement earned:", activityResult.newAchievements[0]);
-          setPendingBadge(activityResult.newAchievements[0]);
+        // Queue any new badges from the activity result
+        const activityBadges = extractNewBadges(activityResult);
+        if (activityBadges.length > 0) {
+          console.log("New badges from activity:", activityBadges.map(b => b?.id || b?.name));
+          enqueueBadges(activityBadges);
         }
   
         // Check if streak should be updated
@@ -295,32 +322,24 @@ const Tracking = () => {
             try {
               const shouldUpdateStreak = await checkStreakConditions(accountType, activityType, targetDate, activityResult);
               
-              if (shouldUpdateStreak) {
+                if (shouldUpdateStreak) {
                 console.log("Will show streak first, then badge");
                 await handleStreakUpdate();
-                // Badge will be shown after streak animation completes
+                // Badges will be shown after streak animation completes
               } else {
                 console.log("No streak, showing badge immediately");
-                if (pendingBadge) {
-                  showBadge(pendingBadge);
-                  setPendingBadge(null);
-                }
+                // No streak animation; show next queued badge now
+                maybeShowNextBadge();
               }
             } catch (error) {
               console.error("Error checking streak conditions:", error);
-              // Show badge anyway
-              if (pendingBadge) {
-                showBadge(pendingBadge);
-                setPendingBadge(null);
-              }
+              // On error, still try to show any queued badge
+              maybeShowNextBadge();
             }
           }, 100);
         } else {
           console.log("Streak already updated, showing badge immediately");
-          if (pendingBadge) {
-            showBadge(pendingBadge);
-            setPendingBadge(null);
-          }
+          maybeShowNextBadge();
         }
       } else {
         console.error("Failed to log activity:", activityResult?.error);
@@ -350,7 +369,9 @@ const Tracking = () => {
     showBadge,
     checkStreakConditions,
     handleStreakUpdate,
-    pendingBadge
+    extractNewBadges,
+    enqueueBadges,
+    maybeShowNextBadge
   ]);
 
   // Separate function to check streak conditions
@@ -423,19 +444,27 @@ const Tracking = () => {
       if (streakResult.success) {
         console.log("Streak updated successfully");
         streakUpdatedToday.current = true;
+        // Queue any badges awarded by streak update
+        const streakBadges = extractNewBadges(streakResult);
+        if (streakBadges.length > 0) {
+          console.log("New badges from streak:", streakBadges.map(b => b?.id || b?.name));
+          enqueueBadges(streakBadges);
+        }
+        // Start streak animation; queued badges will show after it completes
         setShowStreakAnimation(true);
-        // Badges will be processed after streak animation completes via the queue system
       } else {
         console.error("Streak update failed:", streakResult.error);
-        // Badges will still be processed by the queue system
+        // Even on failure, attempt to show any queued badges
+        setTimeout(maybeShowNextBadge, 200);
       }
     } catch (error) {
       console.error("Streak update error:", error);
-      // Badges will still be processed by the queue system
+      // On error, attempt to show any queued badges
+      setTimeout(maybeShowNextBadge, 200);
     } finally {
       setIsProcessingStreak(false);
     }
-  }, [updateStreak, isProcessingStreak]);
+  }, [updateStreak, isProcessingStreak, extractNewBadges, enqueueBadges, maybeShowNextBadge]);
   
   // Reset processing state when animation completes
   useEffect(() => {
@@ -627,13 +656,13 @@ const Tracking = () => {
     
     switch (accountType) {
       case 'post-surgery':
-        return <PostsurgeryInterface 
+                return <PostsurgeryInterface 
                  physioData={{
                    exercises: localWorkouts,
                    weeklySchedule: localWeeklySchedule
                  }} 
                  surgeryData={userData.surgeryData}
-                 onActivityCompletePhysio={() => handleActivityCompletion('physio')}
+                  onActivityCompletePhysio={(date) => handleActivityCompletion('physio', date)}
                  onActivityCompleteTasks={(taskId) => handleActivityCompletion('post-surgery-tasks', null, taskId)} 
                  showSuccess={showSuccess}
                  successMessage={successMessage}
@@ -645,23 +674,18 @@ const Tracking = () => {
                  onActivityComplete={() => handleActivityCompletion('pre-surgery')}
                />;
       case 'brace + physio':
-        return <BracePhysio 
+                return <BracePhysio 
                  workouts={localWorkouts} 
                  weeklySchedule={localWeeklySchedule}
                  braceData={userData.braceData}
                  wearingSchedule={userData.braceData.wearingSchedule}
                  customHeader={renderWorkoutHeader()}
                  onActivityCompleteBrace={() => handleActivityCompletion('brace')}
-                 onActivityCompletePhysio={() => handleActivityCompletion('physio')}
+                  onActivityCompletePhysio={(date) => handleActivityCompletion('physio', date)}
                  onBadgeEarned={(badgeData) => {
                    console.log("Badge earned from brace+physio interface:", badgeData);
-                   if (showStreakAnimation) {
-                     console.log("Streak active, storing badge for later");
-                     setPendingBadge(badgeData);
-                   } else {
-                     console.log("No streak, showing badge immediately");
-                     showBadge(badgeData);
-                   }
+                   enqueueBadges([badgeData]);
+                   if (!showStreakAnimation) maybeShowNextBadge();
                  }}
                  showSuccess={showSuccess}
                  successMessage={successMessage}
@@ -676,13 +700,8 @@ const Tracking = () => {
                  onActivityComplete={handleActivityCompletion}
                  onBadgeEarned={(badgeData) => {
                    console.log("Badge earned from brace interface:", badgeData);
-                   if (showStreakAnimation) {
-                     console.log("Streak active, storing badge for later");
-                     setPendingBadge(badgeData);
-                   } else {
-                     console.log("No streak, showing badge immediately");
-                     showBadge(badgeData);
-                   }
+                   enqueueBadges([badgeData]);
+                   if (!showStreakAnimation) maybeShowNextBadge();
                  }}
                  showSuccess={showSuccess}
                  successMessage={successMessage}
@@ -691,13 +710,13 @@ const Tracking = () => {
                  onNewBadgeEarned={handleNewBadgeEarned}
                />;
       case 'physio':
-        return (
+                return (
             <WorkoutInterface 
               workouts={localWorkouts} 
               weeklySchedule={localWeeklySchedule}
               frequency={userData.physioFrequency}
               customHeader={renderWorkoutHeader()}
-              onActivityComplete={() => handleActivityCompletion('physio')}
+              onActivityComplete={(date) => handleActivityCompletion('physio', date)}
               showSuccess={showSuccess}
               successMessage={successMessage}
               isProcessingActivity={isProcessingActivity}
@@ -721,14 +740,10 @@ const Tracking = () => {
           console.log("Streak animation completed, checking for pending badge");
           setShowStreakAnimation(false);
           
-          // Show pending badge after streak completes
-          if (pendingBadge) {
-            setTimeout(() => {
-              console.log("Showing badge after streak:", pendingBadge);
-              showBadge(pendingBadge);
-              setPendingBadge(null);
-            }, 500); // Small delay for smooth transition
-          }
+          // After streak completes, show next queued badge if any
+          setTimeout(() => {
+            maybeShowNextBadge();
+          }, 400);
         }}
       />
 
@@ -739,6 +754,10 @@ const Tracking = () => {
           console.log("Badge popup animation completed");
           setShowNewBadgePopup(false);
           setNewBadgePopupData(null);
+          // Show next badge if queued
+          setTimeout(() => {
+            maybeShowNextBadge();
+          }, 250);
         }}
       />
 
