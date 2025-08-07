@@ -14,7 +14,11 @@ const Achieve = () => {
   const { state: { idToken } } = useContext(AuthContext);
   const { state: { user, loading, error, badges }, fetchUserData, getUserBadges } = useContext(UserContext);
   const [activeTab, setActiveTab] = useState("badges");
-  const [refreshing, setRefreshing] = useState(false);
+  const [refreshing, setRefreshing] = useState(false); 
+
+  const weeklyExpectedSessions = user?.treatmentData?.physio?.scheduledWorkouts ? Object.values(user?.treatmentData?.physio?.scheduledWorkouts)
+  .map(day => day.length)
+  .reduce((a, b) => a + b, 0) : 0;
 
   // Fetch user data when component mounts or idToken changes
   useEffect(() => {
@@ -64,6 +68,7 @@ const Achieve = () => {
         physioSessions={user?.physioSessions || 0} 
         achievements={badges || {}} 
         user={user}
+        weeklyExpectedSessions={weeklyExpectedSessions || 0}
       />
     </>
   ), [user, activeTab, badges]);

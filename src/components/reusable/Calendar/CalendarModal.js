@@ -16,6 +16,7 @@ import {
   addWeeks,
   subWeeks, 
   addDays,
+  subDays,
   startOfMonth,
   endOfMonth
 } from 'date-fns';
@@ -55,7 +56,7 @@ const CalendarModal = ({
     setCurrentDate(calendarView === 'month' ? addMonths(currentDate, 1) : addWeeks(currentDate, 1));
   };
 
-  const handleDateSelection = (date) => {
+  const handleDateSelection = (date) => { 
     setSelectedDate(date);
     setShowAddEventForm(true);
     onDateSelect?.(date);
@@ -138,17 +139,20 @@ const CalendarModal = ({
   const handleDeleteEvent = async (date, eventIndex) => {
     if (calendarView === 'month') {
       try {
-        // Get the event ID from UserState.user.events
-        const dateString = format(date, 'yyyy-MM-dd');
+        // Subtract 1 day from the provided date to get correct date :))
+        const previousDate = subDays(date, 1);
+        const dateString = format(previousDate, 'yyyy-MM-dd'); 
+  
+        // Access events on the previous day
         const events = UserState.user?.events?.[dateString] || [];
-        
+  
         if (events.length > eventIndex) {
           const eventId = events[eventIndex].id;
           const idToken = await AsyncStorage.getItem('idToken');
           const success = await deleteCalendarEvent(idToken, eventId);
           
           if (success) {
-            console.log('Event deleted successfully');
+            console.log('Event deleted successfully from previous day'); 
           }
         }
       } catch (error) {
@@ -157,7 +161,7 @@ const CalendarModal = ({
     } else {
       onEventDelete?.(date, eventIndex);
     }
-  };  
+  };
 
   const handleCancelEvent = () => {
     setShowAddEventForm(false);
@@ -280,7 +284,7 @@ const CalendarModal = ({
                       onSubmit={handleSubmitEvent}
                       onCancel={handleCancelEvent}
                       events={calendarView === 'month' ? UserState.user?.events : events}
-                      onDeleteEvent={calendarView === 'month' ? handleDeleteEvent : undefined}
+                      onDeleteEvent={calendarView === 'month' ? handleDeleteEvent : handleDeleteEvent}
                       calendarView={calendarView}
                     />
                   )}

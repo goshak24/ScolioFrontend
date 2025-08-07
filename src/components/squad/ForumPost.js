@@ -136,19 +136,13 @@ const ForumPost = ({
                 // Priority: cached profile picture > post avatar > fallback
                 const finalUrl = profilePictureUrl && profilePictureUrl !== 'https://randomuser.me/api/portraits/lego/1.jpg' 
                   ? profilePictureUrl 
-                  : avatar;
-                
-                // Debug logging for ForumPost avatars
-                if (finalUrl !== 'https://randomuser.me/api/portraits/lego/1.jpg') {
-                  console.log(`🖼️ ForumPost avatar for ${username}:`, finalUrl);
-                }
+                  : avatar; 
                 
                 return finalUrl;
               })()
             }} 
             style={styles.avatar}
             onError={(error) => console.warn(`❌ Failed to load ForumPost avatar for ${username || 'unknown'}:`, error.nativeEvent.error)}
-            onLoad={() => console.log(`✅ Loaded ForumPost avatar for ${username || 'unknown'}`)}
           />
         </TouchableOpacity>
         <View style={styles.userInfoContainer}>

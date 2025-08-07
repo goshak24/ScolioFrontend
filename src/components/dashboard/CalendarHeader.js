@@ -33,7 +33,7 @@ const CalendarHeader = ({ profilePic, username }) => {
   };
 
   // Handler for deleting events
-  const handleEventDelete = (date, eventIndex) => {
+  const handleEventDelete = (date, eventIndex) => { 
     const dateStr = format(date, 'yyyy-MM-dd');
     setEvents(prev => {
       const dateEvents = [...(prev[dateStr] || [])];

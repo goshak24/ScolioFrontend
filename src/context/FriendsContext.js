@@ -512,11 +512,11 @@ const sendFriendRequest = (dispatch) => async (receiverId, receiverData = null) 
   }
 };
 
-const sendFriendRequestUsername = (dispatch) => async (receiverUsername) => {
+const sendFriendRequestUsername = (dispatch) => async (recieveUsername) => { 
   try {
     const idToken = await AsyncStorage.getItem('idToken');
     dispatch({ type: "SET_LOADING", payload: true });
-    const response = await api.post("/friends/request-name", { username: receiverUsername }, {
+    const response = await api.post("/friends/request-name", { username: recieveUsername }, {
       headers: {
         'Authorization': `Bearer ${idToken}`
       }

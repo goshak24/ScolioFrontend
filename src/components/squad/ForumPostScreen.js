@@ -224,11 +224,7 @@ const ForumPostScreen = ({ route, navigation }) => {
           <TouchableOpacity style={styles.actionButton}>
             <Ionicons name="chatbubble-outline" size={moderateScale(20)} color={COLORS.white} />
             <Text style={styles.actionText}>{safePost.comments.length}</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.actionButton}>
-            <Ionicons name="share-social-outline" size={moderateScale(20)} color={COLORS.white} />
-          </TouchableOpacity>
+          </TouchableOpacity> 
         </View>
       </View>
 

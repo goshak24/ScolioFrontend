@@ -18,7 +18,7 @@ import COLORS from '../constants/COLORS';
 const StreakExtensionAnimation = ({ 
   visible = false, 
   message = "Streak Extended!", 
-  duration = 6000,
+  duration = 5000,
   onAnimationComplete = () => {},
   style = {},
   enableVibration = true,
@@ -78,7 +78,7 @@ const StreakExtensionAnimation = ({
       triggerVibration();
       playSound();
       
-      // Reset animations
+      // Reset all animations to initial values
       scaleAnim.setValue(0);
       opacityAnim.setValue(0);
       rotateAnim.setValue(0);
@@ -87,8 +87,8 @@ const StreakExtensionAnimation = ({
       sparkleAnim.setValue(0);
       glowAnim.setValue(0);
 
-      // Create enhanced animation sequence
-      Animated.parallel([
+      // Create enhanced animation sequence with better timing
+      const mainAnimation = Animated.parallel([
         // Main container bounce animation
         Animated.sequence([
           Animated.timing(scaleAnim, {
@@ -183,17 +183,39 @@ const StreakExtensionAnimation = ({
             useNativeDriver: true,
           }),
         ]),
-      ]).start(() => {
-        // Fade out animation
-        Animated.timing(opacityAnim, {
+      ]);
+
+      // Start main animation
+      mainAnimation.start(() => {
+        console.log("Main streak animation sequence completed");
+        
+        // Fade out animation with proper cleanup
+        const fadeOutAnimation = Animated.timing(opacityAnim, {
           toValue: 0,
-          duration: duration * 0.4,
-          delay: duration * 0.3,
+          duration: duration * 0.3,
+          delay: duration * 0.2,
           useNativeDriver: true,
-        }).start(() => {
-          onAnimationComplete();
+        });
+
+        fadeOutAnimation.start((finished) => {
+          if (finished) {
+            console.log("Streak animation fade out completed");
+            // Small delay to ensure smooth transition
+            setTimeout(() => {
+              onAnimationComplete();
+            }, 100);
+          }
         });
       });
+    } else {
+      // If not visible, ensure all animations are stopped and reset
+      scaleAnim.stopAnimation();
+      opacityAnim.stopAnimation();
+      rotateAnim.stopAnimation();
+      starAnim.stopAnimation();
+      pulseAnim.stopAnimation();
+      sparkleAnim.stopAnimation();
+      glowAnim.stopAnimation();
     }
   }, [visible, duration, onAnimationComplete]);
 

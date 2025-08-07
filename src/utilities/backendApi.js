@@ -107,7 +107,7 @@ export const hasFirebaseAuth = () => {
 
 const storage = getStorage(app);
 
-const API_BASE_URL = 'https://22d619642d67.ngrok-free.app/api/'; // Remeber to push back notification controller days to not alert people of old notifications 
+const API_BASE_URL = 'https://e89c00444c6c.ngrok-free.app/api/'; // Remeber to push back notification controller days to not alert people of old notifications 
 
 const api = axios.create({
   baseURL: API_BASE_URL,

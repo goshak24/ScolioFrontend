@@ -15,9 +15,11 @@ const BracePhysioTab = ({
   customHeader, 
   onActivityCompleteBrace, 
   onActivityCompletePhysio, 
+  onBadgeEarned = () => {},
   showSuccess, 
   successMessage,
   isStreakAnimationActive = false,
+  isProcessingActivity = false,
   onNewBadgeEarned = () => {}
 }) => {
   const [activeTab, setActiveTab] = useState('Brace'); 
@@ -60,9 +62,11 @@ const BracePhysioTab = ({
             data={braceData} 
             wearingSchedule={wearingSchedule}
             onActivityComplete={onActivityCompleteBrace}
+            onBadgeEarned={onBadgeEarned}
             showSuccess={showSuccess}
             successMessage={successMessage}
             isStreakAnimationActive={isStreakAnimationActive}
+            isProcessingActivity={isProcessingActivity}
             onNewBadgeEarned={onNewBadgeEarned}
           /> 
         </View> 

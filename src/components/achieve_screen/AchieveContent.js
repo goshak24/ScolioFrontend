@@ -52,7 +52,7 @@ const availableBadges = [
   { id: '24', name: 'Hope Holder', description: 'Shared a positive message with others in recovery' },
 ];
 
-const AchieveContent = ({ activeTab, streakDays, physioSessions, achievements, user }) => { 
+const AchieveContent = ({ activeTab, streakDays, physioSessions, achievements, user, weeklyExpectedSessions }) => { 
   // State for surgery task data
   const [surgeryTasks, setSurgeryTasks] = useState({
     completed: 0,
@@ -63,7 +63,7 @@ const AchieveContent = ({ activeTab, streakDays, physioSessions, achievements, u
   const [showAllUnearnedBadges, setShowAllUnearnedBadges] = useState(false);
   
   // Get activity context for real-time brace data updates
-  const { state: activityState, fetchActivityData } = useContext(ActivityContext);
+  const { state: activityState, fetchActivityData } = useContext(ActivityContext); 
   
   // --- SURGERY CONTEXTS HOOKUP ---
   const postSurgCtx = useContext(PostSurgeryContext);
@@ -225,14 +225,14 @@ const AchieveContent = ({ activeTab, streakDays, physioSessions, achievements, u
       case 'physio':
         return [
           ...metrics,
-          { id: 'physio', label: 'Physio Sessions', value: physioSessions || 0, max: 5, icon: 'fitness' },
+          { id: 'physio', label: 'Physio Sessions', value: physioSessions || 0, max: weeklyExpectedSessions, icon: 'fitness' },
           { id: 'pain', label: 'Pain Logs', value: user?.treatmentData?.painLogs?.count || 6, max: 7, icon: 'medical' }
         ];
       case 'brace + physio':
         return [
           ...metrics,
           { id: 'brace', label: 'Brace Hours', value: braceWornThisWeek || 0, max: braceTimeRequiredThisWeek, icon: 'time' },
-          { id: 'physio', label: 'Physio Sessions', value: physioSessions || 0, max: 5, icon: 'fitness' },
+          { id: 'physio', label: 'Physio Sessions', value: physioSessions || 0, max: weeklyExpectedSessions, icon: 'fitness' },
           { id: 'pain', label: 'Pain Logs', value: user?.treatmentData?.painLogs?.count || 6, max: 7, icon: 'medical' }
         ];
       case 'presurgery':
@@ -248,7 +248,7 @@ const AchieveContent = ({ activeTab, streakDays, physioSessions, achievements, u
           ...metrics,
           { id: 'recovery', label: 'Recovery Tasks', value: surgeryTasks.completed || 0, max: surgeryTasks.total || 5, icon: 'checkbox' },
           { id: 'walking', label: 'Daily Walking (min)', value: walkingMinutes || 0, max: 30, icon: 'walk' },
-          { id: 'physio', label: 'Physio Sessions', value: physioSessions || 0, max: 7, icon: 'fitness' }
+          { id: 'physio', label: 'Physio Sessions', value: physioSessions || 0, max: weeklyExpectedSessions, icon: 'fitness' }
         ];
       default:
         return [

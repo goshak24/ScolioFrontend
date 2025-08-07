@@ -81,11 +81,7 @@ export const useProfilePictures = () => {
         }
         
         try {
-            const url = getProfilePictureUrl(userState, username);
-            // Add debug logging to see what URLs are being returned
-            if (url !== 'https://randomuser.me/api/portraits/lego/1.jpg') {
-                console.log(`🖼️ Found profile picture for ${username}:`, url);
-            }
+            const url = getProfilePictureUrl(userState, username); 
             return url;
         } catch (error) {
             console.warn('useProfilePictures: Error getting profile picture URL:', error);

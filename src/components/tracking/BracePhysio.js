@@ -12,9 +12,11 @@ const BracePhysio = ({
   customHeader, 
   onActivityCompleteBrace, 
   onActivityCompletePhysio, 
+  onBadgeEarned = () => {},
   showSuccess, 
   successMessage,
   isStreakAnimationActive = false,
+  isProcessingActivity = false,
   onNewBadgeEarned = () => {} 
 }) => {
   return (
@@ -27,9 +29,11 @@ const BracePhysio = ({
         customHeader={customHeader} 
         onActivityCompleteBrace={onActivityCompleteBrace} 
         onActivityCompletePhysio={onActivityCompletePhysio}
+        onBadgeEarned={onBadgeEarned}
         showSuccess={showSuccess}
         successMessage={successMessage}
         isStreakAnimationActive={isStreakAnimationActive}
+        isProcessingActivity={isProcessingActivity}
         onNewBadgeEarned={onNewBadgeEarned}
       />
     </View>

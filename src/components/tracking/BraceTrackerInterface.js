@@ -7,17 +7,18 @@ import HeightSpacer from '../reusable/HeightSpacer';
 import ReusableButton from '../reusable/ReusableButton';
 import { ProgressBar } from 'react-native-paper';
 import BraceTimer from './BraceTimer';
-import NewBadgePopup from '../newBadgePopup';
 import { Context as ActivityContext } from '../../context/ActivityContext'; 
 import { Context as UserContext } from '../../context/UserContext'; 
 
 const BraceTrackerInterface = ({ 
   wearingSchedule, 
   onActivityComplete,
+  onBadgeEarned = () => {},
   showSuccess,
   successMessage,
   isStreakAnimationActive = false,
-  onNewBadgeEarned = () => {} // Keep for compatibility but handle locally
+  isProcessingActivity = false,
+  onNewBadgeEarned = () => {} // Keep for compatibility
 }) => {
   const { state, updateBraceWornHours, initBraceTracking, getPersistentTimerStatus, clearPersistentTimerData } = useContext(ActivityContext); 
   const { state: UserState, resetDailyBraceHours } = useContext(UserContext); 
@@ -27,10 +28,7 @@ const BraceTrackerInterface = ({
   const [progressColor, setProgressColor] = useState(COLORS.primaryPurple);
   const goalAchievedToday = useRef(false);
   
-  // Badge popup state - back to local handling but streak-aware
-  const [showNewBadgePopup, setShowNewBadgePopup] = useState(false);
-  const [newBadgePopupData, setNewBadgePopupData] = useState(null);
-  const [pendingBadgeData, setPendingBadgeData] = useState(null);
+  // Remove local badge handling - let parent component handle all badges
 
   // Get today's date in YYYY-MM-DD format
   const today = new Date().toISOString().split('T')[0];
@@ -78,15 +76,7 @@ const BraceTrackerInterface = ({
     }
   };
 
-  // Handle showing pending badges when streak animation completes
-  useEffect(() => {
-    if (!isStreakAnimationActive && pendingBadgeData) {
-      console.log("Streak animation completed, showing pending badge");
-      setNewBadgePopupData(pendingBadgeData);
-      setShowNewBadgePopup(true);
-      setPendingBadgeData(null);
-    }
-  }, [isStreakAnimationActive, pendingBadgeData]);
+  // Remove local badge handling - parent component handles badges
   
   // Get worn hours from the wearingHistory map for today, defaulting to 0
   const wornTodayHours = state.braceData?.[today] || UserState.user?.treatmentData?.brace?.wearingHistory?.[today] || 0;
@@ -101,31 +91,17 @@ const BraceTrackerInterface = ({
     if (wornTodayHours >= expectedWearingHours) {
       setProgressColor(COLORS.accentGreen);
       // Trigger activity completion for streak update if goal just achieved
-      if (!goalAchievedToday.current && onActivityComplete) {
+      if (!goalAchievedToday.current && onActivityComplete && !isProcessingActivity) {
         goalAchievedToday.current = true;
+        console.log("Goal achieved via useEffect, calling onActivityComplete");
         onActivityComplete('brace');
       }
     } else {
       setProgressColor(COLORS.primaryPurple);
     }
-  }, [wornTodayHours, expectedWearingHours, onActivityComplete]);
+  }, [wornTodayHours, expectedWearingHours, onActivityComplete, isProcessingActivity]);
   
-  const handleBadgeDisplay = (badgeData) => {
-    if (!badgeData) return;
-    
-    console.log("Badge earned in brace interface:", badgeData);
-    
-    if (isStreakAnimationActive) {
-      // Streak is active, store badge for later
-      console.log("Streak animation active, storing badge for later");
-      setPendingBadgeData(badgeData);
-    } else {
-      // No streak, show immediately
-      console.log("No streak animation, showing badge immediately");
-      setNewBadgePopupData(badgeData);
-      setShowNewBadgePopup(true);
-    }
-  };
+  // Remove local badge handling - parent component handles all badges
   
   const handleTimeSaved = async (hours) => {
     try {
@@ -135,17 +111,19 @@ const BraceTrackerInterface = ({
         return;
       }
 
-      // Handle badge display with streak awareness
+      // Handle badges via callback to parent
       if (result.newAchievements && result.newAchievements.length > 0) {
-        handleBadgeDisplay(result.newAchievements[0]);
+        console.log("Timer saved, calling onBadgeEarned:", result.newAchievements[0]);
+        onBadgeEarned(result.newAchievements[0]);
       }
   
       // Manually calculate updated hours
       const updatedHours = (wornTodayHours || 0) + hours;
   
       // Check if goal was achieved and trigger activity completion
-      if (updatedHours >= expectedWearingHours && !goalAchievedToday.current && onActivityComplete) {
+      if (updatedHours >= expectedWearingHours && !goalAchievedToday.current && onActivityComplete && !isProcessingActivity) {
         goalAchievedToday.current = true;
+        console.log("Goal achieved, calling onActivityComplete");
         onActivityComplete('brace');
       }
 
@@ -171,17 +149,19 @@ const BraceTrackerInterface = ({
         return;
       }
 
-      // Handle badge display with streak awareness
+      // Handle badges via callback to parent
       if (result.newAchievements && result.newAchievements.length > 0) {
-        handleBadgeDisplay(result.newAchievements[0]);
+        console.log("Quick log completed, calling onBadgeEarned:", result.newAchievements[0]);
+        onBadgeEarned(result.newAchievements[0]);
       }
   
       // Manually calculate updated hours
       const updatedHours = (wornTodayHours || 0) + hours;
   
       // Check if goal was achieved and trigger activity completion
-      if (updatedHours >= expectedWearingHours && !goalAchievedToday.current && onActivityComplete) {
+      if (updatedHours >= expectedWearingHours && !goalAchievedToday.current && onActivityComplete && !isProcessingActivity) {
         goalAchievedToday.current = true;
+        console.log("Goal achieved via quick log, calling onActivityComplete");
         onActivityComplete('brace');
       }
     } catch (error) {
@@ -241,17 +221,7 @@ const BraceTrackerInterface = ({
         </View>
       )}
 
-      {/* Badge Popup */}
-      <View style={styles.badgePopupContainer}>
-        <NewBadgePopup
-          visible={showNewBadgePopup && newBadgePopupData !== null}
-          badge={newBadgePopupData}
-          onAnimationComplete={() => {
-            setShowNewBadgePopup(false);
-            setNewBadgePopupData(null);
-          }}
-        />
-      </View>
+      {/* Badge popup removed - handled by parent component */}
 
       {timerOn && (
         <BraceTimer
@@ -548,11 +518,5 @@ const styles = StyleSheet.create({
     fontSize: moderateScale(14),
     fontWeight: 'bold',
   },
-  badgePopupContainer: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: moderateScale(20),
-    zIndex: 1000,
-  },
+
 });

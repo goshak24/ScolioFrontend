@@ -509,8 +509,7 @@ const Squad = () => {
                                 : 'https://randomuser.me/api/portraits/lego/1.jpg');
                 
                 // Debug logging for Squad conversation avatars
-                if (avatarUrl !== 'https://randomuser.me/api/portraits/lego/1.jpg') {
-                  console.log(`🖼️ Squad conversation avatar for ${username}:`, avatarUrl);
+                if (avatarUrl !== 'https://randomuser.me/api/portraits/lego/1.jpg') { 
                 }
                 
                 return avatarUrl;
@@ -520,11 +519,7 @@ const Squad = () => {
             onError={(error) => {
               const username = enhancedUser?.username || item.user?.username || 'unknown';
               console.warn(`❌ Failed to load Squad conversation avatar for ${username}:`, error.nativeEvent.error);
-            }}
-            onLoad={() => {
-              const username = enhancedUser?.username || item.user?.username || 'unknown';
-              console.log(`✅ Loaded Squad conversation avatar for ${username}`);
-            }}
+            }} 
           />
           {/* Online indicator - will need to be implemented with real data */}
           {enhancedUser?.isOnline && (

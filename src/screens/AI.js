@@ -100,16 +100,7 @@ const AI = () => {
             <View style={styles.headerTextContainer}>
               <Text style={styles.headerTitle}>Your AI Bestie</Text>
               <Text style={styles.headerSubtitle}>Ask me anything about scoliosis</Text>
-            </View>
-            <LinearGradient colors={["#9B34EF", "#E9338A"]} style={styles.micGradient}>
-              <TouchableOpacity onPress={() => setShowVoicePrompt(!showVoicePrompt)}>
-                  <Ionicons 
-                    name={"mic"} 
-                    size={moderateScale(24)} 
-                    color={COLORS.white} 
-                  />
-              </TouchableOpacity>
-            </LinearGradient>
+            </View> 
           </View>
 
           {/* Voice Assistant Tab (Appears when "mic" is clicked) */}

@@ -52,7 +52,7 @@ const ReusableForm = ({
   };
 
   // Add event deletion handler
-  const handleEventDelete = (date, eventIndex) => {
+  const handleEventDelete = (date, eventIndex) => { 
     const dateStr = date.toISOString().split('T')[0];
     const events = {...scheduledEvents};
     
