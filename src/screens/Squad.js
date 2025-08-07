@@ -82,58 +82,36 @@ const Squad = () => {
           console.log("🔄 Loading initial forum posts");
           await fetchPosts({ forceFetch: false, page: 1 });
           lastForumFetchTime.current = new Date().getTime();
-        } else {
-          console.log("📋 Using existing forum posts from state");
+        }
+
+        // Load friends and friend requests
+        if (FriendsState.friends.length === 0) {
+          console.log('🔄 Loading friends data in Squad screen');
+          getFriends();
+        }
+        if (FriendsState.friendRequests.length === 0) {
+          console.log('🔄 Loading friend requests in Squad screen');
+          getFriendRequests();
         }
       } catch (error) {
         console.error("❌ Error loading initial data:", error);
-      }
-
-      // Load friend-related data - THIS IS CRITICAL for Messages tab
-      if (FriendsState.friendRequests.length === 0) {
-        console.log('🔄 Loading friend requests in Squad screen');
-        getFriendRequests();
-      } else {
-        console.log('📋 Friend requests already loaded:', FriendsState.friendRequests.length);
-      }
-      
-      // Always load friends if not already loaded - needed for user names in Messages tab
-      if (!friendsLoaded.current && FriendsState.friends.length === 0) {
-        console.log('🔄 Loading friends data for user names in Messages tab');
-        friendsLoaded.current = true;
-        getFriends();
-      } else if (FriendsState.friends.length > 0) {
-        console.log(`📋 Friends already loaded: ${FriendsState.friends.length} friends`);
       }
     };
 
     loadInitialData();
   }, []);
-  
-  // Reset data load flags when the screen is focused
+
+  // Refactored focus effect to be more reliable
   useFocusEffect(
     useCallback(() => {
       const now = new Date().getTime();
-      
-      // Don't run focus effect logic if initial data hasn't been loaded yet
-      if (!initialDataLoaded.current.Forums && activeTab === "Forums") {
-        console.log("⏩ Skipping focus effect - initial Forums data not loaded yet");
-        return;
-      }
-      
-      if (!initialDataLoaded.current.Messages && activeTab === "Messages") {
-        console.log("⏩ Skipping focus effect - initial Messages data not loaded yet");
-        return;
-      }
-      
-      // DATA REFRESHING LOGIC: HANDLES THE FORUM POST REFRESHING AFTER A CERTAIN PERIOD OF TIME 
-      // 
-      // Only refresh data if returning after a significant time (e.g., 2+ minutes)
-      const timeSinceLastFocus = now - lastFocusTime.current;
-      const shouldRefreshOnFocus = timeSinceLastFocus > 2 * 60 * 1000; // 2 minutes
-      
-      if (activeTab === "Forums" && shouldRefreshOnFocus) {
-        // If it's been a while since we last fetched forums, refresh them
+
+      if (activeTab === "Messages") {
+        console.log("🔄 Refreshing messages and friends on focus");
+        // Force refresh conversations and friends data to get latest messages and profile pictures
+        loadConversations(true);
+      } else if (activeTab === "Forums") {
+        // Refresh forum posts if it's been a while
         const timeSinceLastForumFetch = now - lastForumFetchTime.current;
         const shouldRefreshForums = timeSinceLastForumFetch > 5 * 60 * 1000; // 5 minutes
         
@@ -142,18 +120,7 @@ const Squad = () => {
           fetchPosts({ forceFetch: true, page: 1 });
           lastForumFetchTime.current = now;
         }
-      } else if (activeTab === "Messages" && shouldRefreshOnFocus) {
-        // Only reload conversations when returning after significant time away
-        initialDataLoaded.current.Messages = false;
-        lastFocusTime.current = now;
       }
-      
-      // Update last focus time
-      lastFocusTime.current = now;
-      
-      return () => {
-        // No cleanup needed
-      };
     }, [activeTab])
   );
 
@@ -263,19 +230,16 @@ const Squad = () => {
 
       console.log("🔄 Loading Messages tab data...");
       
-      // CRITICAL: Always ensure friends data is loaded first 
-      // This is needed to match user IDs to names in conversations
-      if (FriendsState.friends.length === 0) {
-        console.log("📋 No friends data found - loading friends first");
+      // CRITICAL: Always ensure friends data is loaded first, especially when forcing a refresh
+      // This is needed to match user IDs to names and get profile pictures in conversations
+      if (FriendsState.friends.length === 0 || forceRefresh) {
+        console.log(`📋 ${forceRefresh ? "Force refreshing" : "Loading"} friends data first`);
         try {
-          await getFriends(false); // Load friends without forcing refresh
-          console.log(`✅ Friends loaded: ${FriendsState.friends.length} friends`);
+          await getFriends(forceRefresh); // Pass forceRefresh to get latest friend data
         } catch (error) {
           console.error("❌ Failed to load friends:", error);
-          // Continue anyway - conversations might still work
+          // We can continue, but conversations might lack some user data
         }
-      } else {
-        console.log(`📋 Friends already loaded: ${FriendsState.friends.length} friends`);
       }
       
       // Check if conversations already exist in state
