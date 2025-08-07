@@ -60,6 +60,7 @@ const Squad = () => {
   const [messagesLoading, setMessagesLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchActive, setSearchActive] = useState(false);
+  const [enhancedConversations, setEnhancedConversations] = useState([]);
   
   // Track if friends data is already loaded
   const friendsLoaded = useRef(false);
@@ -179,33 +180,27 @@ const Squad = () => {
   // Track fetched usernames to prevent infinite loops
   const fetchedUsernames = useRef(new Set());
   
-  // Fetch profile pictures for forum posts and conversations
+  // Fetch profile pictures for forum posts and ENHANCED conversations
   useEffect(() => {
     const fetchPictures = async () => {
       try {
-        // Check if we have the necessary functions available
         if (!extractUsernames || !fetchProfilePictures) {
           return;
         }
 
-        // Extract usernames from forum posts and conversations
+        // Extract usernames from forum posts and the now enhanced conversations
         const forumUsernames = extractUsernames(ForumState.posts, 'username');
-        const conversationUsernames = extractUsernames(MessagesState.conversations, 'user.username');
+        const conversationUsernames = extractUsernames(enhancedConversations, 'user.username');
         
-        // Combine all usernames
-        const allUsernames = [...forumUsernames, ...conversationUsernames];
+        const allUsernames = [...new Set([...forumUsernames, ...conversationUsernames])];
         
-        // Filter out usernames we've already fetched
         const unfetchedUsernames = allUsernames.filter(username => 
           username && !fetchedUsernames.current.has(username)
         );
         
         if (unfetchedUsernames.length > 0) {
-          console.log(`📷 Squad: Fetching profile pictures for ${unfetchedUsernames.length} users`);
-          
-          // Mark usernames as being fetched to prevent duplicate requests
+          console.log(`📷 Squad: Fetching profile pictures for ${unfetchedUsernames.length} users from enhanced conversations`);
           unfetchedUsernames.forEach(username => fetchedUsernames.current.add(username));
-          
           await fetchProfilePictures(unfetchedUsernames);
         }
       } catch (error) {
@@ -213,12 +208,30 @@ const Squad = () => {
       }
     };
 
-    // Only fetch if we have data to work with and functions are available
-    if ((ForumState.posts.length > 0 || MessagesState.conversations.length > 0) && 
+    // Depend on enhancedConversations now
+    if ((ForumState.posts.length > 0 || enhancedConversations.length > 0) &&
         extractUsernames && fetchProfilePictures) {
       fetchPictures();
     }
-  }, [ForumState.posts, MessagesState.conversations]);
+  }, [ForumState.posts, enhancedConversations]);
+
+  // Effect to enhance conversations with full user data once friends are loaded
+  useEffect(() => {
+    if (MessagesState.conversations && FriendsState.friends.length > 0) {
+      console.log("Enhancing conversations with friend data...");
+      const enhanced = MessagesState.conversations.map(conv => {
+        const enhancedUser = getCompleteUserData(conv.user, FriendsState, getUserById);
+        return {
+          ...conv,
+          user: enhancedUser || conv.user,
+        };
+      });
+      setEnhancedConversations(enhanced);
+    } else if (MessagesState.conversations) {
+      // If friends are not loaded, use the raw conversations
+      setEnhancedConversations(MessagesState.conversations);
+    }
+  }, [MessagesState.conversations, FriendsState.friends]);
 
   const loadConversations = async (forceRefresh = false) => {
     setMessagesLoading(true);
@@ -401,13 +414,10 @@ const Squad = () => {
     }))
   });
 
-  // Navigate to conversation screen with enhanced user data
+  // Navigate to conversation screen with already enhanced user data
   const navigateToConversation = (otherUser) => {
-    // Get complete user data using friends context
-    const enhancedUser = getCompleteUserData(otherUser, FriendsState, getUserById); 
-    
-    // Navigate to chat screen with enhanced user data
-    navigation.navigate('ChatScreen', { otherUser: enhancedUser });
+    // The user object is already enhanced, so we can navigate directly
+    navigation.navigate('ChatScreen', { otherUser });
   };
 
   const deleteConversation = (conversationId) => { 
@@ -432,56 +442,35 @@ const Squad = () => {
     ); 
   };
 
-  // Render conversation item with enhanced user data
+  // Render conversation item with already enhanced user data
   const renderConversationItem = ({ item }) => {
-    // Enhance user data with friends context data
-    const enhancedUser = getCompleteUserData(item.user, FriendsState, getUserById);
-    
-    // If user data is still incomplete, show a loading placeholder
-    if (!enhancedUser || (!enhancedUser.username && !enhancedUser.displayName)) {
-      console.log("⚠️ User data incomplete for conversation:", item.id);
-    }
-    
-    // Update the item with enhanced user data
-    const enhancedItem = {
-      ...item,
-      user: enhancedUser || item.user || { id: item.otherUserId, username: 'Loading...' }
-    }; 
+    // The `item` is now from `enhancedConversations`, so `item.user` should be complete.
+    const enhancedUser = item.user;
 
     return (
       <TouchableOpacity 
         style={styles.conversationItem}
-        onPress={() => navigateToConversation(enhancedUser || item.user)}
+        onPress={() => navigateToConversation(enhancedUser)}
       >
         <View style={styles.avatarContainer}>
           <Image 
             source={{ 
               uri: (() => {
-                const username = enhancedUser?.username || item.user?.username;
+                const username = enhancedUser?.username;
                 
-                // Ensure we have a valid username before processing
                 if (!username || typeof username !== 'string') {
-                  console.warn(`⚠️ Squad: Invalid conversation username:`, { enhancedUser, itemUser: item.user });
                   return 'https://randomuser.me/api/portraits/lego/1.jpg';
                 }
                 
                 const profilePictureUrl = getProfilePictureUrlFor ? getProfilePictureUrlFor(username) : null;
-                const avatarUrl = enhancedUser?.avatar || 
-                               item.user?.avatar || 
-                               (profilePictureUrl && profilePictureUrl !== 'https://randomuser.me/api/portraits/lego/1.jpg' 
-                                ? profilePictureUrl 
-                                : 'https://randomuser.me/api/portraits/lego/1.jpg');
-                
-                // Debug logging for Squad conversation avatars
-                if (avatarUrl !== 'https://randomuser.me/api/portraits/lego/1.jpg') { 
-                }
+                const avatarUrl = enhancedUser?.avatar || profilePictureUrl || 'https://randomuser.me/api/portraits/lego/1.jpg';
                 
                 return avatarUrl;
               })()
             }} 
             style={styles.avatar}
             onError={(error) => {
-              const username = enhancedUser?.username || item.user?.username || 'unknown';
+              const username = enhancedUser?.username || 'unknown';
               console.warn(`❌ Failed to load Squad conversation avatar for ${username}:`, error.nativeEvent.error);
             }} 
           />
@@ -493,18 +482,18 @@ const Squad = () => {
         <View style={styles.conversationInfo}>
           <View style={styles.conversationHeader}>
             <Text style={styles.username}>
-              {enhancedUser?.username || enhancedUser?.displayName || item.user?.username || 'Loading...'}
+              {enhancedUser?.username || enhancedUser?.displayName || 'Loading...'}
             </Text>
-            <Text style={styles.timestamp}>{MDYformatTimestamp(enhancedItem.lastMessageTime)}</Text>
+            <Text style={styles.timestamp}>{MDYformatTimestamp(item.lastMessageTime)}</Text>
           </View>
           <View style={styles.messagePreviewContainer}>
             <Text style={styles.messagePreview} numberOfLines={1}>
-              {enhancedItem.lastMessage || 'No messages yet'}
+              {item.lastMessage || 'No messages yet'}
             </Text>
-            <TouchableOpacity style={{position:'absolute', right: moderateScale(0), top: moderateScale(0), padding: moderateScale(0), flexDirection: 'row', alignItems: 'center'}} onPress={() => deleteConversation(enhancedItem.id)}>
-              {enhancedItem.unreadCount > 0 && (
+            <TouchableOpacity style={{position:'absolute', right: moderateScale(0), top: moderateScale(0), padding: moderateScale(0), flexDirection: 'row', alignItems: 'center'}} onPress={() => deleteConversation(item.id)}>
+              {item.unreadCount > 0 && (
                 <View style={styles.unreadBadge}>
-                  <Text style={styles.unreadCount}>{enhancedItem.unreadCount}</Text> 
+                  <Text style={styles.unreadCount}>{item.unreadCount}</Text>
                 </View>
               )}
               <Ionicons name="trash-outline" size={moderateScale(20)} color="gray" />
@@ -665,7 +654,7 @@ const Squad = () => {
           </View>
         ) : (
           <FlatList
-            data={MessagesState.conversations}
+            data={enhancedConversations}
             keyExtractor={(item) => item.id}
             renderItem={renderConversationItem}
             contentContainerStyle={styles.listContainer}
