@@ -190,6 +190,35 @@ const userReducer = (state, action) => {
                 error: null,
                 profilePictures: {} // Clear cached profile pictures on sign out
             };
+            case "REMOVE_CALENDAR_EVENT": {
+                const { eventId } = action.payload;
+                const updatedEvents = { ...state.user.events };
+            
+                // Loop through each date's events to find and remove the event by ID
+                for (const date in updatedEvents) {
+                    const eventsArray = updatedEvents[date];
+                    const filteredEvents = eventsArray.filter(event => event.id !== eventId);
+            
+                    if (filteredEvents.length !== eventsArray.length) {
+                        // We found and removed the event
+                        if (filteredEvents.length > 0) {
+                            updatedEvents[date] = filteredEvents;
+                        } else {
+                            delete updatedEvents[date]; // Clean up if no events remain for this date
+                        }
+                        break; // Stop searching after removal
+                    }
+                }
+            
+                return {
+                    ...state,
+                    user: {
+                        ...state.user,
+                        events: updatedEvents
+                    }
+                };
+            }
+            
         default:
             return state;
     }

@@ -144,7 +144,7 @@ const CalendarModal = ({
         const dateString = format(previousDate, 'yyyy-MM-dd'); 
   
         // Access events on the previous day
-        const events = UserState.user?.events?.[dateString] || [];
+        const events = UserState.user?.events?.[dateString] || []; 
   
         if (events.length > eventIndex) {
           const eventId = events[eventIndex].id;
