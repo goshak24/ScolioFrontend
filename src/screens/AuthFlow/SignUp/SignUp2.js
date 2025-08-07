@@ -32,40 +32,35 @@ const SignUp2 = ({ route }) => {
     }
 
     if (!date || !newEvent) return;
-    
-    // Use the same date formatting function
+
     const formatDateForKey = (date) => {
       const year = date.getFullYear();
       const month = String(date.getMonth() + 1).padStart(2, '0');
       const day = String(date.getDate()).padStart(2, '0');
       return `${year}-${month}-${day}`;
     };
-    
-    const dateStr = formatDateForKey(date);
-    
-    if (treatmentContext === 'physio') {
-      if (!newEvent.type) newEvent.type = 'physio';
-    } else if (treatmentContext === 'brace + physio') {
-      const existingEvents = scheduledEvents[dateStr] || [];
-      const hasPhysio = existingEvents.some(e => e.type === 'physio');
-      const hasBrace = existingEvents.some(e => e.type === 'brace');
 
-      if (!newEvent.type) {
-        if (!hasPhysio) {
-          newEvent.type = 'physio';
-        } else if (!hasBrace) {
-          newEvent.type = 'brace';
-        } else {
-          newEvent.type = 'physio';
-        }
+    const dateStr = formatDateForKey(date);
+
+    // The event type is now set in the EventForm, so the complex logic here is removed.
+    // This ensures that any number of physio or brace events can be added.
+    if (!newEvent.type) {
+      if (treatmentContext === 'physio') {
+        newEvent.type = 'physio';
+      } else if (treatmentContext === 'brace + physio') {
+        // Default to physio if type is not specified
+        newEvent.type = 'physio';
       }
     }
 
-    setScheduledEvents(prev => ({
-      ...prev,
-      [dateStr]: [...(prev[dateStr] || []), newEvent]
-    }));
-  }; 
+    setScheduledEvents(prev => {
+      const updatedEvents = [...(prev[dateStr] || []), newEvent];
+      return {
+        ...prev,
+        [dateStr]: updatedEvents,
+      };
+    });
+  };
 
   const handleDeleteEvent = (date, eventIndex) => {
     if (!date) return;
