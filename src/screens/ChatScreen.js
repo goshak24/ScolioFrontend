@@ -4,7 +4,8 @@ import {
     StyleSheet,
     SafeAreaView,
     Platform,
-    KeyboardAvoidingView
+    KeyboardAvoidingView,
+    TouchableOpacity
 } from 'react-native';
 import { moderateScale } from 'react-native-size-matters';
 import COLORS from '../constants/COLORS';
@@ -20,6 +21,7 @@ import {
     LoadingState,
     formatMessageTime
 } from '../components/messaging/chat';
+import UserProfileModal from '../components/profile/UserProfileModal';
 
 const ChatScreen = ({ route, navigation }) => {
     const { otherUser } = route.params;
@@ -27,7 +29,8 @@ const ChatScreen = ({ route, navigation }) => {
     const { state: userState } = useContext(UserContext);
     const [messageText, setMessageText] = useState('');
     const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null); 
+    const [error, setError] = useState(null);
+    const [profileModalVisible, setProfileModalVisible] = useState(false);
     const flatListRef = useRef(null);
     const prevMessageCount = useRef(0);
     const lastMessageUpdate = useRef(Date.now());
@@ -228,18 +231,18 @@ const ChatScreen = ({ route, navigation }) => {
         navigation.goBack();
     };
 
+    const handleUserPress = () => {
+        setProfileModalVisible(true);
+    };
+
     return (
         <SafeAreaView style={styles.container}>
-            {/* Chat header */}
-            <ChatHeader 
-                otherUser={otherUser} 
-                onBackPress={() => navigation.goBack()} 
-                onUserPress={() => {
-                    // Navigate to user profile if needed
-                }} 
+            <ChatHeader
+                otherUser={otherUser}
+                onBackPress={() => navigation.goBack()}
+                onUserPress={handleUserPress}
             />
 
-            {/* Messages content */}
             <KeyboardAvoidingView
                 style={styles.keyboardAvoidingContainer}
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -277,6 +280,14 @@ const ChatScreen = ({ route, navigation }) => {
                     </View>
                 )}
             </KeyboardAvoidingView>
+
+            {profileModalVisible && (
+                <UserProfileModal
+                    visible={profileModalVisible}
+                    onClose={() => setProfileModalVisible(false)}
+                    userId={otherUser.id}
+                />
+            )}
         </SafeAreaView>
     );
 };
