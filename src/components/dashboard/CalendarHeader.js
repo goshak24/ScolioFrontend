@@ -9,46 +9,13 @@ import HeightSpacer from '../reusable/HeightSpacer';
 import { navigate } from '../navigation/navigationRef';
 import CalendarModal from '../../components/reusable/Calendar/CalendarModal';
 
-const CalendarHeader = ({ profilePic, username }) => {
+const CalendarHeader = ({ profilePic, username, onOpenCalendar }) => {
   const today = new Date();
   const weekStart = startOfWeek(today);
   const weekEnd = endOfWeek(today);
   const weekDays = eachDayOfInterval({ start: weekStart, end: weekEnd });
   
-  // State for managing calendar modal visibility
-  const [modalVisible, setModalVisible] = useState(false);
-  // State to store calendar events
-  const [events, setEvents] = useState({});
-
-  // Handler for adding events
-  const handleEventAdd = (date, eventData) => {
-    const dateStr = format(date, 'yyyy-MM-dd');
-    setEvents(prev => {
-      const dateEvents = prev[dateStr] || [];
-      return {
-        ...prev,
-        [dateStr]: [...dateEvents, eventData]
-      };
-    });
-  };
-
-  // Handler for deleting events
-  const handleEventDelete = (date, eventIndex) => { 
-    const dateStr = format(date, 'yyyy-MM-dd');
-    setEvents(prev => {
-      const dateEvents = [...(prev[dateStr] || [])];
-      dateEvents.splice(eventIndex, 1);
-      
-      const newEvents = { ...prev };
-      if (dateEvents.length === 0) {
-        delete newEvents[dateStr];
-      } else {
-        newEvents[dateStr] = dateEvents;
-      }
-      
-      return newEvents;
-    });
-  };
+  // Calendar state and modal handled by Dashboard to avoid duplicate modals/fetch loops
 
   return (
     <View style={styles.headerContainer}>
@@ -78,58 +45,12 @@ const CalendarHeader = ({ profilePic, username }) => {
         
         <TouchableOpacity 
           style={styles.settingsButton}
-          onPress={() => setModalVisible(true)}
+          onPress={onOpenCalendar}
         >
           <Ionicons name="calendar" size={moderateScale(22)} color={COLORS.white} /> 
         </TouchableOpacity>
-      </View>
-
-      <HeightSpacer height={moderateScale(5)} /> 
+      </View>  
       
-      <ScrollView 
-        horizontal 
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.datesContainer}
-        overScrollMode="never"
-        bounces={false}
-        showsVerticalScrollIndicator={false}
-      >
-        {weekDays.map((day, index) => {
-          const isCurrentDay = isToday(day);
-          return (
-            <View key={index} style={[styles.dayContainer, index === 0 && styles.firstDay, index === weekDays.length - 1 && styles.lastDay]}>
-              <Text style={styles.weekDayText}>{format(day, 'EEE')}</Text>
-              
-              {isCurrentDay ? (
-                <LinearGradient 
-                  colors={["#A130D3", "#CD298D"]}  
-                  start={{ x: 0, y: 0 }} 
-                  end={{ x: 1, y: 1 }} 
-                  style={styles.currentDateContainer}
-                >
-                  <Text style={styles.currentDateText}>{format(day, 'd')}</Text>
-                </LinearGradient>
-              ) : (
-                <View style={styles.dateContainer}>
-                  <Text style={styles.dateText}>{format(day, 'd')}</Text>
-                </View>
-              )}
-            </View>
-          );
-        })}
-      </ScrollView>
-
-      {/* Calendar Modal Implementation */}
-      <CalendarModal
-        visible={modalVisible}
-        onClose={() => setModalVisible(false)}
-        onDateSelect={(date) => console.log('Date selected:', date)}
-        events={events}
-        initialDate={today}
-        onEventAdd={handleEventAdd}
-        onEventDelete={handleEventDelete}
-        defaultView="month"
-      />
     </View>
   );
 };
@@ -139,8 +60,8 @@ export default CalendarHeader;
 const styles = StyleSheet.create({
   headerContainer: {
     marginTop: moderateScale(5), 
-    paddingBottom: moderateScale(10),
-    backgroundColor: COLORS.backgroundPurple,
+    paddingBottom: moderateScale(5),
+    backgroundColor: COLORS.darkBackground,
     width: '100%',
   },
   topRow: {
@@ -148,7 +69,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: moderateScale(15),
-    marginBottom: moderateScale(10),
+    marginBottom: moderateScale(8),
   },
   profileIcon: {
     width: moderateScale(36),

@@ -24,30 +24,30 @@ const SurgeryProgressCard = () => {
 
   const contentMap = {
     'presurgery': {
-      title: "Pre-Surgery Preparation",
-      description: "Complete your pre-op checklist for a successful surgery 🏥",
-      buttonText: "View Pre-Op Checklist",
+      title: "Pre-Op Checklist",
+      description: "Prep like a pro. Knock off your pre-op tasks 🏥",
+      buttonText: "Open Checklist ✅",
       icon: "clipboard-outline",
       buttonGradient: ["#3E9278", "#56C596"]
     },
     'pre-surgery': {
-      title: "Pre-Surgery Preparation",
-      description: "Complete your pre-op checklist for a successful surgery 🏥",
-      buttonText: "View Pre-Op Checklist",
+      title: "Pre-Op Checklist",
+      description: "Prep like a pro. Knock off your pre-op tasks 🏥",
+      buttonText: "Open Checklist ✅",
       icon: "clipboard-outline",
       buttonGradient: ["#3E9278", "#56C596"]
     },
     'postsurgery': {
       title: "Recovery Progress",
-      description: "Track your healing journey with gentle activities 🌱",
-      buttonText: "View Recovery Plan",
+      description: "Gentle wins add up. Keep it light and steady 🌱",
+      buttonText: "Open Recovery Plan",
       icon: "pulse-outline",
       buttonGradient: ["#3E9278", "#56C596"]
     },
     'post-surgery': {
       title: "Recovery Progress",
-      description: "Track your healing journey with gentle activities 🌱",
-      buttonText: "View Recovery Plan",
+      description: "Gentle wins add up. Keep it light and steady 🌱",
+      buttonText: "Open Recovery Plan",
       icon: "pulse-outline",
       buttonGradient: ["#3E9278", "#56C596"]
     }
@@ -57,11 +57,21 @@ const SurgeryProgressCard = () => {
   // Fix accType to handle formatting variations
   const normalizedAccType = accType.replace(/\s+/g, ' ').trim().toLowerCase();
 
-  // Get content for the current account type or use default
-  const content = contentMap[normalizedAccType] || contentMap['physio'];
-  
   const isPreSurgery = accType === 'presurgery' || accType === 'pre-surgery';
   const isPostSurgery = accType === 'postsurgery' || accType === 'post-surgery';
+
+  // Get content for the current account type or use a friendly default
+  const content = isPreSurgery
+    ? contentMap['presurgery']
+    : isPostSurgery
+      ? contentMap['postsurgery']
+      : {
+          title: 'Surgery',
+          description: 'Stay on top of your care. You got this ✨',
+          buttonText: 'Open',
+          icon: 'medkit-outline',
+          buttonGradient: [COLORS.tabActiveStart, COLORS.tabActiveEnd]
+        };
   
   const [daysSince, setDaysSince] = useState(0);
   const [daysUntil, setDaysUntil] = useState(0);
@@ -182,7 +192,7 @@ const SurgeryProgressCard = () => {
             color={COLORS.primaryPurple} 
           />
           <Text style={styles.title}>
-            {isPreSurgery ? "Surgery Preparation" : "Recovery Progress"}
+            {isPreSurgery ? content.title : content.title}
           </Text>
         </View>
         <View style={styles.daysBadge}>
@@ -191,6 +201,7 @@ const SurgeryProgressCard = () => {
       </View>
       
       <Text style={styles.subtitle}>{surgeryDaysInfo.label}</Text>
+      <Text style={styles.description}>{content.description}</Text>
       
       <HeightSpacer height={moderateScale(15)} />
       
@@ -267,11 +278,10 @@ export default SurgeryProgressCard;
 
 const styles = StyleSheet.create({
   container: {
-    padding: moderateScale(16),
+    padding: moderateScale(14),
     backgroundColor: COLORS.cardDark,
-    borderRadius: moderateScale(10),
-    marginHorizontal: moderateScale(10),
-    marginVertical: moderateScale(7.5),
+    borderRadius: moderateScale(12),
+    marginVertical: moderateScale(10),
   },
   header: {
     flexDirection: 'row',
@@ -290,8 +300,15 @@ const styles = StyleSheet.create({
     marginLeft: moderateScale(8),
   },
   subtitle: {
-    fontSize: moderateScale(14),
+    fontSize: moderateScale(13),
     color: COLORS.lightGray,
+    marginTop: moderateScale(2)
+  },
+  description: {
+    fontSize: moderateScale(13),
+    color: COLORS.lightGray,
+    lineHeight: moderateScale(18),
+    marginTop: moderateScale(6)
   },
   daysBadge: {
     backgroundColor: COLORS.primaryPurple,

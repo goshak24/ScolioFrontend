@@ -9,13 +9,13 @@ import { navigate } from '../navigation/navigationRef';
 const DoctorsHubCard = () => {
   return (
     <View style={styles.card}>
-      <Text style={styles.title}>🩺 Find trusted specialists nearby</Text>
+      <Text style={styles.title}>Doctors Hub</Text>
       <Text style={styles.description}>
-        Connect with orthopedic surgeons, physiotherapists, and scoliosis specialists in your area
+        🩺 Need a specialist? We’ll help you find orthopedic surgeons, physios, and scoliosis pros near you.
       </Text>
-      <HeightSpacer height={moderateScale(5)} />
+      <HeightSpacer height={moderateScale(10)} />
       <ReusableButton 
-        btnText="Find doctors"
+        btnText="Find a doctor 🧑‍⚕️"
         onPress={() => navigate("FindDoctors")}
         gradientColors={[COLORS.tabActiveStart, COLORS.tabActiveEnd]}
         textColor={COLORS.white}
@@ -32,20 +32,19 @@ export default DoctorsHubCard;
 const styles = StyleSheet.create({
   card: {
     backgroundColor: COLORS.cardDark,
-    borderRadius: moderateScale(10), 
-    padding: moderateScale(16), 
-    marginHorizontal: moderateScale(10), 
-    marginVertical: moderateScale(7.5),
+    borderRadius: moderateScale(12), 
+    padding: moderateScale(14),  
+    marginVertical: moderateScale(10),
   },
   title: {
     color: COLORS.white,
     fontSize: moderateScale(16),
     fontWeight: 'bold', 
-    marginBottom: moderateScale(5)
+    marginBottom: moderateScale(6)
   },
   description: {
     color: COLORS.lightGray,
-    fontSize: moderateScale(14),
-    marginVertical: 4,
+    fontSize: moderateScale(13),
+    lineHeight: moderateScale(18),
   },
 });
