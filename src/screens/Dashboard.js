@@ -1,5 +1,5 @@
 import { SafeAreaView, StyleSheet, Text, View, ScrollView, StatusBar, ActivityIndicator, Platform, TouchableOpacity } from 'react-native';
-import React, { useContext, useEffect, useMemo, useState, useCallback } from 'react';
+import React, { useContext, useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { scale, moderateScale } from 'react-native-size-matters';
 import CalendarHeader from '../components/dashboard/CalendarHeader';
 import HeightSpacer from '../components/reusable/HeightSpacer';
@@ -20,11 +20,12 @@ import CalendarModal from '../components/reusable/Calendar/CalendarModal';
 import { format } from 'date-fns';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
+import { getFormattedDate, getDateStringFromFirestoreTimestamp } from '../components/timeZoneHelpers';
 
 const Dashboard = () => {
   const { state: { user, loading }, resetDailyBraceHours } = useContext(UserContext);
   const { state: painState, loadPainLogs } = useContext(PainTrackingContext);
-  const { state: activityState, fetchActivityData } = useContext(ActivityContext);
+  const { state: activityState, fetchActivityData, updateStreak } = useContext(ActivityContext);
   const [isPlaying, setIsPlaying] = useState(false);
   const [showCalendarModal, setShowCalendarModal] = useState(false);
   const [events, setEvents] = useState({});
@@ -67,7 +68,7 @@ const Dashboard = () => {
   };
 
   // Hooks must run consistently on every render — declare derived hooks before any early return
-  const todayKey = useMemo(() => new Date().toISOString().split('T')[0], []);
+  const todayKey = useMemo(() => getFormattedDate(), []);
   const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const todayDayName = useMemo(() => dayNames[new Date().getDay()], []);
   const painTrend = useMemo(() => {
@@ -125,7 +126,7 @@ const Dashboard = () => {
   const braceHoursToday = (activityState?.braceData?.[todayKey]) 
     ?? user?.treatmentData?.brace?.wearingHistory?.[todayKey] 
     ?? 0;
-  const physioCompletedToday = user?.treatmentData?.physio?.physioHistory?.[todayKey] || 0;
+  const physioCompletedToday = (user?.treatmentData?.physio?.workoutHistory?.[todayKey]?.length) || 0;
   const scheduledForToday = (user?.treatmentData?.physio?.scheduledWorkouts?.[todayDayName] || []).length;
   const username = user?.username || 'there';
 
@@ -164,6 +165,27 @@ const Dashboard = () => {
     { key: 'painInsights', title: 'Pain Insights', subtitle: `Weekly summary • ${painTrend}`, icon: 'trending-up', bg: '#A855F720' },
     { key: 'goals', title: 'Treatment Goals', subtitle: 'Keep going • You got this', icon: 'trophy', bg: '#10B98120' },
   ];
+
+  // Auto-extend streak for physio accounts with nothing scheduled today
+  const autoStreakDoneRef = useRef(false);
+  useEffect(() => {
+    try {
+      if (!user) return;
+      if (autoStreakDoneRef.current) return;
+      const acc = (user.acc_type || '').toLowerCase();
+      if (acc !== 'physio') return;
+      const scheduled = (user?.treatmentData?.physio?.scheduledWorkouts?.[todayDayName] || []).length;
+      const workoutsToday = Array.isArray(user?.treatmentData?.physio?.workoutHistory?.[todayKey])
+        ? user.treatmentData.physio.workoutHistory[todayKey].length
+        : 0;
+      const lastUpdateStr = getDateStringFromFirestoreTimestamp(user?.lastStreakUpdate);
+      const alreadyUpdated = lastUpdateStr === todayKey;
+      if (scheduled === 0 && workoutsToday === 0 && !alreadyUpdated) {
+        autoStreakDoneRef.current = true;
+        updateStreak && updateStreak();
+      }
+    } catch {}
+  }, [user, todayKey, todayDayName, updateStreak]);
 
   return (
     <View style={styles.rootContainer}>
@@ -244,10 +266,22 @@ const Dashboard = () => {
             {/* Recent activity */}
             <RecentActivity items={(function(){
               const items = [];
-              if (physioCompletedToday > 0) items.push({ name: 'Physio Session', time: 'Today', icon: 'barbell' });
-              if (braceHoursToday > 0) items.push({ name: 'Brace Check', time: 'Today', icon: 'time' });
-              if (mostRecentPain) items.push({ name: 'Pain Log', time: 'Recent', icon: 'heart' });
-              return items;
+              const workoutHistory = user?.treatmentData?.physio?.workoutHistory || {};
+              // Collect recent workout completions with names (latest dates first)
+              const dates = Object.keys(workoutHistory).sort((a,b) => b.localeCompare(a));
+              for (const date of dates) {
+                const names = Array.isArray(workoutHistory[date]) ? workoutHistory[date] : [];
+                for (const workoutName of names) {
+                  if (items.length >= 4) break;
+                  const isToday = date === todayKey;
+                  items.push({ name: `Completed: ${workoutName}`, time: isToday ? 'Today' : date, icon: 'barbell' });
+                }
+                if (items.length >= 4) break;
+              }
+              // Add brace and pain if room left
+              if (items.length < 4 && braceHoursToday > 0) items.push({ name: 'Brace Wear Progress', time: 'Today', icon: 'time' });
+              if (items.length < 4 && mostRecentPain) items.push({ name: 'Pain Log', time: 'Recent', icon: 'heart' });
+              return items.slice(0, 4);
             })()} />
 
             {/* Doctors Hub */}

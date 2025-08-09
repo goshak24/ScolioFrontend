@@ -24,7 +24,7 @@ import NewBadgePopup from '../components/newBadgePopup';
 
 const Tracking = () => {
   const { state: { idToken } } = useContext(AuthContext);
-  const { state: { user, loading }, fetchUserData, addUserPhysioWorkout, incrementPhysio } = useContext(UserContext);
+  const { state: { user, loading }, fetchUserData, addUserPhysioWorkout, incrementPhysio, appendWorkoutHistory } = useContext(UserContext);
   const { state: activityState, updateStreak, logPhysio, updateBraceWornHours } = useContext(ActivityContext); 
   const { updateRecoveryTasks, isRecoveryChecklistCompleteForDate } = useContext(PostSurgeryContext);
 
@@ -46,7 +46,7 @@ const Tracking = () => {
   const [showSuccess, setShowSuccess] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const streakUpdatedToday = useRef(false);
-  const activityInProgress = useRef(false);
+  const activityInProgress = useRef(false); 
 
   // Normalize new badges from various backend response shapes
   const extractNewBadges = useCallback((result) => {
@@ -214,7 +214,7 @@ const Tracking = () => {
   const isPhysioCompleteForDate = useCallback((date, count = 0) => {
     if (!user?.treatmentData?.physio) return false;
     
-    const physioHistory = user.treatmentData.physio.physioHistory || {};
+    const workoutHistory = user.treatmentData.physio.workoutHistory || {};
     const scheduledWorkouts = user.treatmentData.physio.scheduledWorkouts || {};
     
     // Get the full day name (e.g., "Saturday", "Monday") for the given date
@@ -229,15 +229,15 @@ const Tracking = () => {
       return true;
     }
     
-    // Get completed sessions for this date
-    const completedSessions = physioHistory[date] || 0;
+    // Get completed workouts for this date (length of list), safe access
+    const completedSessions = Array.isArray(workoutHistory[date]) ? workoutHistory[date].length : 0;
     
     // Check if completed sessions meet or exceed scheduled workouts
     return completedSessions >= workoutsForDay.length + count - 1;
   }, [user, getFullDayNameFromDate]);
 
   // CENTRALIZED ACTIVITY COMPLETION HANDLER
-  const handleActivityCompletion = useCallback(async (activityType, specificDate = null, taskId = null) => {
+  const handleActivityCompletion = useCallback(async (activityType, specificDate = null, taskId = null, workoutName = null) => {
     // Prevent multiple activity completions during processing
     if (activityInProgress.current || isProcessingStreak || isProcessingActivity) {
       console.log("Activity or streak already processing, skipping...");
@@ -258,10 +258,15 @@ const Tracking = () => {
       switch (activityType) {
         case 'physio':
           console.log("Processing physio completion...");
-          activityResult = await logPhysio(specificDate);
+          activityResult = await logPhysio(specificDate, workoutName);
           
           if (activityResult.success) {
             incrementPhysio(specificDate);
+            // Optimistically append workout to local user state for immediate Dashboard reflection
+            if (workoutName) {
+              const appendDate = specificDate || today;
+              appendWorkoutHistory(appendDate, workoutName);
+            }
             message = 'Physio session completed! 💪';
           }
           break;
@@ -277,10 +282,14 @@ const Tracking = () => {
   
         case 'brace + physio':
           console.log("Processing brace + physio completion...");
-          activityResult = await logPhysio(specificDate);
+          activityResult = await logPhysio(specificDate, workoutName);
           
           if (activityResult.success) {
             incrementPhysio(specificDate);
+            if (workoutName) {
+              const appendDate = specificDate || today;
+              appendWorkoutHistory(appendDate, workoutName);
+            }
             message = 'Physio session completed! 💪';
           }
           break;
@@ -380,7 +389,9 @@ const Tracking = () => {
     const braceTarget = user?.treatmentData?.brace?.wearingSchedule || 0;
     const dayName = getFullDayNameFromDate(targetDate);
     const scheduledWorkoutsForDay = user?.treatmentData?.physio?.scheduledWorkouts?.[dayName] || [];
-    const completedPhysioSessions = user?.treatmentData?.physio?.physioHistory?.[targetDate] || 0;
+    const completedPhysioSessions = Array.isArray(user?.treatmentData?.physio?.workoutHistory?.[targetDate])
+      ? user.treatmentData.physio.workoutHistory[targetDate].length
+      : 0;
     
     let shouldUpdateStreak = false;
     
@@ -662,7 +673,7 @@ const Tracking = () => {
                    weeklySchedule: localWeeklySchedule
                  }} 
                  surgeryData={userData.surgeryData}
-                  onActivityCompletePhysio={(date) => handleActivityCompletion('physio', date)}
+                  onActivityCompletePhysio={(date, workoutName) => handleActivityCompletion('physio', date, null, workoutName)}
                  onActivityCompleteTasks={(taskId) => handleActivityCompletion('post-surgery-tasks', null, taskId)} 
                  showSuccess={showSuccess}
                  successMessage={successMessage}
@@ -681,7 +692,7 @@ const Tracking = () => {
                  wearingSchedule={userData.braceData.wearingSchedule}
                  customHeader={renderWorkoutHeader()}
                  onActivityCompleteBrace={() => handleActivityCompletion('brace')}
-                  onActivityCompletePhysio={(date) => handleActivityCompletion('physio', date)}
+                  onActivityCompletePhysio={(date, workoutName) => handleActivityCompletion('physio', date, null, workoutName)}
                  onBadgeEarned={(badgeData) => {
                    console.log("Badge earned from brace+physio interface:", badgeData);
                    enqueueBadges([badgeData]);
@@ -716,7 +727,7 @@ const Tracking = () => {
               weeklySchedule={localWeeklySchedule}
               frequency={userData.physioFrequency}
               customHeader={renderWorkoutHeader()}
-              onActivityComplete={(date) => handleActivityCompletion('physio', date)}
+              onActivityComplete={(date, workoutName) => handleActivityCompletion('physio', date, null, workoutName)}
               showSuccess={showSuccess}
               successMessage={successMessage}
               isProcessingActivity={isProcessingActivity}

@@ -76,7 +76,7 @@ const BracePhysioTab = ({
             workouts={workouts} 
             weeklySchedule={weeklySchedule}
             customHeader={customHeader} 
-            onActivityComplete={onActivityCompletePhysio}
+            onActivityComplete={(date, workoutName) => onActivityCompletePhysio(date, workoutName)}
             showSuccess={showSuccess}
             successMessage={successMessage}
           /> 

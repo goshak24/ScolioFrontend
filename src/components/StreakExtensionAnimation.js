@@ -37,6 +37,9 @@ const StreakExtensionAnimation = ({
   // Dismissal controls without triggering rerenders
   const canDismissRef = useRef(false);
   const dismissedRef = useRef(false);
+  // Refs to control looping animations so we can stop them cleanly
+  const pulseLoopRef = useRef(null);
+  const sparkleLoopRef = useRef(null);
 
   useEffect(() => {
     completionCallbackRef.current = onAnimationComplete;
@@ -99,7 +102,42 @@ const StreakExtensionAnimation = ({
       canDismissRef.current = false;
       dismissedRef.current = false;
 
-      // Create enhanced animation sequence with better timing
+      // Start looping animations separately so they don't block completion
+      pulseLoopRef.current = Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, {
+            toValue: 1.1,
+            duration: 800,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseAnim, {
+            toValue: 1,
+            duration: 800,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+        ])
+      );
+      pulseLoopRef.current.start();
+
+      sparkleLoopRef.current = Animated.loop(
+        Animated.sequence([
+          Animated.timing(sparkleAnim, {
+            toValue: 1,
+            duration: 600,
+            useNativeDriver: true,
+          }),
+          Animated.timing(sparkleAnim, {
+            toValue: 0,
+            duration: 600,
+            useNativeDriver: true,
+          }),
+        ])
+      );
+      sparkleLoopRef.current.start();
+
+      // Finite main animation sequence (no loops)
       const mainAnimation = Animated.parallel([
         // Main container bounce animation
         Animated.sequence([
@@ -116,40 +154,19 @@ const StreakExtensionAnimation = ({
             useNativeDriver: true,
           }),
         ]),
-        
         // Opacity fade in
         Animated.timing(opacityAnim, {
           toValue: 1,
           duration: duration * 0.2,
           useNativeDriver: true,
         }),
-        
-        // Continuous glow pulse
-        Animated.loop(
-          Animated.sequence([
-            Animated.timing(pulseAnim, {
-              toValue: 1.1,
-              duration: 800,
-              easing: Easing.inOut(Easing.ease),
-              useNativeDriver: true,
-            }),
-            Animated.timing(pulseAnim, {
-              toValue: 1,
-              duration: 800,
-              easing: Easing.inOut(Easing.ease),
-              useNativeDriver: true,
-            }),
-          ])
-        ),
-        
         // Star rotation animation
         Animated.timing(rotateAnim, {
-          toValue: 2, // Multiple rotations
+          toValue: 2,
           duration: duration * 0.9,
           easing: Easing.out(Easing.quad),
           useNativeDriver: true,
         }),
-        
         // Star scaling with bounce
         Animated.sequence([
           Animated.timing(starAnim, {
@@ -165,23 +182,6 @@ const StreakExtensionAnimation = ({
             useNativeDriver: true,
           }),
         ]),
-        
-        // Sparkle effects
-        Animated.loop(
-          Animated.sequence([
-            Animated.timing(sparkleAnim, {
-              toValue: 1,
-              duration: 600,
-              useNativeDriver: true,
-            }),
-            Animated.timing(sparkleAnim, {
-              toValue: 0,
-              duration: 600,
-              useNativeDriver: true,
-            }),
-          ])
-        ),
-        
         // Glow effect
         Animated.sequence([
           Animated.timing(glowAnim, {
@@ -197,15 +197,19 @@ const StreakExtensionAnimation = ({
         ]),
       ]);
 
-      // Start main animation
+      // Start main animation and then fade out
       mainAnimation.start(() => {
         console.log("Main streak animation sequence completed");
-        
+        // Allow dismiss by tap after main completes
+        canDismissRef.current = true;
+        // Stop looping animations before fade out
+        if (pulseLoopRef.current) pulseLoopRef.current.stop();
+        if (sparkleLoopRef.current) sparkleLoopRef.current.stop();
+
         // Fade out animation with proper cleanup
         const fadeOutAnimation = Animated.timing(opacityAnim, {
           toValue: 0,
           duration: duration * 0.3,
-          delay: duration * 0.2,
           useNativeDriver: true,
         });
 
@@ -214,13 +218,11 @@ const StreakExtensionAnimation = ({
             console.log("Streak animation fade out completed");
             // Small delay to ensure smooth transition
             setTimeout(() => {
-              // Mark as dismissable and also call completion callback once
-              canDismissRef.current = true;
               if (!dismissedRef.current && typeof completionCallbackRef.current === 'function') {
                 dismissedRef.current = true;
                 completionCallbackRef.current();
               }
-            }, 100);
+            }, 80);
           }
         });
       });
@@ -233,6 +235,8 @@ const StreakExtensionAnimation = ({
       pulseAnim.stopAnimation();
       sparkleAnim.stopAnimation();
       glowAnim.stopAnimation();
+      if (pulseLoopRef.current) pulseLoopRef.current.stop();
+      if (sparkleLoopRef.current) sparkleLoopRef.current.stop();
     }
   }, [visible, duration]);
 
@@ -253,6 +257,8 @@ const StreakExtensionAnimation = ({
   const handleOverlayPress = () => {
     if (canDismissRef.current && !dismissedRef.current) {
       dismissedRef.current = true;
+      if (pulseLoopRef.current) pulseLoopRef.current.stop();
+      if (sparkleLoopRef.current) sparkleLoopRef.current.stop();
       if (typeof completionCallbackRef.current === 'function') {
         completionCallbackRef.current();
       }

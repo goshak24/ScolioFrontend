@@ -68,10 +68,12 @@ export const updateUserProfile = async (idToken, updates) => {
     }
 }; 
 
-export const logPhysioSession = async (idToken, date = null) => {
+export const logPhysioSession = async (idToken, date = null, workoutName = null) => {
     try {
         // Create request body with optional date parameter
-        const requestBody = date ? { date } : {};
+        const requestBody = {};
+        if (date) requestBody.date = date;
+        if (workoutName && typeof workoutName === 'string') requestBody.workoutName = workoutName;
         
         const response = await api.post(
             '/users/log-physio',

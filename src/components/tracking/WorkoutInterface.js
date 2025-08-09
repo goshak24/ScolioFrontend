@@ -7,6 +7,7 @@ import HeightSpacer from '../../components/reusable/HeightSpacer';
 import { Context as UserContext } from '../../context/UserContext'; 
 import { getFormattedDate, getDateStringFromFirestoreTimestamp } from '../timeZoneHelpers'; 
 import PhysioTimerComponent from './PhysioTimerComponent';
+import PhysioHistoryModal from './PhysioHistoryModal';
 
 const WorkoutInterface = ({ 
   workouts = [], 
@@ -173,7 +174,13 @@ const WorkoutInterface = ({
     const handleTimerComplete = () => {
         setWorkoutCompleted(true);
         if (onActivityComplete) {
-            onActivityComplete(today);
+            let workoutName = null;
+            if (selectedWorkouts.length === 1) {
+                const selectedIndex = selectedWorkouts[0];
+                const selectedWorkout = combinedWorkouts.find(w => w.originalIndex === selectedIndex);
+                workoutName = selectedWorkout?.title || null;
+            }
+            onActivityComplete(today, workoutName);
         }
     };
 
@@ -183,8 +190,49 @@ const WorkoutInterface = ({
         // For example, disable workout selection while timer is running
     };
 
-    // Get the recent history data
-    const recentHistory = getRecentHistory();
+    // Get the recent history data (from workoutHistory)
+    const recentHistory = (() => {
+        const history = [];
+        const now = new Date();
+        const scheduledByDay = user?.treatmentData?.physio?.scheduledWorkouts || {};
+        const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+        const workoutHistory = user?.treatmentData?.physio?.workoutHistory || {};
+
+        for (let i = 0; i < 3; i++) {
+            const dateObj = new Date(now);
+            dateObj.setDate(dateObj.getDate() - i);
+            const dateStr = `${dateObj.getFullYear()}-${String(dateObj.getMonth()+1).padStart(2,'0')}-${String(dateObj.getDate()).padStart(2,'0')}`;
+            const dayName = dayNames[dateObj.getDay()];
+
+            const scheduledForDay = Array.isArray(scheduledByDay[dayName]) ? scheduledByDay[dayName].length : 0;
+            const completedForDate = Array.isArray(workoutHistory[dateStr]) ? workoutHistory[dateStr].length : 0;
+
+            let status = '🟡';
+            if (scheduledForDay === 0) {
+                status = completedForDate > 0 ? '✅' : '🟡';
+            } else if (completedForDate >= scheduledForDay) {
+                status = '✅';
+            } else if (completedForDate === 0) {
+                status = '❌';
+            }
+
+            const formattedDate = new Date(dateStr).toLocaleDateString('en-US', {
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric'
+            });
+
+            history.push({
+                status,
+                date: formattedDate,
+                rawDate: dateStr,
+                summary: `${completedForDate}/${scheduledForDay} session${scheduledForDay === 1 ? '' : 's'}`,
+                completed: completedForDate > 0
+            });
+        }
+
+        return history;
+    })();
 
     // Render workout section
     const renderWorkoutSection = (workouts, sectionTitle, isExpanded = true) => {
@@ -217,6 +265,8 @@ const WorkoutInterface = ({
             </View>
         );
     };
+
+    const [historyVisible, setHistoryVisible] = useState(false);
 
     return (
         <View style={styles.container}>
@@ -358,7 +408,9 @@ const WorkoutInterface = ({
             <View style={styles.card}>
                 <View style={styles.historyHeaderRow}>
                     <Text style={styles.cardTitle}>Recent History</Text>
-                    <Text style={styles.viewAll}>View All</Text>
+                    <TouchableOpacity onPress={() => setHistoryVisible(true)}>
+                        <Text style={styles.viewAll}>View All</Text>
+                    </TouchableOpacity>
                 </View>
                 
                 {recentHistory.length > 0 ? (
@@ -375,6 +427,11 @@ const WorkoutInterface = ({
                     <Text style={styles.noHistoryText}>No recent physio sessions found.</Text>
                 )}
             </View>
+
+            <PhysioHistoryModal
+                visible={historyVisible}
+                onClose={() => setHistoryVisible(false)}
+            />
 
             {/* Tips Section */}
             <View style={styles.tipsCard}>

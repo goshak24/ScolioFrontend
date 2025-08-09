@@ -189,7 +189,7 @@ const updateStreak = (dispatch) => async () => {
     }
 };
 
-const logPhysio = (dispatch) => async (date = null) => {
+const logPhysio = (dispatch) => async (date = null, workoutName = null) => {
     try {
         dispatch({ type: "SET_LOADING", payload: true });
         const idToken = await getToken();
@@ -197,7 +197,7 @@ const logPhysio = (dispatch) => async (date = null) => {
             throw new Error('No authentication token found');
         }
         
-        const result = await logPhysioSession(idToken, date);
+        const result = await logPhysioSession(idToken, date, workoutName);
         
         if (result.success) {
             dispatch({ 

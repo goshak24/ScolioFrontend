@@ -106,6 +106,27 @@ const userReducer = (state, action) => {
                     }
                 }
             };
+        case "ADD_WORKOUT_HISTORY": {
+            const { date, workoutName } = action.payload;
+            const existingHistory = state.user?.treatmentData?.physio?.workoutHistory || {};
+            const prevForDate = Array.isArray(existingHistory[date]) ? existingHistory[date] : [];
+            return {
+                ...state,
+                user: {
+                    ...state.user,
+                    treatmentData: {
+                        ...state.user.treatmentData,
+                        physio: {
+                            ...state.user.treatmentData.physio,
+                            workoutHistory: {
+                                ...existingHistory,
+                                [date]: [...prevForDate, workoutName]
+                            }
+                        }
+                    }
+                }
+            };
+        }
         case "SET_LOADING":
             return { ...state, loading: action.payload };
         case "SET_ERROR":
@@ -439,6 +460,12 @@ const incrementPhysio = (dispatch) => (specificDate = null) => {
     dispatch({ type: "INCREMENT_PHYSIO", payload: { date } });
 };
 
+// Optimistically append a completed workout name to workoutHistory for a date
+const appendWorkoutHistory = (dispatch) => (date, workoutName) => {
+    if (!date || !workoutName) return;
+    dispatch({ type: "ADD_WORKOUT_HISTORY", payload: { date, workoutName } });
+};
+
 const updateBraceWornHoursUser = (dispatch) => (hours) => {
     dispatch({ type: "UPDATE_BRACE_HOURS", payload: { hours } });
 };
@@ -767,6 +794,7 @@ export const { Provider, Context } = createDataContext(
         deleteCalendarEvent,
         incrementStreak,
         incrementPhysio,
+        appendWorkoutHistory,
         updateBraceWornHoursUser,
         deleteUserAccountData,
         setStreak,
