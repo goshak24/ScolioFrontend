@@ -1,6 +1,18 @@
 import createDataContext from './createDataContext';
-import api from '../utilities/backendApi';
+import api, { verifyBackendTokenAndSetupFirebase } from '../utilities/backendApi';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getApp } from 'firebase/app';
+import { 
+  getFirestore, 
+  collection, 
+  query, 
+  where, 
+  orderBy, 
+  onSnapshot, 
+  limit as fsLimit,
+  Timestamp,
+  startAfter
+} from 'firebase/firestore';
 
 // Action types
 const SET_LOADING = 'set_loading';
@@ -9,11 +21,13 @@ const SET_GROUPS = 'set_groups';
 const SET_USER_GROUPS = 'set_user_groups';
 const SET_GROUP_DETAILS = 'set_group_details';
 const SET_GROUP_MESSAGES = 'set_group_messages';
+const APPEND_GROUP_MESSAGES = 'append_group_messages';
 const ADD_GROUP = 'add_group';
 const UPDATE_GROUP = 'update_group';
 const REMOVE_GROUP = 'remove_group';
 const ADD_MESSAGE = 'add_message';
 const CLEAR_GROUPS_CACHE = 'clear_groups_cache';
+const SET_GROUP_LISTENER = 'set_group_listener';
 
 // Reducer
 const groupsReducer = (state, action) => {
@@ -52,6 +66,23 @@ const groupsReducer = (state, action) => {
           [action.payload.groupId]: action.payload.messages
         }
       };
+    case APPEND_GROUP_MESSAGES: {
+      const existing = state.groupMessages[action.payload.groupId] || [];
+      // De-duplicate by id while appending
+      const byId = new Map(existing.map(m => [m.id, m]));
+      action.payload.messages.forEach(m => {
+        // Overwrite existing with newer fields (replace optimistic with server doc)
+        const prev = byId.get(m.id) || {};
+        byId.set(m.id, { ...prev, ...m });
+      });
+      return {
+        ...state,
+        groupMessages: {
+          ...state.groupMessages,
+          [action.payload.groupId]: Array.from(byId.values())
+        }
+      };
+    }
     case ADD_GROUP:
       return {
         ...state,
@@ -92,6 +123,11 @@ const groupsReducer = (state, action) => {
         groupDetails: {},
         groupMessages: {},
         error: null
+      };
+    case SET_GROUP_LISTENER:
+      return {
+        ...state,
+        activeGroupListener: action.payload || null
       };
     default:
       return state;
@@ -300,8 +336,19 @@ const sendMessage = (dispatch) => async (groupId, messageData) => {
     });
     
     if (response.data.success) {
-      // Optionally add the message to local state immediately for better UX
-      // You might want to refresh messages or add it optimistically
+      // Optimistically append the message using returned id to avoid duplicate later
+      const optimistic = {
+        id: response.data.messageId,
+        senderId: messageData.senderId,
+        senderName: messageData.senderName,
+        text: messageData.text || '',
+        messageType: messageData.messageType || 'text',
+        mediaUrl: messageData.mediaUrl || null,
+        deleted: false,
+        isEdited: false,
+        createdAt: new Date().toISOString(),
+      };
+      dispatch({ type: APPEND_GROUP_MESSAGES, payload: { groupId, messages: [optimistic] } });
       return response.data.messageId;
     } else {
       throw new Error(response.data.error || 'Failed to send message');
@@ -315,6 +362,99 @@ const sendMessage = (dispatch) => async (groupId, messageData) => {
 
 const clearGroupsCache = (dispatch) => () => {
   dispatch({ type: CLEAR_GROUPS_CACHE });
+};
+
+// Real-time listener for a group's messages (only when user is inside the chat)
+// Mirrors DM listener approach: small page, asc order, append-only
+let db;
+try {
+  const app = getApp();
+  db = getFirestore(app);
+} catch (e) {
+  // Firestore not ready in some environments; listener will no-op
+}
+
+// Prevent duplicate listeners across renders/screens with ref counting
+// Map: groupId -> { unsubscribe: Function, count: number }
+const activeMessageListeners = new Map();
+let firebaseAuthReady = false;
+
+const listenToGroupMessages = (dispatch) => async (groupId) => {
+  if (!db || !groupId) return () => {};
+
+  // Ensure Firebase auth is established for Firestore rules
+  try {
+    if (!firebaseAuthReady) {
+      const authResult = await verifyBackendTokenAndSetupFirebase();
+      if (authResult?.success) {
+        firebaseAuthReady = true;
+      } else {
+        console.warn('Groups listener auth setup failed:', authResult?.error);
+        // Still attempt to listen; Firestore will error if rules block
+      }
+    }
+  } catch {}
+
+  // Prevent duplicate listeners per group (React strict mode double effects, etc.)
+  if (activeMessageListeners.has(groupId)) {
+    const entry = activeMessageListeners.get(groupId);
+    entry.count += 1;
+    const cleanupExisting = () => {
+      const current = activeMessageListeners.get(groupId);
+      if (!current) return;
+      current.count -= 1;
+      if (current.count <= 0) {
+        try { current.unsubscribe(); } catch {}
+        activeMessageListeners.delete(groupId);
+      }
+    };
+    return cleanupExisting;
+  }
+
+  // Real-time: listen only to the newest document to minimize reads.
+  const msgsRef = collection(db, 'groups', groupId, 'messages');
+  const liveQ = query(
+    msgsRef,
+    where('deleted', '==', false),
+    // Only fetch the latest message; new inserts will trigger a new snapshot
+    orderBy('createdAt', 'desc'),
+    fsLimit(1)
+  );
+
+  const unsubscribe = onSnapshot(liveQ, (snapshot) => {
+    try {
+      const added = [];
+      snapshot.docChanges().forEach((change) => {
+        if (change.type === 'added') {
+          const data = change.doc.data();
+          added.push({ id: change.doc.id, ...data, createdAt: data.createdAt?.toDate?.()?.toISOString() });
+        }
+      });
+      if (added.length > 0) {
+        // Since query is desc, the added item is the newest; append to the end
+        dispatch({ type: APPEND_GROUP_MESSAGES, payload: { groupId, messages: added } });
+      }
+    } catch (err) {}
+  });
+
+  // Register listener with ref count 1
+  activeMessageListeners.set(groupId, { unsubscribe, count: 1 });
+  // Provide a cleanup that decrements the count and unsubscribes when it hits 0
+  const cleanup = () => {
+    const current = activeMessageListeners.get(groupId);
+    if (!current) return;
+    current.count -= 1;
+    if (current.count <= 0) {
+      try { current.unsubscribe(); } catch {}
+      activeMessageListeners.delete(groupId);
+    } else {
+      activeMessageListeners.set(groupId, current);
+    }
+  };
+
+  // Optional: track in state for external cleanup, but not required
+  dispatch({ type: SET_GROUP_LISTENER, payload: cleanup });
+  return cleanup;
 };
 
 // Initial state
@@ -340,7 +480,8 @@ export const { Provider, Context } = createDataContext(
     getGroupDetails,
     getGroupMessages,
     sendMessage,
-    clearGroupsCache
+    clearGroupsCache,
+    listenToGroupMessages
   },
   initialState
 ); 

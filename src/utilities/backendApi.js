@@ -4,7 +4,7 @@ import { initializeAuth, getReactNativePersistence } from "firebase/auth";
 import { getStorage } from "firebase/storage";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants"; 
-import { onAuthStateChanged, signInAnonymously, signOut } from "firebase/auth"; 
+import { onAuthStateChanged, signInWithCustomToken, signOut } from "firebase/auth"; 
 
 const {
   FIREBASE_API_KEY,
@@ -50,37 +50,46 @@ export const verifyBackendTokenAndSetupFirebase = async () => {
       return { success: false, error: "No backend token" };
     }
     
-    // Verify token with backend
-    const verifyResponse = await api.get("/auth/verify-token", {
-      headers: { Authorization: `Bearer ${idToken}` }
-    });
-    
-    if (!verifyResponse.data.userId) {
-      return { success: false, error: "Token verification failed" };
+    // Verify backend token to get the backend user id
+    let backendUserId = null;
+    try {
+      const verifyResp = await api.get("/auth/verify-token", {
+        headers: { Authorization: `Bearer ${idToken}` }
+      });
+      backendUserId = verifyResp?.data?.userId || null;
+    } catch (e) {
+      console.error('❌ Auth verification failed:', e?.message || e);
+      return { success: false, error: 'verify_failed' };
     }
-    
-    const backendUserId = verifyResponse.data.userId;
-    
-    // If already signed in to Firebase for this user, we're good
-    if (auth.currentUser && currentBackendUserId === backendUserId) {
+
+    // If already signed in with matching UID, skip re-signin
+    if (auth.currentUser && backendUserId && auth.currentUser.uid === backendUserId) {
       return { success: true, user: auth.currentUser, backendUserId };
     }
-    
-    // If different user, sign out first
-    if (auth.currentUser && currentBackendUserId !== backendUserId) {
+
+    // Request a Firebase custom token for this backend user
+    // Try a couple of likely endpoints; backend must mint via Admin SDK
+    let customToken = null; 
+    const ctResp = await api.get("/auth/firebase-custom-token", { headers: { Authorization: `Bearer ${idToken}` } });
+    if (ctResp?.data?.customToken) {
+      customToken = ctResp.data.customToken;
+    }
+  
+    if (!customToken) {
+      return { success: false, error: 'no_custom_token_endpoint' };
+    }
+
+    // Sign out if changing users
+    if (auth.currentUser && backendUserId && auth.currentUser.uid !== backendUserId) {
       await signOut(auth);
     }
-    
-    // Sign in anonymously to Firebase to enable Firestore access
-    const userCredential = await signInAnonymously(auth);
-    currentBackendUserId = backendUserId;
-    
-    console.log("✅ Firebase Auth ready for Firestore");
-    return { 
-      success: true, 
-      user: userCredential.user, 
-      backendUserId 
-    };
+
+    // Sign in with custom token so request.auth.uid == backend user id
+    const cred = await signInWithCustomToken(auth, customToken);
+    currentBackendUserId = cred.user?.uid || backendUserId;
+
+    console.log("✅ Firebase Auth ready for Firestore (custom token)");
+    return { success: true, user: cred.user, backendUserId: currentBackendUserId };
     
   } catch (error) {
     console.error("❌ Firebase Auth setup failed:", error.message);

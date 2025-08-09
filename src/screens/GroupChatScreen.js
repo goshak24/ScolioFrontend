@@ -45,7 +45,8 @@ const GroupChatScreen = () => {
     getGroupMessages, 
     sendMessage, 
     leaveGroup,
-    setError 
+    setError,
+    listenToGroupMessages 
   } = useContext(GroupsContext);
   
   const { state: AuthState } = useContext(AuthContext);
@@ -53,8 +54,19 @@ const GroupChatScreen = () => {
   
   const currentUserId = AuthState.userId || UserState.user?.uid;
 
+  // Keep local messages in sync with context listener data
+  useEffect(() => {
+    const ctxMessages = GroupsState.groupMessages?.[groupId] || [];
+    setMessages(ctxMessages);
+  }, [GroupsState.groupMessages, groupId]);
+
   useEffect(() => {
     loadGroupData();
+    // Start realtime listener only while inside this chat
+    const unsubscribe = listenToGroupMessages && listenToGroupMessages(groupId);
+    return () => {
+      if (typeof unsubscribe === 'function') unsubscribe();
+    };
   }, [groupId]);
 
   const loadGroupData = async () => {
@@ -112,13 +124,14 @@ const GroupChatScreen = () => {
     try {
       setSendingMessage(true);
       
+      const senderName = UserState.user?.username || UserState.user?.name || 'You';
       await sendMessage(groupId, {
         text: textToSend,
-        messageType: 'text'
+        messageType: 'text',
+        senderName,
+        senderId: currentUserId
       });
-      
-      // Refresh messages after sending
-      await loadMessages();
+      // Do not reload; realtime listener will append the message
       
     } catch (error) {
       console.error('Error sending message:', error);

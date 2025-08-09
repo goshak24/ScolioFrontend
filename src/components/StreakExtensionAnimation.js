@@ -32,6 +32,15 @@ const StreakExtensionAnimation = ({
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const sparkleAnim = useRef(new Animated.Value(0)).current;
   const glowAnim = useRef(new Animated.Value(0)).current;
+  // Keep the latest completion callback in a ref to avoid effect resets on parent re-renders
+  const completionCallbackRef = useRef(onAnimationComplete);
+  // Dismissal controls without triggering rerenders
+  const canDismissRef = useRef(false);
+  const dismissedRef = useRef(false);
+
+  useEffect(() => {
+    completionCallbackRef.current = onAnimationComplete;
+  }, [onAnimationComplete]);
   
   // Sound setup (uncomment when you install react-native-sound)
   /*
@@ -86,6 +95,9 @@ const StreakExtensionAnimation = ({
       pulseAnim.setValue(1);
       sparkleAnim.setValue(0);
       glowAnim.setValue(0);
+      // Reset dismissal flags when (re)starting
+      canDismissRef.current = false;
+      dismissedRef.current = false;
 
       // Create enhanced animation sequence with better timing
       const mainAnimation = Animated.parallel([
@@ -202,7 +214,12 @@ const StreakExtensionAnimation = ({
             console.log("Streak animation fade out completed");
             // Small delay to ensure smooth transition
             setTimeout(() => {
-              onAnimationComplete();
+              // Mark as dismissable and also call completion callback once
+              canDismissRef.current = true;
+              if (!dismissedRef.current && typeof completionCallbackRef.current === 'function') {
+                dismissedRef.current = true;
+                completionCallbackRef.current();
+              }
             }, 100);
           }
         });
@@ -217,7 +234,7 @@ const StreakExtensionAnimation = ({
       sparkleAnim.stopAnimation();
       glowAnim.stopAnimation();
     }
-  }, [visible, duration, onAnimationComplete]);
+  }, [visible, duration]);
 
   // Don't render anything if not visible
   if (!visible) return null;
@@ -233,6 +250,15 @@ const StreakExtensionAnimation = ({
     outputRange: [0.3, 1, 0.3],
   });
 
+  const handleOverlayPress = () => {
+    if (canDismissRef.current && !dismissedRef.current) {
+      dismissedRef.current = true;
+      if (typeof completionCallbackRef.current === 'function') {
+        completionCallbackRef.current();
+      }
+    }
+  };
+
   return (
     <Animated.View 
       style={[
@@ -242,6 +268,8 @@ const StreakExtensionAnimation = ({
           opacity: opacityAnim,
         },
       ]}
+      onStartShouldSetResponder={() => true}
+      onResponderRelease={handleOverlayPress}
     >
       {/* Background glow effect */}
       <Animated.View 
