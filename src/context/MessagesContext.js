@@ -339,7 +339,7 @@ const getConversations = (dispatch) => async (userId, forceFetch = false) => {
 };
 
 // Get initial messages for a conversation (ULTRA-EFFICIENT - MINIMAL FIREBASE READS)
-const getMessages = (dispatch) => async (otherUserId, forceFetch = false, offset = 0, limit = MESSAGES_PER_PAGE, currentUserId = null) => {
+const getMessages = (dispatch) => async (otherUserId, forceFetch = false, _offset = 0, limit = MESSAGES_PER_PAGE, currentUserId = null) => {
   try {
     dispatch({ type: "SET_LOADING", payload: true });
     
@@ -440,7 +440,7 @@ const getMessages = (dispatch) => async (otherUserId, forceFetch = false, offset
     
     // Fetch initial messages ONCE from API (REDUCED LIMIT - cache for 24 hours)
     console.log(`📥 Loading initial messages from API (LIMIT: ${MESSAGES_PER_PAGE}) - will cache for 24 hours`);
-    const response = await api.get(`/messages/conversation/${otherUserId}?limit=${MESSAGES_PER_PAGE}&offset=${offset}`);
+    const response = await api.get(`/messages/conversation/${otherUserId}?limit=${MESSAGES_PER_PAGE}`);
     const messages = response.data.messages || [];
     
     // Process messages to add isOwn flag
@@ -520,15 +520,28 @@ const getOlderMessages = (dispatch) => async (otherUserId, currentUserId) => {
       };
     }
     
-    // Get current offset based on cached messages
-    const offset = (messageCache[conversationId]?.length || 0);
+    // Determine oldest timestamp in current list to paginate by time
+    const existing = messageCache[conversationId] || [];
+    let oldestTimestampMs = null;
+    if (existing.length > 0) {
+      const oldest = existing[0];
+      const sec = oldest?.timestamp?._seconds || oldest?.timestamp?.seconds || null;
+      const nsec = oldest?.timestamp?._nanoseconds || oldest?.timestamp?.nanoseconds || 0;
+      if (sec !== null) {
+        oldestTimestampMs = (sec * 1000) + Math.floor((nsec || 0) / 1e6);
+      } else if (oldest?.timestamp) {
+        const d = new Date(oldest.timestamp);
+        if (!isNaN(d.getTime())) oldestTimestampMs = d.getTime();
+      }
+    }
     
     // Use MINIMAL limit for older messages to reduce reads
     const OLDER_MESSAGES_LIMIT = 8; // Only 8 older messages at a time
     
     // Fetch older messages from API (MINIMAL LIMIT)
-    console.log(`📤 Fetching older messages: offset=${offset}, limit=${OLDER_MESSAGES_LIMIT}`);
-    const response = await api.get(`/messages/conversation/${otherUserId}?limit=${OLDER_MESSAGES_LIMIT}&offset=${offset}`);
+    const query = oldestTimestampMs ? `&timestamp=${oldestTimestampMs}` : '';
+    console.log(`📤 Fetching older messages: limit=${OLDER_MESSAGES_LIMIT}${query ? `, timestamp=${oldestTimestampMs}` : ''}`);
+    const response = await api.get(`/messages/conversation/${otherUserId}?limit=${OLDER_MESSAGES_LIMIT}${query}`);
     const messages = response.data.messages || [];
     
     // Process messages to add isOwn flag
@@ -545,9 +558,9 @@ const getOlderMessages = (dispatch) => async (otherUserId, currentUserId) => {
     const hasMore = processedMessages.length === OLDER_MESSAGES_LIMIT;
     dispatch({ type: "SET_HAS_MORE_MESSAGES", payload: hasMore });
     
-    // Update pagination state
+    // Update pagination state (timestamp-based)
     paginationState[conversationId] = {
-      offset: offset + processedMessages.length,
+      lastOldestTimestampMs: oldestTimestampMs,
       hasMore,
       loading: false
     };
