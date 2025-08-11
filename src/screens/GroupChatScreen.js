@@ -10,7 +10,8 @@ import {
   Alert,
   Platform,
   KeyboardAvoidingView,
-  RefreshControl
+  RefreshControl,
+  Modal
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { moderateScale } from 'react-native-size-matters';
@@ -36,6 +37,8 @@ const GroupChatScreen = () => {
   const [groupDetails, setGroupDetails] = useState(null);
   const [showGroupInfo, setShowGroupInfo] = useState(false);
   const [messageText, setMessageText] = useState('');
+  const [showMembersModal, setShowMembersModal] = useState(false);
+  const [members, setMembers] = useState([]); 
   
   const flatListRef = useRef(null);
   
@@ -46,7 +49,9 @@ const GroupChatScreen = () => {
     sendMessage, 
     leaveGroup,
     setError,
-    listenToGroupMessages 
+    listenToGroupMessages,
+    kickMember: kickMemberAction,
+    banMember: banMemberAction
   } = useContext(GroupsContext);
   
   const { state: AuthState } = useContext(AuthContext);
@@ -81,6 +86,8 @@ const GroupChatScreen = () => {
       
       if (detailsResult.status === 'fulfilled') {
         setGroupDetails(detailsResult.value.group);
+        // Populate members list if provided by backend; otherwise keep empty
+        setMembers(Array.isArray(detailsResult.value.members) ? detailsResult.value.members : []);
       }
       
     } catch (error) {
@@ -235,7 +242,141 @@ const GroupChatScreen = () => {
           <Text style={styles.statText}>{groupDetails?.lastActive}</Text>
         </View>
       </View>
+
+      <View style={styles.infoButtonsRow}>
+        <TouchableOpacity style={styles.secondaryButton} onPress={() => setShowMembersModal(true)}>
+          <Text style={styles.secondaryButtonText}>View members</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.secondaryButton, { backgroundColor: '#3b2a4d' }]} onPress={handleLeaveGroup}>
+          <Text style={styles.secondaryButtonText}>Leave group</Text>
+        </TouchableOpacity>
+        {!!isAdmin && (
+          <TouchableOpacity style={[styles.secondaryButton, { backgroundColor: '#4b2d5b' }]} onPress={() => Alert.alert('Admin', 'Admin tools will be available here soon.') }>
+            <Text style={styles.secondaryButtonText}>Admin tools</Text>
+          </TouchableOpacity>
+        )}
+      </View>
     </View>
+  );
+
+  const isAdmin = !!(
+    (groupDetails?.createdBy && groupDetails.createdBy === currentUserId) ||
+    (groupDetails?.ownerId && groupDetails.ownerId === currentUserId) ||
+    (groupDetails?.creatorId && groupDetails.creatorId === currentUserId) ||
+    (Array.isArray(groupDetails?.adminIds) && groupDetails.adminIds.includes(currentUserId))
+  );
+
+  const friendlyMemberName = (m) =>
+    m?.username || m?.displayName || m?.name || m?.userName || m?.id || 'Unknown';
+
+  const resolveMemberUserId = (m) => m?.userId || m?.uid || m?.id || m?.user?.uid || m?.user?.id || null;
+
+  const handleKickMember = (member) => {
+    if (!member) return;
+    Alert.alert(
+      'Remove member',
+      `Remove ${friendlyMemberName(member)} from this group?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const memberId = resolveMemberUserId(member);
+              if (!memberId) throw new Error('Missing member id');
+              const res = await kickMemberAction(groupId, memberId);
+              if (res.success) {
+                setMembers((prev) => prev.filter((m) => (m.userId || m.uid || m.id) !== memberId));
+                Alert.alert('Member removed', 'The member was removed.');
+              } else {
+                Alert.alert('Failed', res.error || 'Failed to remove member');
+              }
+            } catch (e) {
+              Alert.alert('Error', e?.message || 'Failed to remove member');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const handleBanMember = (member) => {
+    if (!member) return;
+    Alert.alert(
+      'Ban member',
+      `Ban ${friendlyMemberName(member)} from this group?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Ban',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const memberId = resolveMemberUserId(member);
+              if (!memberId) throw new Error('Missing member id');
+              const res = await banMemberAction(groupId, memberId);
+              if (res.success) {
+                setMembers((prev) => prev.filter((m) => (m.userId || m.uid || m.id) !== memberId));
+                Alert.alert('Member banned', 'The member was banned.');
+              } else {
+                Alert.alert('Failed', res.error || 'Failed to ban member');
+              }
+            } catch (e) {
+              Alert.alert('Error', e?.message || 'Failed to ban member');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const renderMembersModal = () => (
+    <Modal
+      transparent
+      visible={showMembersModal}
+      animationType="slide"
+      onRequestClose={() => setShowMembersModal(false)}
+    >
+      <View style={styles.modalBackdrop}>
+        <View style={styles.modalCard}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Group members</Text>
+            <TouchableOpacity style={styles.modalClose} onPress={() => setShowMembersModal(false)}>
+              <Ionicons name="close" size={moderateScale(20)} color={COLORS.white} />
+            </TouchableOpacity>
+          </View>
+
+          {members.length === 0 ? (
+            <View style={{ paddingVertical: moderateScale(20) }}>
+              <Text style={{ color: COLORS.lightGray }}>No members to show.</Text>
+            </View>
+          ) : (
+            <FlatList
+              data={members}
+              keyExtractor={(item, index) => String(item.uid || item.id || index)}
+              renderItem={({ item }) => (
+                <View style={styles.memberRow}>
+                  <Text style={styles.memberName}>{friendlyMemberName(item)}</Text>
+                  {isAdmin && (item.uid || item.id) !== currentUserId ? (
+                    <View style={styles.memberActions}>
+                      <TouchableOpacity style={styles.memberActionBtn} onPress={() => handleKickMember(item)}>
+                        <Text style={styles.memberActionText}>Remove</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={[styles.memberActionBtn, { backgroundColor: '#5b2b2b' }]} onPress={() => handleBanMember(item)}>
+                        <Text style={styles.memberActionText}>Ban</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : null}
+                </View>
+              )}
+              ItemSeparatorComponent={() => <View style={styles.memberDivider} />}
+              contentContainerStyle={{ paddingBottom: moderateScale(8) }}
+            />
+          )}
+        </View>
+      </View>
+    </Modal>
   );
 
   const renderHeader = () => (
@@ -296,6 +437,7 @@ const GroupChatScreen = () => {
         {renderHeader()}
         
         {showGroupInfo && renderGroupInfo()}
+        {renderMembersModal()}
         
         <FlatList
           ref={flatListRef}
@@ -372,6 +514,23 @@ const styles = StyleSheet.create({
     padding: moderateScale(15),
     borderRadius: moderateScale(12),
   },
+  infoButtonsRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+    marginTop: moderateScale(10),
+    gap: moderateScale(10),
+  },
+  secondaryButton: {
+    backgroundColor: '#2c2a3b',
+    paddingVertical: moderateScale(8),
+    paddingHorizontal: moderateScale(12),
+    borderRadius: moderateScale(8),
+  },
+  secondaryButtonText: {
+    color: COLORS.white,
+    fontSize: moderateScale(13),
+    fontWeight: '600',
+  },
   groupName: {
     color: COLORS.white,
     fontSize: moderateScale(16),
@@ -406,6 +565,65 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     marginTop: moderateScale(10),
     fontSize: moderateScale(14),
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'flex-end',
+  },
+  modalCard: {
+    backgroundColor: COLORS.cardDark,
+    borderTopLeftRadius: moderateScale(16),
+    borderTopRightRadius: moderateScale(16),
+    padding: moderateScale(12),
+    maxHeight: '70%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: moderateScale(8),
+  },
+  modalTitle: {
+    color: COLORS.white,
+    fontSize: moderateScale(16),
+    fontWeight: '700',
+  },
+  modalClose: {
+    padding: moderateScale(6),
+  },
+  memberRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: moderateScale(8),
+  },
+  memberName: {
+    color: COLORS.white,
+    fontSize: moderateScale(14),
+    flex: 1,
+    marginRight: moderateScale(10),
+  },
+  memberActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: moderateScale(6),
+  },
+  memberActionBtn: {
+    backgroundColor: '#3b2a4d',
+    paddingVertical: moderateScale(6),
+    paddingHorizontal: moderateScale(10),
+    borderRadius: moderateScale(6),
+  },
+  memberActionText: {
+    color: COLORS.white,
+    fontSize: moderateScale(12),
+    fontWeight: '600',
+  },
+  memberDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: '#444',
+    opacity: 0.6,
   },
   messagesList: {
     flex: 1,

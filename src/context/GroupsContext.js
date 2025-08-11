@@ -262,6 +262,34 @@ const leaveGroup = (dispatch) => async (groupId) => {
   }
 };
 
+// Kick a member (admin only)
+const kickMember = (dispatch) => async (groupId, memberId) => {
+  try {
+    const idToken = await AsyncStorage.getItem('idToken');
+    const response = await api.post(`/groups/${groupId}/kick/${memberId}`, {}, {
+      headers: { 'Authorization': `Bearer ${idToken}` }
+    });
+    return { success: true, data: response.data };
+  } catch (error) {
+    console.error('Kick member error:', error);
+    return { success: false, error: error.response?.data?.error || 'Failed to remove member' };
+  }
+};
+
+// Ban a member (admin only)
+const banMember = (dispatch) => async (groupId, memberId) => {
+  try {
+    const idToken = await AsyncStorage.getItem('idToken');
+    const response = await api.post(`/groups/${groupId}/ban/${memberId}`, {}, {
+      headers: { 'Authorization': `Bearer ${idToken}` }
+    });
+    return { success: true, data: response.data };
+  } catch (error) {
+    console.error('Ban member error:', error);
+    return { success: false, error: error.response?.data?.error || 'Failed to ban member' };
+  }
+};
+
 const getGroupDetails = (dispatch) => async (groupId) => {
   try {
     const idToken = await AsyncStorage.getItem('idToken');
@@ -413,27 +441,27 @@ const listenToGroupMessages = (dispatch) => async (groupId) => {
 
   // Real-time: listen only to the newest document to minimize reads.
   const msgsRef = collection(db, 'groups', groupId, 'messages');
+  // Narrow to the last few minutes to prevent initial backfill on first attach
+  const fiveMinutesAgo = Timestamp.fromMillis(Date.now() - 5 * 60 * 1000);
   const liveQ = query(
     msgsRef,
     where('deleted', '==', false),
-    // Only fetch the latest message; new inserts will trigger a new snapshot
-    orderBy('createdAt', 'desc'),
-    fsLimit(1)
+    where('createdAt', '>', fiveMinutesAgo),
+    orderBy('createdAt', 'asc'),
+    fsLimit(10)
   );
 
-  const unsubscribe = onSnapshot(liveQ, (snapshot) => {
+  const unsubscribe = onSnapshot(liveQ, { includeMetadataChanges: false }, (snapshot) => {
     try {
-      const added = [];
-      snapshot.docChanges().forEach((change) => {
-        if (change.type === 'added') {
-          const data = change.doc.data();
-          added.push({ id: change.doc.id, ...data, createdAt: data.createdAt?.toDate?.()?.toISOString() });
-        }
-      });
-      if (added.length > 0) {
-        // Since query is desc, the added item is the newest; append to the end
-        dispatch({ type: APPEND_GROUP_MESSAGES, payload: { groupId, messages: added } });
-      }
+      // Only process 'added' changes to minimize work
+      const added = snapshot
+        .docChanges()
+        .filter((c) => c.type === 'added')
+        .map((c) => {
+          const data = c.doc.data();
+          return { id: c.doc.id, ...data, createdAt: data.createdAt?.toDate?.()?.toISOString() };
+        });
+      if (added.length > 0) dispatch({ type: APPEND_GROUP_MESSAGES, payload: { groupId, messages: added } });
     } catch (err) {}
   });
 
@@ -481,7 +509,9 @@ export const { Provider, Context } = createDataContext(
     getGroupMessages,
     sendMessage,
     clearGroupsCache,
-    listenToGroupMessages
+    listenToGroupMessages,
+    kickMember,
+    banMember
   },
   initialState
 ); 
