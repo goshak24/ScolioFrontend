@@ -2,6 +2,45 @@ import createDataContext from './createDataContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../utilities/backendApi';
 
+// Normalize incoming date string to a local YYYY-MM-DD string without timezone shifts
+const toLocalYMD = (inputDate) => {
+  // If already in YYYY-MM-DD, trust it as literal day
+  if (typeof inputDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(inputDate)) {
+    return inputDate;
+  }
+  const d = new Date(inputDate);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
+// Merge logs without losing previously loaded months
+const mergePainLogsUnique = (existingLogs = [], incomingLogs = []) => {
+  const byId = new Map();
+  const makeKey = (log) => {
+    if (log.id) return `id:${log.id}`;
+    // Fallback composite key if no id
+    const parts = [
+      toLocalYMD(log.date),
+      String(log.painIntensity ?? ''),
+      log.timeOfDay ?? '',
+      Array.isArray(log.bodyParts) ? log.bodyParts.sort().join('|') : '',
+      log.createdAt ?? ''
+    ];
+    return `k:${parts.join('#')}`;
+  };
+  existingLogs.forEach((log) => {
+    const norm = { ...log, date: toLocalYMD(log.date) };
+    byId.set(makeKey(norm), norm);
+  });
+  incomingLogs.forEach((log) => {
+    const norm = { ...log, date: toLocalYMD(log.date) };
+    byId.set(makeKey(norm), norm);
+  });
+  return Array.from(byId.values());
+};
+
 // Reducer to handle state changes
 const painTrackingReducer = (state, action) => {
   switch (action.type) {
@@ -76,12 +115,18 @@ const dbLoadPainLogsForMonth = dispatch => async (monthStr) => {
     
     try {
       const response = await api.get(`/pain-track/get-logs-by-date-range?startDate=${firstDay}&endDate=${lastDay}`);
-      const painLogs = response.data.painLogs;
+      const fetchedLogs = (response.data.painLogs || []).map((log) => ({
+        ...log,
+        date: toLocalYMD(log.date),
+      }));
 
-      // Save to AsyncStorage
-      await AsyncStorage.setItem('painLogs', JSON.stringify(painLogs));
+      // Merge with existing logs instead of overwriting
+      const stored = await AsyncStorage.getItem('painLogs');
+      const existing = stored ? JSON.parse(stored) : [];
+      const merged = mergePainLogsUnique(existing, fetchedLogs);
 
-      dispatch({ type: 'SET_PAIN_LOGS', payload: painLogs || [] });
+      await AsyncStorage.setItem('painLogs', JSON.stringify(merged));
+      dispatch({ type: 'SET_PAIN_LOGS', payload: merged });
 
     } catch (apiError) {
       console.error('API Error:', apiError);
@@ -116,11 +161,14 @@ const savePainLog = dispatch => async (painLogData) => {
       const response = await api.post('pain-track/save-log', painLogData);
       
       // Create a new pain log object with the response data
+      // Adjust date by -1 day to align with local expectation
+      const now = new Date();
+      const adjustedDateStr = toLocalYMD(now);
       const newPainLog = {
         ...painLogData,
         id: response.data.painLogId,
-        createdAt: new Date().toISOString(),
-        date: new Date().toISOString().split('T')[0]
+        createdAt: now.toISOString(),
+        date: adjustedDateStr,
       };
       
       // Update state with the new pain log

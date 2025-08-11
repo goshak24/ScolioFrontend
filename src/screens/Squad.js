@@ -514,6 +514,8 @@ const Squad = () => {
       <Text style={styles.emptyText}>No conversations yet</Text>
       <HeightSpacer height={10} />
       <Text style={styles.emptySubtext}>Start a conversation with a friend!</Text>
+      <HeightSpacer height={moderateScale(40)} />
+      <Text style={styles.emptySubtext}>You can add friends by username in the friends tab or by interacting with their profiles in the forums or groups.</Text>
     </View>
   );
 

@@ -1,4 +1,4 @@
-import React, { useContext, useState, useEffect } from "react";
+import React, { useContext, useState, useEffect, useRef } from "react";
 import {
   View, 
   Text, 
@@ -25,11 +25,13 @@ import { Context as AuthContext } from '../../context/AuthContext';
 import { Context as ForumContext } from '../../context/ForumContext'; 
 import { Context as UserContext } from '../../context/UserContext';
 import UserProfileModal from '../profile/UserProfileModal';
+import useProfilePictures from "../../hooks/useProfilePictures";
 
 const ForumPostScreen = ({ route, navigation }) => { 
   const { state: AuthState, printUserId } = useContext(AuthContext); 
-  const { state: ForumState, likePost, unlikePost, addComment, likeComment, unlikeComment } = useContext(ForumContext); 
+  const { state: ForumState, likePost, unlikePost, addComment, likeComment, unlikeComment, deletePost } = useContext(ForumContext); 
   const { state: UserState } = useContext(UserContext); 
+  const { fetchProfilePictures, getProfilePictureUrlFor, extractUsernames } = useProfilePictures();
 
   // Get initial post data from route params
   const { post: initialPost } = route.params || {};
@@ -44,7 +46,7 @@ const ForumPostScreen = ({ route, navigation }) => {
     postId: currentPost?.id || "1",
     userId: currentPost?.userId || "1",
     username: currentPost?.username || "Anonymous",
-    avatar: currentPost?.avatar || "https://randomuser.me/api/portraits/women/44.jpg",
+    avatar: currentPost?.avatar || "https://randomuser.me/api/portraits/lego/1.jpg",
     content: currentPost?.content || "No content available",
     createdAt: currentPost?.createdAt || { _seconds: Math.floor(Date.now() / 1000), _nanoseconds: 0 },
     likes: currentPost?.likes || [],
@@ -57,6 +59,7 @@ const ForumPostScreen = ({ route, navigation }) => {
   const [likeCount, setLikeCount] = useState(0);
   const [profileModalVisible, setProfileModalVisible] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState(null);
+  const fetchedUsernames = useRef(new Set());
 
   // Update like state whenever the post changes
   useEffect(() => {
@@ -84,6 +87,29 @@ const ForumPostScreen = ({ route, navigation }) => {
     
     return null;
   };
+
+  // Prefetch profile pictures for post author and commenters
+  useEffect(() => {
+    const prefetchPictures = async () => {
+      try {
+        if (!extractUsernames || !fetchProfilePictures) return;
+
+        const commentUsernames = extractUsernames(safePost.comments || [], 'username');
+        const authorUsername = safePost.username ? [safePost.username] : [];
+        const allUsernames = [...new Set([...authorUsername, ...commentUsernames])];
+
+        const toFetch = allUsernames.filter(u => u && !fetchedUsernames.current.has(u));
+        if (toFetch.length > 0) {
+          toFetch.forEach(u => fetchedUsernames.current.add(u));
+          await fetchProfilePictures(toFetch);
+        }
+      } catch (error) {
+        console.warn('ForumPostScreen: Error prefetching profile pictures', error);
+      }
+    };
+
+    prefetchPictures();
+  }, [safePost.username, safePost.comments, extractUsernames, fetchProfilePictures]);
 
   const handleAddComment = async () => {
     if (!comment.trim()) {
@@ -141,6 +167,43 @@ const ForumPostScreen = ({ route, navigation }) => {
     setProfileModalVisible(true);
   };
 
+  const canDelete = (() => {
+    try {
+      const authUserId = AuthState.userId || UserState.user?.uid;
+      return authUserId && authUserId === safePost.userId;
+    } catch {
+      return false;
+    }
+  })();
+
+  const handleDeletePost = async () => {
+    try {
+      if (!canDelete) return;
+      
+      Alert.alert("Delete Post", "Are you sure you want to delete this post?", [
+        { text: "Cancel", style: "cancel" },
+        { 
+          text: "Delete", 
+          style: "destructive", 
+          onPress: async () => {
+            try {
+              const res = await deletePost(safePost.postId);
+              if (res?.success) {
+                navigation.goBack();
+              } else {
+                Alert.alert('Delete Failed', res?.error || 'Unable to delete post');
+              }
+            } catch (e) {
+              Alert.alert('Delete Failed', 'An unexpected error occurred');
+            }
+          }
+        }
+      ]);
+    } catch (e) {
+      Alert.alert('Delete Failed', 'An unexpected error occurred');
+    }
+  };
+
   const renderScrollContent = () => (
     <View style={styles.container}>
       {/* Main post container */}
@@ -149,8 +212,24 @@ const ForumPostScreen = ({ route, navigation }) => {
         <View style={styles.postHeader}>
           <TouchableOpacity onPress={() => openUserProfile(safePost.userId)}>
             <Image 
-              source={{ uri: safePost.avatar }} 
+              source={{ 
+                uri: (() => {
+                  try {
+                    const username = safePost.username;
+                    const fallback = 'https://randomuser.me/api/portraits/lego/1.jpg';
+                    const profileUrl = getProfilePictureUrlFor ? getProfilePictureUrlFor(username) : null;
+                    // Prefer cached profile picture; fallback to post avatar; then default
+                    return (profileUrl && profileUrl !== fallback) ? profileUrl : (safePost.avatar || fallback);
+                  } catch (e) {
+                    return 'https://randomuser.me/api/portraits/lego/1.jpg';
+                  }
+                })()
+              }} 
               style={styles.avatar} 
+              onError={(error) => {
+                const username = safePost?.username || 'unknown';
+                console.warn(`❌ Failed to load ForumPostScreen author avatar for ${username}:`, error.nativeEvent?.error);
+              }}
             />
           </TouchableOpacity>
           <View style={styles.userInfo}>
@@ -205,6 +284,11 @@ const ForumPostScreen = ({ route, navigation }) => {
               })()}
             </Text>
           </View>
+          {canDelete && (
+            <TouchableOpacity onPress={handleDeletePost} style={styles.postDeleteBtn}>
+              <Ionicons name="trash-outline" size={moderateScale(20)} color={COLORS.lightGray} />
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Post content */}
@@ -256,6 +340,16 @@ const ForumPostScreen = ({ route, navigation }) => {
               onUnlikeComment={unlikeComment}
               currentUserId={getUserId()}
               postId={safePost.postId}
+              avatarPic={(() => {
+                try {
+                  const username = comment?.username;
+                  const fallback = 'https://randomuser.me/api/portraits/lego/1.jpg';
+                  const profileUrl = getProfilePictureUrlFor ? getProfilePictureUrlFor(username) : null;
+                  return (profileUrl && profileUrl !== fallback) ? profileUrl : (comment?.avatar || fallback);
+                } catch (e) {
+                  return 'https://randomuser.me/api/portraits/lego/1.jpg';
+                }
+              })()}
             />
           ))
       )}
@@ -344,6 +438,10 @@ const styles = {
     flexDirection: "row",
     alignItems: "center",
     marginBottom: verticalScale(10),
+  },
+  postDeleteBtn: {
+    marginLeft: 'auto',
+    padding: moderateScale(6),
   },
   avatar: {
     width: moderateScale(40),

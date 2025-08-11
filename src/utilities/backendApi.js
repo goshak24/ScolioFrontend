@@ -116,7 +116,7 @@ export const hasFirebaseAuth = () => {
 
 const storage = getStorage(app);
 
-const API_BASE_URL = 'https://scoliobackend.ew.r.appspot.com/api/'; // Remeber to push back notification controller days to not alert people of old notifications 
+const API_BASE_URL = 'https://f1502bbc64e2.ngrok-free.app/api/'; // Remeber to push back notification controller days to not alert people of old notifications 
 
 const api = axios.create({
   baseURL: API_BASE_URL,

@@ -108,6 +108,27 @@ const Dashboard = () => {
     }, [])
   );
 
+  // Auto-extend streak for physio accounts with nothing scheduled today
+  const autoStreakDoneRef = useRef(false);
+  useEffect(() => {
+    try {
+      if (!user) return;
+      if (autoStreakDoneRef.current) return;
+      const acc = (user.acc_type || '').toLowerCase();
+      if (acc !== 'physio') return;
+      const scheduled = (user?.treatmentData?.physio?.scheduledWorkouts?.[todayDayName] || []).length;
+      const workoutsToday = Array.isArray(user?.treatmentData?.physio?.workoutHistory?.[todayKey])
+        ? user.treatmentData.physio.workoutHistory[todayKey].length
+        : 0;
+      const lastUpdateStr = getDateStringFromFirestoreTimestamp(user?.lastStreakUpdate);
+      const alreadyUpdated = lastUpdateStr === todayKey;
+      if (scheduled === 0 && workoutsToday === 0 && !alreadyUpdated) {
+        autoStreakDoneRef.current = true;
+        updateStreak && updateStreak();
+      }
+    } catch {}
+  }, [user, todayKey, todayDayName, updateStreak]);
+
   // Show loading indicator if user data is being fetched
   if (loading || !user) {
     return (
@@ -166,26 +187,7 @@ const Dashboard = () => {
     { key: 'goals', title: 'Treatment Goals', subtitle: 'Keep going • You got this', icon: 'trophy', bg: '#10B98120' },
   ];
 
-  // Auto-extend streak for physio accounts with nothing scheduled today
-  const autoStreakDoneRef = useRef(false);
-  useEffect(() => {
-    try {
-      if (!user) return;
-      if (autoStreakDoneRef.current) return;
-      const acc = (user.acc_type || '').toLowerCase();
-      if (acc !== 'physio') return;
-      const scheduled = (user?.treatmentData?.physio?.scheduledWorkouts?.[todayDayName] || []).length;
-      const workoutsToday = Array.isArray(user?.treatmentData?.physio?.workoutHistory?.[todayKey])
-        ? user.treatmentData.physio.workoutHistory[todayKey].length
-        : 0;
-      const lastUpdateStr = getDateStringFromFirestoreTimestamp(user?.lastStreakUpdate);
-      const alreadyUpdated = lastUpdateStr === todayKey;
-      if (scheduled === 0 && workoutsToday === 0 && !alreadyUpdated) {
-        autoStreakDoneRef.current = true;
-        updateStreak && updateStreak();
-      }
-    } catch {}
-  }, [user, todayKey, todayDayName, updateStreak]);
+  
 
   return (
     <View style={styles.rootContainer}>

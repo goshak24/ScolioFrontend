@@ -72,6 +72,11 @@ const forumReducer = (state, action) => {
                         : post
                 )
             };
+        case 'delete_post':
+            return {
+                ...state,
+                posts: state.posts.filter(post => post.id !== action.payload.postId)
+            };
         case 'like_comment':
             return {
                 ...state,
@@ -431,6 +436,33 @@ const updateCacheForPostAction = async (actionType, payload) => {
                                 : post
                         );
                         break;
+                    case 'like_comment': {
+                        const { postId, commentId, userId } = payload;
+                        updatedPosts = updatedPosts.map(post => {
+                            if (post.id !== postId) return post;
+                            const updatedComments = (post.comments || []).map(c => {
+                                if (c.id !== commentId) return c;
+                                const likes = Array.isArray(c.likes) ? c.likes : [];
+                                if (likes.includes(userId)) return c;
+                                return { ...c, likes: [...likes, userId] };
+                            });
+                            return { ...post, comments: updatedComments };
+                        });
+                        break;
+                    }
+                    case 'unlike_comment': {
+                        const { postId, commentId, userId } = payload;
+                        updatedPosts = updatedPosts.map(post => {
+                            if (post.id !== postId) return post;
+                            const updatedComments = (post.comments || []).map(c => {
+                                if (c.id !== commentId) return c;
+                                const likes = Array.isArray(c.likes) ? c.likes : [];
+                                return { ...c, likes: likes.filter(id => id !== userId) };
+                            });
+                            return { ...post, comments: updatedComments };
+                        });
+                        break;
+                    }
                     case 'add_comment':
                         updatedPosts = updatedPosts.map(post =>
                             post.id === payload.postId 
@@ -440,6 +472,9 @@ const updateCacheForPostAction = async (actionType, payload) => {
                                 } 
                                 : post
                         );
+                        break;
+                    case 'delete_post':
+                        updatedPosts = updatedPosts.filter(post => post.id !== payload.postId);
                         break;
                     default:
                         continue;
@@ -535,6 +570,30 @@ const likePost = dispatch => async (postId, userId) => {
     }
 };
 
+// Delete a post
+const deletePost = dispatch => async (postId) => {
+    try {
+        const idToken = await AsyncStorage.getItem("idToken");
+        if (!postId) {
+            console.error("❌ Error: postId is required for deletePost");
+            return { success: false };
+        }
+
+        await api.delete(`/forum/posts/${postId}`, {
+            headers: {
+                'Authorization': `Bearer ${idToken}`
+            }
+        });
+
+        dispatch({ type: 'delete_post', payload: { postId } });
+        await updateCacheForPostAction('delete_post', { postId });
+        return { success: true };
+    } catch (error) {
+        console.error("❌ Error deleting post:", error.response ? error.response.data : error);
+        return { success: false, error: error.message };
+    }
+};
+
 // Unlike a post
 const unlikePost = dispatch => async (postId, userId) => {
     try {
@@ -622,6 +681,7 @@ const likeComment = dispatch => async (postId, commentId, userId) => {
         });
 
         dispatch({ type: 'like_comment', payload: { postId, commentId, userId } });
+        await updateCacheForPostAction('like_comment', { postId, commentId, userId });
     } catch (error) {
         console.error("❌ Error liking comment:", error.response ? error.response.data : error);
     }
@@ -640,6 +700,7 @@ const unlikeComment = dispatch => async (postId, commentId, userId) => {
         });
 
         dispatch({ type: 'unlike_comment', payload: { postId, commentId, userId } });
+        await updateCacheForPostAction('unlike_comment', { postId, commentId, userId });
     } catch (error) {
         console.error("❌ Error unliking comment:", error.response ? error.response.data : error);
     }
@@ -706,7 +767,8 @@ export const { Provider, Context } = createDataContext(
         likeComment,
         unlikeComment,
         clearForumCache,
-        getCacheInfo
+        getCacheInfo,
+        deletePost
     }, 
     { 
         posts: [], 

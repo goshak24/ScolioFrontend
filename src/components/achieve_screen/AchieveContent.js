@@ -18,39 +18,67 @@ const WALKING_MINUTES_KEY = 'walkingMinutes';
 
 // All available badges from the controller
 const availableBadges = [
-  { id: '1', name: 'Ultimate Achiever', description: 'Complete all achievements' },
-  { id: '2', name: 'Legend', description: 'Reach top 1% leaderboard' },
+  //{ id: '1', name: 'Ultimate Achiever', description: 'Complete all achievements' },
+  //{ id: '2', name: 'Legend', description: 'Reach top 1% leaderboard' },
 
   // 🦴 Brace Adherence
   { id: '3', name: 'Brace Starter', description: 'Wore your brace for the first time' },
-  { id: '4', name: 'Brace Boss', description: 'Wore your brace daily for 7 days straight' },
-  { id: '5', name: 'Aligned & Strong', description: 'Completed your first full week wearing the brace as prescribed' },
+  //{ id: '4', name: 'Brace Boss', description: 'Wore your brace daily for 7 days straight' },
+  //{ id: '5', name: 'Aligned & Strong', description: 'Completed your first full week wearing the brace as prescribed' },
   { id: '6', name: 'Support Squad', description: 'Scanned or logged brace usage 10 times' },
-  { id: '7', name: 'Posture Pro', description: 'Great posture and brace usage for 14 days!' },
-  { id: '8', name: 'Brace & Win', description: '30-day streak with your brace - commitment pays off' },
+  //{ id: '7', name: 'Posture Pro', description: 'Great posture and brace usage for 14 days!' },
+  //{ id: '8', name: 'Brace & Win', description: '30-day streak with your brace - commitment pays off' },
 
   // 🧘 Physio Therapy
   { id: '9', name: 'Stretch Starter', description: 'First log, committed to moving better!' },
   { id: '10', name: 'Motion Master', description: 'Completed 5 movement therapy sessions' },
-  { id: '11', name: 'Therapy Trailblazer', description: 'Completed 10 unique physio routines' },
-  { id: '12', name: 'Pain Slayer', description: 'Logged progress on pain reduction over 2 weeks' },
-  { id: '13', name: 'Recovery Ritualist', description: 'Checked in with physio tracker for 14 days straight' },
-  { id: '14', name: 'Move to Heal', description: 'Hit a 30-day rehab streak - wow!' },
+  //{ id: '11', name: 'Therapy Trailblazer', description: 'Completed 10 unique physio routines' },
+  //{ id: '12', name: 'Pain Slayer', description: 'Logged progress on pain reduction over 2 weeks' },
+  //{ id: '13', name: 'Recovery Ritualist', description: 'Checked in with physio tracker for 14 days straight' },
+  //{ id: '14', name: 'Move to Heal', description: 'Hit a 30-day rehab streak - wow!' },
 
   // 💬 Community / Messaging
-  { id: '15', name: 'First Voice', description: 'Posted your first message in the forum' },
+  { id: '15', name: 'First Voice', description: 'Posted your first post in the forum' },
   { id: '16', name: 'Circle Builder', description: 'Replied to 5 others posts with kindness or tips' },
   { id: '17', name: 'Uplifter', description: 'Gave 10+ upvotes or reactions to community posts' },
-  { id: '18', name: 'Community Guide', description: 'Answered someones question with helpful advice' },
+  //{ id: '18', name: 'Community Guide', description: 'Answered someones question with helpful advice' },
   { id: '19', name: 'Kindred Spirit', description: 'Supported a fellow user via private messaging' },
 
   // 💡 Bonus
-  { id: '20', name: 'Nudge Ninja', description: 'Responded to in-app nudge 10+ times' },
-  { id: '21', name: 'Progress Tracker', description: 'Logged daily recovery score for 14 days' },
-  { id: '22', name: 'Realign Rebel', description: 'Broke through a recovery plateau with consistency' },
-  { id: '23', name: 'Milestone Maven', description: 'Hit all weekly goals 3 weeks in a row' },
-  { id: '24', name: 'Hope Holder', description: 'Shared a positive message with others in recovery' },
+  // id: '20', name: 'Nudge Ninja', description: 'Responded to in-app nudge 10+ times' },
+  //{ id: '21', name: 'Progress Tracker', description: 'Logged daily recovery score for 14 days' },
+  //{ id: '22', name: 'Realign Rebel', description: 'Broke through a recovery plateau with consistency' },
+  //{ id: '23', name: 'Milestone Maven', description: 'Hit all weekly goals 3 weeks in a row' },
+  //{ id: '24', name: 'Hope Holder', description: 'Shared a positive message with others in recovery' },
 ];
+
+// Helper: filter badges relevant to the user's account type
+// Account types supported: 'brace', 'physio', 'brace + physio', 'pre-surgery'/'presurgery', 'post-surgery'/'postsurgery'
+const filterBadgesByAccountType = (allBadges, accountType, isPostSurgery) => {
+  const normalizedType = (accountType || '').toLowerCase();
+
+  const braceBadgeIds = new Set(['3', '4', '5', '6', '7', '8']);
+  const physioBadgeIds = new Set(['9', '10', '11', '12', '13', '14']);
+  const communityBadgeIds = new Set(['15', '16', '17', '18', '19']);
+  const generalBadgeIds = new Set(['1', '20', '22', '24']);
+
+  const includesBrace = normalizedType === 'brace' || normalizedType === 'brace + physio';
+  const includesPhysio =
+    normalizedType === 'physio' ||
+    normalizedType === 'brace + physio' ||
+    normalizedType === 'post-surgery' ||
+    normalizedType === 'postsurgery' ||
+    isPostSurgery === true;
+
+  return allBadges.filter((badge) => {
+    const id = badge.id;
+    if (generalBadgeIds.has(id)) return true; // always relevant
+    if (communityBadgeIds.has(id)) return true; // community is relevant to all
+    if (braceBadgeIds.has(id)) return includesBrace; // brace-specific
+    if (physioBadgeIds.has(id)) return includesPhysio; // physio-specific
+    return true;
+  });
+};
 
 const AchieveContent = ({ activeTab, streakDays, physioSessions, achievements, user, weeklyExpectedSessions }) => { 
   // State for surgery task data
@@ -204,8 +232,11 @@ const AchieveContent = ({ activeTab, streakDays, physioSessions, achievements, u
   // Get earned badge IDs for filtering
   const earnedBadgeIds = earnedBadges.map(badge => badge.id);
 
-  // Filter available badges to get unearned badges
-  const unearnedBadges = availableBadges.filter(badge => !earnedBadgeIds.includes(badge.id));
+  // Filter available badges to only those relevant to the user's account type
+  const filteredAvailableBadges = filterBadgesByAccountType(availableBadges, accountType, isPostSurgery);
+
+  // Filter relevant badges to get unearned badges
+  const unearnedBadges = filteredAvailableBadges.filter(badge => !earnedBadgeIds.includes(badge.id));
 
   // Get progress metrics based on account type
   const getProgressMetrics = () => {

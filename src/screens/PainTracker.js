@@ -1,10 +1,14 @@
 import { SafeAreaView, StyleSheet, Text, View, ScrollView, StatusBar, TouchableOpacity, Platform, Alert, ActivityIndicator } from 'react-native';
-import React, { useState, useCallback, useEffect, useContext } from 'react';
+import React, { useState, useCallback, useEffect, useContext, useMemo } from 'react';
 import { Context as PainTrackingContext } from '../context/PainTrackingContext';
 import { moderateScale } from 'react-native-size-matters';
 import { Ionicons } from '@expo/vector-icons';
 import COLORS from '../constants/COLORS';
 import HeightSpacer from '../components/reusable/HeightSpacer';
+import PatternsRangeTabs from '../components/pain_tracking/PatternsRangeTabs';
+import HistoryWeekStrip from '../components/pain_tracking/HistoryWeekStrip';
+import HistoryActionsRow from '../components/pain_tracking/HistoryActionsRow';
+import PatternsChart from '../components/pain_tracking/PatternsChart';
 import BodyMapSelector from '../components/pain_tracking/BodyMapSelector';
 import PainIntensitySlider from '../components/pain_tracking/PainIntensitySlider';
 import TimeOfDaySelector from '../components/pain_tracking/TimeOfDaySelector';
@@ -12,7 +16,23 @@ import ActivitiesSelector from '../components/pain_tracking/ActivitiesSelector';
 import SleepQualityTracker from '../components/pain_tracking/SleepQualityTracker';
 import PainNotes from '../components/pain_tracking/PainNotes';
 import SaveButton from '../components/pain_tracking/SaveButton';
-import DateNavigator from '../components/pain_tracking/DateNavigator';
+import CalendarModal from '../components/reusable/Calendar/CalendarModal';
+import { 
+  format,
+  startOfWeek,
+  endOfWeek,
+  addDays,
+  subDays,
+  startOfMonth,
+  endOfMonth,
+  startOfYear,
+  endOfYear,
+  eachDayOfInterval,
+  eachMonthOfInterval,
+  isAfter,
+  isWithinInterval,
+  parseISO
+} from 'date-fns';
 import BodyMapVisualization from '../components/pain_tracking/BodyMapVisualization';
 import PainHistoryEntry from '../components/pain_tracking/PainHistoryEntry';
 import MetricsDisplay from '../components/pain_tracking/MetricsDisplay';
@@ -38,6 +58,12 @@ const PainTracker = ({ navigation }) => {
   const [historyLogs, setHistoryLogs] = useState([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [dataInitialized, setDataInitialized] = useState(false);
+  const [loadedMonths, setLoadedMonths] = useState({});
+  const [isLoadingPatterns, setIsLoadingPatterns] = useState(false);
+
+  // Interactive history controls
+  const [isCalendarVisible, setIsCalendarVisible] = useState(false);
+  const [currentWeekStart, setCurrentWeekStart] = useState(startOfWeek(new Date(), { weekStartsOn: 1 }));
 
   // Pain patterns tracking week navigation 
   const [currentWeekOffset, setCurrentWeekOffset] = useState(0); // 0 = current week, -1 = previous week, etc.
@@ -47,6 +73,9 @@ const PainTracker = ({ navigation }) => {
 
   // Pain tracker showing back or front image state 
   const [showBack, setShowBack] = useState(true);
+  // Patterns state
+  const [patternsRange, setPatternsRange] = useState('week'); // 'week' | 'month' | 'year'
+  const [patternsAnchorDate, setPatternsAnchorDate] = useState(new Date());
 
   // Load all pain logs when component mounts
   useEffect(() => {
@@ -60,6 +89,7 @@ const PainTracker = ({ navigation }) => {
         
         // Then load from database for the current month
         await dbLoadPainLogsForMonth(currentMonth);
+        setLoadedMonths(prev => ({ ...prev, [currentMonth]: true }));
         
         setDataInitialized(true);
         console.log("Pain logs initialized");
@@ -80,6 +110,53 @@ const PainTracker = ({ navigation }) => {
       loadPainLogsForDate(currentHistoryDate);
     }
   }, [dataInitialized, activeTab, currentHistoryDate, state.painLogs]);
+
+  // Ensure data is loaded for the selected patterns range
+  useEffect(() => {
+    if (activeTab !== 'patterns') return;
+    const loadRangeMonths = async () => {
+      try {
+        setIsLoadingPatterns(true);
+        let rangeStart;
+        let rangeEnd;
+        if (patternsRange === 'week') {
+          rangeStart = startOfWeek(patternsAnchorDate, { weekStartsOn: 1 });
+          rangeEnd = endOfWeek(patternsAnchorDate, { weekStartsOn: 1 });
+        } else if (patternsRange === 'month') {
+          rangeStart = startOfMonth(patternsAnchorDate);
+          rangeEnd = endOfMonth(patternsAnchorDate);
+        } else {
+          rangeStart = startOfYear(patternsAnchorDate);
+          rangeEnd = endOfYear(patternsAnchorDate);
+        }
+
+        // Build set of YYYY-MM months in range
+        const monthsInRange = new Set();
+        let cursor = new Date(rangeStart);
+        while (cursor <= rangeEnd) {
+          const yyyyMm = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}`;
+          monthsInRange.add(yyyyMm);
+          cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
+        }
+
+        // Determine which months actually need loading
+        const toLoad = Array.from(monthsInRange).filter(m => !loadedMonths[m]);
+        if (toLoad.length === 0) return;
+
+        for (const monthKey of toLoad) {
+          try {
+            await dbLoadPainLogsForMonth(monthKey);
+            setLoadedMonths(prev => (prev[monthKey] ? prev : { ...prev, [monthKey]: true }));
+          } catch (e) {
+            console.error('Error loading month for patterns', monthKey, e);
+          }
+        }
+      } finally {
+        setIsLoadingPatterns(false);
+      }
+    };
+    loadRangeMonths();
+  }, [activeTab, patternsRange, patternsAnchorDate, loadedMonths, dbLoadPainLogsForMonth]);
 
   // Function to load pain logs for a specific date
   const loadPainLogsForDate = (date) => {
@@ -150,6 +227,99 @@ const PainTracker = ({ navigation }) => {
       setCurrentHistoryDate(nextDate);
     }
   };
+
+  // Map of date -> count of logs, to show indicators
+  const painLogsCountByDate = useMemo(() => {
+    const counts = {};
+    state.painLogs.forEach(log => {
+      // Keep counts on the actual log date; we removed the selection shift so UI is consistent
+      const dateKey = log.date;
+      counts[dateKey] = (counts[dateKey] || 0) + 1;
+    });
+    return counts;
+  }, [state.painLogs]);
+
+  // Build events object for calendar (to visualize pain logs)
+  const painEventsForCalendar = useMemo(() => {
+    const events = {};
+    Object.entries(painLogsCountByDate).forEach(([dateKey, count]) => {
+      events[dateKey] = Array.from({ length: count }).map((_, idx) => ({
+        type: 'pain',
+        title: `Pain log ${idx + 1}`,
+      }));
+    });
+    return events;
+  }, [painLogsCountByDate]);
+
+  // Select date with month-aware loading
+  const selectHistoryDate = useCallback(async (jsDate) => {
+    try {
+      // Build date string without timezone shifting by constructing parts
+      const newDateStr = `${jsDate.getFullYear()}-${String(jsDate.getMonth() + 1).padStart(2, '0')}-${String(jsDate.getDate()).padStart(2, '0')}`;
+      const newMonth = newDateStr.slice(0, 7);
+
+      if (!loadedMonths[newMonth]) {
+        setIsLoadingHistory(true);
+        try {
+          await dbLoadPainLogsForMonth(newMonth);
+          setLoadedMonths(prev => ({ ...prev, [newMonth]: true }));
+        } catch (error) {
+          console.error(`Error loading pain logs for month ${newMonth}:`, error);
+        } finally {
+          setIsLoadingHistory(false);
+        }
+      }
+
+      setCurrentHistoryDate(newDateStr);
+      // Recompute week start using local date parts, not the jsDate ref
+      const [yy,mm,dd] = newDateStr.split('-').map(n=>parseInt(n,10));
+      const localDate = new Date(yy, mm-1, dd);
+      setCurrentWeekStart(startOfWeek(localDate, { weekStartsOn: 1 }));
+    } catch (e) {
+      console.error('Failed to select date:', e);
+    }
+  }, [dbLoadPainLogsForMonth, loadedMonths]);
+
+  const goToToday = useCallback(() => {
+    const today = new Date();
+    selectHistoryDate(today);
+  }, [selectHistoryDate]);
+
+  const goToPreviousWeek = useCallback(() => {
+    const previousWeekStart = addDays(currentWeekStart, -7);
+    setCurrentWeekStart(previousWeekStart);
+    // If current selection is outside the new week, select the week's start
+    const [y,m,d] = currentHistoryDate.split('-').map(n=>parseInt(n,10));
+    const selectedDate = new Date(y, m-1, d);
+    const newWeekEnd = addDays(previousWeekStart, 6);
+    if (selectedDate < previousWeekStart || selectedDate > newWeekEnd) {
+      selectHistoryDate(previousWeekStart);
+    }
+  }, [currentWeekStart, currentHistoryDate, selectHistoryDate]);
+
+  const goToNextWeek = useCallback(() => {
+    const nextWeekStart = addDays(currentWeekStart, 7);
+    setCurrentWeekStart(nextWeekStart);
+    const [y,m,d] = currentHistoryDate.split('-').map(n=>parseInt(n,10));
+    const selectedDate = new Date(y, m-1, d);
+    const newWeekEnd = addDays(nextWeekStart, 6);
+    if (selectedDate < nextWeekStart || selectedDate > newWeekEnd) {
+      // Try to select the latest allowed day in the upcoming week that isn't future
+      const today = new Date();
+      let chosenDate = null;
+      for (let i = 6; i >= 0; i--) {
+        const day = addDays(nextWeekStart, i);
+        if (!isAfter(day, today)) {
+          chosenDate = day;
+          break;
+        }
+      }
+      if (chosenDate) {
+        selectHistoryDate(chosenDate);
+      }
+      // If all days are future, keep current selection but still allow viewing next week's strip
+    }
+  }, [currentWeekStart, currentHistoryDate, selectHistoryDate]);
 
   // Handler for area selection
   const handleSelectArea = (area) => {
@@ -349,11 +519,19 @@ const PainTracker = ({ navigation }) => {
               {/* History Content */}
               {activeTab === 'history' && (
                 <>
-                  <DateNavigator 
-                    date={currentHistoryDate}
-                    onPrevious={goToPreviousDay}
-                    onNext={goToNextDay}
-                  />
+                  {/* Interactive weekly selector and actions */}
+                    <HistoryWeekStrip
+                      currentWeekStart={currentWeekStart}
+                      onPrevWeek={goToPreviousWeek}
+                      onNextWeek={goToNextWeek}
+                      currentHistoryDate={currentHistoryDate}
+                      painLogsCountByDate={painLogsCountByDate}
+                      onSelectDate={selectHistoryDate}
+                    />
+                    <HistoryActionsRow
+                      onToday={goToToday}
+                      onOpenCalendar={() => setIsCalendarVisible(true)}
+                    />
                   
                   {(isLoadingHistory || !dataInitialized) ? (
                     <View style={styles.loadingContainer}>
@@ -410,6 +588,9 @@ const PainTracker = ({ navigation }) => {
               {/* Pain Intensity Over Time Chart */}
               {activeTab === 'patterns' && ( 
                 <View>
+                {/* Range selector */}
+                <PatternsRangeTabs range={patternsRange} onChange={setPatternsRange} />
+
                 <View style={styles.patternSection}>
                   <Text style={styles.patternSectionTitle}>Pain Intensity Over Time</Text>
                   <View style={styles.chartContainer}>
@@ -428,82 +609,103 @@ const PainTracker = ({ navigation }) => {
                       {/* Dynamic data visualization */}
                       <View style={styles.lineChart}>
                         {(() => {
-                          // Process pain logs to get last 7 days of data
-                          const last7Days = [];
-                          const today = new Date();
-                          
-                          for (let i = 6; i >= 0; i--) {
-                            const date = new Date(today);
-                            date.setDate(date.getDate() - i);
-                            last7Days.push(date.toISOString().split('T')[0]);
+                          // Compute displayed range
+                          let rangeStart;
+                          let rangeEnd;
+                          if (patternsRange === 'week') {
+                            rangeStart = startOfWeek(patternsAnchorDate, { weekStartsOn: 1 });
+                            rangeEnd = endOfWeek(patternsAnchorDate, { weekStartsOn: 1 });
+                          } else if (patternsRange === 'month') {
+                            rangeStart = startOfMonth(patternsAnchorDate);
+                            rangeEnd = endOfMonth(patternsAnchorDate);
+                          } else {
+                            rangeStart = startOfYear(patternsAnchorDate);
+                            rangeEnd = endOfYear(patternsAnchorDate);
                           }
 
-                          // Group pain logs by date and calculate average intensity
-                          const dailyAverages = last7Days.map(date => {
-                            const logsForDate = state.painLogs.filter(log => log.date === date);
-                            if (logsForDate.length === 0) return { date, avgIntensity: 0, hasData: false };
-                            
-                            const totalIntensity = logsForDate.reduce((sum, log) => sum + log.painIntensity, 0);
-                            return { 
-                              date, 
-                              avgIntensity: totalIntensity / logsForDate.length,
-                              hasData: true 
-                            };
+                          // Build buckets
+                          let buckets = [];
+                          if (patternsRange === 'year') {
+                            buckets = eachMonthOfInterval({ start: rangeStart, end: rangeEnd }).map(d => ({ key: format(d, 'yyyy-MM'), label: format(d, 'MMM') }));
+                          } else if (patternsRange === 'month') {
+                            buckets = eachDayOfInterval({ start: rangeStart, end: rangeEnd }).map(d => ({ key: format(d, 'yyyy-MM-dd'), label: format(d, 'd') }));
+                          } else {
+                            // Default to week
+                            buckets = eachDayOfInterval({ start: rangeStart, end: rangeEnd }).map(d => ({ key: format(d, 'yyyy-MM-dd'), label: format(d, 'EEE') }));
+                          }
+
+                          const avgByBucket = buckets.map(b => {
+                            const logs = state.painLogs.filter(log => log.date === b.key);
+                            if (logs.length === 0) return { ...b, avg: 0, hasData: false };
+                            const sum = logs.reduce((acc, l) => acc + (l.painIntensity || 0), 0);
+                            return { ...b, avg: sum / logs.length, hasData: true };
                           });
 
-                          // Create data points for the chart
-                          return dailyAverages.map((dayData, index) => {
-                            if (!dayData.hasData) return null;
-                            
-                            const leftPosition = (index / (dailyAverages.length - 1)) * 85 + 6.25; // Distribute evenly across chart width
-                            const bottomPosition = (dayData.avgIntensity / 10) * 85 + 5; // Scale to chart height (0-10 pain scale)
-                            
+                          const points = avgByBucket.map((b, index) => {
+                            if (!b.hasData) return null;
+                            const count = avgByBucket.length;
+                            const leftPercent = count > 0 ? ((index + 0.5) / count) * 100 : 50;
+                            const bottomPercent = (b.avg / 10) * 100; // relative to chartArea height baseline (we also have grid bg)
                             return (
-                              <View 
-                                key={index}
-                                style={[
-                                  styles.dataPoint, 
-                                  { 
-                                    left: `${leftPosition}%`, 
-                                    bottom: `${bottomPosition}%` 
-                                  }
-                                ]} 
-                              />
+                              <View key={index} style={[styles.dataPoint, { left: `${leftPercent}%`, bottom: `${bottomPercent}%` }]} />
                             );
-                          }).filter(point => point !== null);
+                          }).filter(Boolean);
+                          return points;
                         })()}
                       </View>
                     </View>
                   </View>
                   <View style={styles.chartXAxis}>
                     {(() => {
-                      // Generate last 7 days labels
-                      const last7Days = [];
-                      const today = new Date();
-                      
-                      for (let i = 6; i >= 0; i--) {
-                        const date = new Date(today);
-                        date.setDate(date.getDate() - i);
-                        last7Days.push(date.getDate().toString());
+                      if (patternsRange === 'month') {
+                        const lastDay = endOfMonth(patternsAnchorDate).getDate();
+                        const ticks = [0, 5, 10, 15, 20, 25, 30].filter(n => n <= lastDay);
+                        return ticks.map((n, idx) => (
+                          <Text key={idx} style={styles.xAxisLabel}>{String(n)}</Text>
+                        ));
                       }
-                      
-                      return last7Days.map((day, index) => (
-                        <Text key={index} style={styles.xAxisLabel}>{day}</Text>
+                      // week
+                      const start = startOfWeek(patternsAnchorDate, { weekStartsOn: 1 });
+                      const end = endOfWeek(patternsAnchorDate, { weekStartsOn: 1 });
+                      return eachDayOfInterval({ start, end }).map((d, idx) => (
+                        <Text key={idx} style={styles.xAxisLabel}>{format(d, 'EEE')}</Text>
                       ));
                     })()}
                   </View>
                 </View>
 
-                {/* Pain by Body Area - Dynamic */}
+                {/* Pain by Body Area - Dynamic (range-aware) */}
                 <View style={styles.patternSection}>
                   <Text style={styles.patternSectionTitle}>Pain by Body Area</Text>
                   <View style={[styles.bodyAreaContainer, { backgroundColor: COLORS.workoutOption }]}>
                     {(() => {
-                      // Process pain logs to get body part frequency
+                      // Compute selected range
+                      let rangeStart;
+                      let rangeEnd;
+                      if (patternsRange === 'week') {
+                        rangeStart = startOfWeek(patternsAnchorDate, { weekStartsOn: 1 });
+                        rangeEnd = endOfWeek(patternsAnchorDate, { weekStartsOn: 1 });
+                      } else if (patternsRange === 'month') {
+                        rangeStart = startOfMonth(patternsAnchorDate);
+                        rangeEnd = endOfMonth(patternsAnchorDate);
+                      } else {
+                        rangeStart = startOfYear(patternsAnchorDate);
+                        rangeEnd = endOfYear(patternsAnchorDate);
+                      }
+                      const filteredLogs = state.painLogs.filter(log => {
+                        if (!log.date) return false;
+                        try {
+                          const d = parseISO(log.date);
+                          return isWithinInterval(d, { start: rangeStart, end: rangeEnd });
+                        } catch {
+                          return false;
+                        }
+                      });
+
                       const bodyPartCounts = {};
-                      const totalLogs = state.painLogs.length;
+                      const totalLogs = filteredLogs.length;
                       
-                      state.painLogs.forEach(log => {
+                      filteredLogs.forEach(log => {
                         log.bodyParts.forEach(part => {
                           bodyPartCounts[part] = (bodyPartCounts[part] || 0) + 1;
                         });
@@ -556,43 +758,78 @@ const PainTracker = ({ navigation }) => {
                   </View>
                 </View>
 
-                {/* Pain Correlation with Activities - Dynamic */}
+                {/* Pain Correlation with Activities - Dynamic (range-aware) */}
                 <View style={styles.patternSection}>
                   <Text style={styles.patternSectionTitle}>Pain Correlation with Activities</Text>
                   <View style={[styles.activitiesContainer, { backgroundColor: COLORS.workoutOption }]}>
                     {(() => {
-                      // Process activities and their correlation with high pain
-                      const activityAnalysis = {}; 
-                      
-                      state.painLogs.forEach(log => {
-                        log.activities.forEach(activity => {
+                      // Compute selected range
+                      let rangeStart;
+                      let rangeEnd;
+                      if (patternsRange === 'week') {
+                        rangeStart = startOfWeek(patternsAnchorDate, { weekStartsOn: 1 });
+                        rangeEnd = endOfWeek(patternsAnchorDate, { weekStartsOn: 1 });
+                      } else if (patternsRange === 'month') {
+                        rangeStart = startOfMonth(patternsAnchorDate);
+                        rangeEnd = endOfMonth(patternsAnchorDate);
+                      } else {
+                        rangeStart = startOfYear(patternsAnchorDate);
+                        rangeEnd = endOfYear(patternsAnchorDate);
+                      }
+
+                      const filteredLogs = state.painLogs.filter(log => {
+                        if (!log.date) return false;
+                        try {
+                          const d = parseISO(log.date);
+                          return isWithinInterval(d, { start: rangeStart, end: rangeEnd });
+                        } catch {
+                          return false;
+                        }
+                      });
+
+                      // Baseline high-pain rate across the selected range
+                      const totalRangeLogs = filteredLogs.length;
+                      const totalRangeHighPain = filteredLogs.filter(l => (l.painIntensity || 0) >= 7).length;
+                      const baseHighPainRate = totalRangeLogs > 0 ? totalRangeHighPain / totalRangeLogs : 0;
+
+                      // Aggregate activity stats (count, high-pain count, sum intensity)
+                      const activityAnalysis = {};
+                      const baselineSumIntensity = filteredLogs.reduce((acc, l) => acc + (l.painIntensity || 0), 0);
+                      const baselineAvgIntensity = totalRangeLogs > 0 ? baselineSumIntensity / totalRangeLogs : 0;
+                      filteredLogs.forEach(log => {
+                        const intensity = log.painIntensity || 0;
+                        (log.activities || []).forEach(activity => {
                           if (!activityAnalysis[activity]) {
-                            activityAnalysis[activity] = { totalLogs: 0, highPainLogs: 0 };
+                            activityAnalysis[activity] = { totalLogs: 0, highPainLogs: 0, sumIntensity: 0 };
                           }
-                          activityAnalysis[activity].totalLogs++;
-                          if (log.painIntensity >= 7) { // Consider 7+ as high pain
-                            activityAnalysis[activity].highPainLogs++;
+                          activityAnalysis[activity].totalLogs += 1;
+                          activityAnalysis[activity].sumIntensity += intensity;
+                          if (intensity >= 7) {
+                            activityAnalysis[activity].highPainLogs += 1;
                           }
                         });
                       });
-                      
-                      // Calculate correlation percentages
+
+                      // Compute delta vs baseline (percentage points)
                       const correlationData = Object.entries(activityAnalysis)
                         .map(([activity, data]) => {
-                          const correlationPercentage = data.totalLogs > 0 
-                            ? Math.round((data.highPainLogs / data.totalLogs) * 100) 
-                            : 0;
-                          
+                          const activityRate = data.totalLogs > 0 ? data.highPainLogs / data.totalLogs : 0;
+                          const deltaPct = Math.round((activityRate - baseHighPainRate) * 100);
+                          const avgIntensity = data.totalLogs > 0 ? data.sumIntensity / data.totalLogs : 0;
+                          const deltaIntensity = avgIntensity - baselineAvgIntensity;
+                          const sharePct = totalRangeLogs > 0 ? Math.round((data.totalLogs / totalRangeLogs) * 100) : 0;
                           return {
                             name: activity.charAt(0).toUpperCase() + activity.slice(1),
-                            correlation: correlationPercentage,
-                            isPositive: correlationPercentage > 50,
-                            totalLogs: data.totalLogs
+                            deltaPct,
+                            avgIntensity,
+                            deltaIntensity,
+                            totalLogs: data.totalLogs,
+                            sharePct,
                           };
                         })
-                        .filter(item => item.totalLogs >= 2) // Only show activities with at least 2 logs
-                        .sort((a, b) => Math.abs(b.correlation - 50) - Math.abs(a.correlation - 50)) // Sort by strongest correlation
-                        .slice(0, 4); // Show top 4 activities
+                        .filter(item => item.totalLogs >= 2)
+                        .sort((a, b) => Math.abs(b.deltaPct) - Math.abs(a.deltaPct))
+                        .slice(0, 4);
                       
                       if (correlationData.length === 0) {
                         return (
@@ -601,14 +838,18 @@ const PainTracker = ({ navigation }) => {
                       }
                       
                       return correlationData.map((activity, index) => {
-                        const isHighPain = activity.correlation > 60;
-                        const dotColor = isHighPain ? COLORS.red : 
-                                        activity.correlation > 40 ? COLORS.accentOrange : COLORS.accentGreen;
-                        const changeText = activity.correlation > 50 
-                          ? `+${activity.correlation - 50}% pain risk`
-                          : `-${50 - activity.correlation}% pain risk`;
-                        const bgColor = isHighPain ? COLORS.red + '20' : COLORS.accentGreen + '20';
-                        const textColor = isHighPain ? COLORS.red : COLORS.accentGreen;
+                        const isHigherRisk = activity.deltaPct > 0;
+                        const isNearNeutral = Math.abs(activity.deltaPct) <= 5;
+                        const dotColor = isNearNeutral ? COLORS.accentOrange : (isHigherRisk ? COLORS.red : COLORS.accentGreen);
+                        const bgColor = isHigherRisk ? COLORS.red + '20' : COLORS.accentGreen + '20';
+                        const textColor = isHigherRisk ? COLORS.red : COLORS.accentGreen;
+                        const highPainText = activity.deltaPct === 0
+                          ? 'High pain: no change vs baseline'
+                          : activity.deltaPct > 0
+                            ? `High pain: +${activity.deltaPct}% vs baseline`
+                            : `High pain: ${Math.abs(activity.deltaPct)}% lower vs baseline`;
+                        const avgText = `Avg: ${activity.avgIntensity.toFixed(1)}/10`;
+                        const freqText = `${activity.totalLogs} logs${activity.sharePct ? ` • ${activity.sharePct}%` : ''}`;
                         
                         return (
                           <View key={index} style={styles.activityItem}>
@@ -616,10 +857,17 @@ const PainTracker = ({ navigation }) => {
                               <View style={[styles.activityDot, { backgroundColor: dotColor }]} />
                               <Text style={styles.activityName}>{activity.name}</Text>
                             </View>
-                            <View style={[styles.painChangeContainer, { backgroundColor: bgColor }]}>
-                              <Text style={[styles.painChangeText, { color: textColor }]}>
-                                {changeText}
-                              </Text>
+                            <View style={{ alignItems: 'flex-end' }}>
+                              <View style={[styles.painChangeContainer, { backgroundColor: bgColor, marginBottom: 4 }]}>
+                                <Text style={[styles.painChangeText, { color: textColor }]}>
+                                  {highPainText}
+                                </Text>
+                              </View>
+                              <View style={[styles.painChangeContainer, { backgroundColor: COLORS.backgroundPurple }]}>
+                                <Text style={[styles.painChangeText, { color: COLORS.white }]}>
+                                  {avgText} • {freqText}
+                                </Text>
+                              </View>
                             </View>
                           </View>
                         );
@@ -691,6 +939,15 @@ const PainTracker = ({ navigation }) => {
             </View>
           </ScrollView>
         </KeyboardAvoidingView>
+        <CalendarModal 
+          visible={isCalendarVisible}
+          onClose={() => setIsCalendarVisible(false)}
+          onDateSelect={(date) => { selectHistoryDate(date); setIsCalendarVisible(false); }}
+          // Shift events internally by -1 day for alignment so modal shows markers on correct day
+          events={painEventsForCalendar}
+          initialDate={new Date(currentHistoryDate)}
+          defaultView="month"
+        />
       </SafeAreaView>
     </View>
   );
@@ -702,6 +959,88 @@ const styles = StyleSheet.create({
   rootContainer: {
     flex: 1,
     backgroundColor: COLORS.backgroundPurple, 
+  },
+  historyControlsContainer: {
+    paddingHorizontal: moderateScale(15),
+    marginBottom: moderateScale(10),
+  },
+  weekNavRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: moderateScale(8),
+  },
+  weekNavButton: {
+    backgroundColor: COLORS.backgroundPurple,
+    padding: moderateScale(6),
+    borderRadius: moderateScale(8),
+  },
+  weekRangeText: {
+    color: COLORS.white,
+    fontSize: moderateScale(14),
+    fontWeight: '600',
+  },
+  weekStrip: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  dayPill: {
+    width: `${100 / 7 - 1}%`,
+    alignItems: 'center',
+    paddingVertical: moderateScale(6),
+    backgroundColor: COLORS.workoutOption,
+    borderRadius: moderateScale(8),
+  },
+  dayPillSelected: {
+    borderWidth: 2,
+    borderColor: COLORS.primaryPurple,
+  },
+  dayPillDisabled: {
+    opacity: 0.4,
+  },
+  dayPillWeekday: {
+    color: COLORS.lightGray,
+    fontSize: moderateScale(11),
+    marginBottom: moderateScale(2),
+  },
+  dayPillDay: {
+    color: COLORS.white,
+    fontSize: moderateScale(14),
+    fontWeight: '600',
+  },
+  dayPillSelectedText: {
+    color: COLORS.primaryPurple,
+  },
+  logDot: {
+    marginTop: moderateScale(4),
+    paddingHorizontal: moderateScale(6),
+    paddingVertical: moderateScale(1),
+    backgroundColor: COLORS.accentOrange + '33',
+    borderRadius: moderateScale(10),
+  },
+  logDotText: {
+    color: COLORS.accentOrange,
+    fontSize: moderateScale(10),
+    fontWeight: '600',
+  },
+  historyActionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginTop: moderateScale(8),
+  },
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.backgroundPurple,
+    paddingHorizontal: moderateScale(10),
+    paddingVertical: moderateScale(6),
+    borderRadius: moderateScale(8),
+    marginLeft: moderateScale(8),
+  },
+  actionButtonText: {
+    color: COLORS.white,
+    marginLeft: moderateScale(6),
+    fontSize: moderateScale(12),
   },
   loadingContainer: {
     padding: moderateScale(20),
@@ -837,6 +1176,32 @@ const styles = StyleSheet.create({
     paddingHorizontal: moderateScale(15),
     marginBottom: moderateScale(25)
   },
+  patternRangeTabs: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    backgroundColor: COLORS.cardDark,
+    marginHorizontal: moderateScale(15),
+    marginBottom: moderateScale(12),
+    borderRadius: moderateScale(10),
+    paddingVertical: moderateScale(6),
+  },
+  patternRangeTab: {
+    paddingHorizontal: moderateScale(12),
+    paddingVertical: moderateScale(6),
+    borderRadius: moderateScale(8),
+  },
+  patternRangeTabActive: {
+    backgroundColor: COLORS.primaryPurple,
+  },
+  patternRangeTabText: {
+    color: COLORS.lightGray,
+    fontSize: moderateScale(13),
+  },
+  patternRangeTabTextActive: {
+    color: COLORS.white,
+    fontWeight: '600',
+  },
   patternSectionTitle: {
     fontSize: moderateScale(18),
     fontWeight: '600',
@@ -890,10 +1255,11 @@ const styles = StyleSheet.create({
   },
   dataPoint: {
     position: 'absolute',
-    width: moderateScale(8),
-    height: moderateScale(8),
-    borderRadius: moderateScale(4),
+    width: 8,
+    height: 8,
+    borderRadius: 4,
     backgroundColor: COLORS.primaryPurple,
+    transform: [{ translateX: -4 }, { translateY: 4 }],
   },
   chartXAxis: {
     flexDirection: 'row',
