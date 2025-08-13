@@ -11,8 +11,10 @@ import COLORS from '../../../constants/COLORS';
  * @param {Function} onChangeText - Function to handle text changes
  * @param {Function} onSendPress - Function to handle send button press
  * @param {boolean} loading - Whether a message is being sent
+ * @param {Function} onFocus - Optional focus handler to notify parent
+ * @param {Function} onInputContentSizeChange - Optional content size change handler for multiline growth
  */
-const ChatInput = ({ messageText, onChangeText, onSendPress, loading = false }) => {
+const ChatInput = ({ messageText, onChangeText, onSendPress, loading = false, onFocus, onInputContentSizeChange }) => {
   return (
     <View style={styles.inputContainer}>
       <TextInput
@@ -22,6 +24,8 @@ const ChatInput = ({ messageText, onChangeText, onSendPress, loading = false }) 
         value={messageText}
         onChangeText={onChangeText}
         multiline
+        onFocus={onFocus}
+        onContentSizeChange={onInputContentSizeChange}
       />
       <TouchableOpacity 
         style={styles.sendButton}

@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, Image, Platform } from 'react-native';
 import { moderateScale, scale } from 'react-native-size-matters';
 import COLORS from '../../constants/COLORS';
+import { formatMessageTime } from '../messaging/chat/utils';
 
 /**
  * Component to display a single chat message
@@ -35,7 +36,7 @@ const ChatMessage = ({ text, isUser, timestamp, aiAvatarUrl }) => {
         isUser ? styles.userMessageContent : styles.aiMessageContent
       ]}>
         <Text style={styles.messageText}>{text}</Text>
-        <Text style={styles.timestamp}>{timestamp}</Text>
+        <Text style={styles.timestamp}>{formatMessageTime(timestamp)}</Text>
       </View>
     </View>
   );

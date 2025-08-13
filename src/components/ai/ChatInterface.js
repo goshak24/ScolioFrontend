@@ -4,6 +4,7 @@ import { moderateScale, verticalScale } from 'react-native-size-matters';
 import { Ionicons } from '@expo/vector-icons';
 import COLORS from '../../constants/COLORS';
 import ChatMessage from './ChatMessage';
+import { formatMessageDayLabel } from '../messaging/chat/utils';
 import ChatInput from './ChatInput';
 import Constants from 'expo-constants';
 import { Context as AssistantContext } from '../../context/AssistantContext';
@@ -142,14 +143,38 @@ const ChatInterface = ({ onClose, isVisible, initialQuestion = null, conversatio
           <View style={styles.chatContainer}>
             <FlatList
               ref={flatListRef}
-              data={currentConversation?.messages || []}
-              keyExtractor={(item, index) => item.id || index.toString()}
+              data={(() => {
+                const msgs = currentConversation?.messages || [];
+                const result = [];
+                let prevKey = null;
+                for (let i = 0; i < msgs.length; i += 1) {
+                  const m = msgs[i];
+                  const label = formatMessageDayLabel(m.timestamp);
+                  if (label && label !== prevKey) {
+                    result.push({ type: 'separator', key: `sep-${label}-${i}`, label });
+                    prevKey = label;
+                  }
+                  result.push({ type: 'message', key: m.id || `m-${i}`, data: m });
+                }
+                return result;
+              })()}
+              keyExtractor={(item, index) => item.key || index.toString()}
               renderItem={({ item }) => (
-                <ChatMessage 
-                  text={item.text}
-                  isUser={item.isUser}
-                  timestamp={item.timestamp}
-                />
+                item.type === 'separator' ? (
+                  <View style={styles.separatorContainer}>
+                    <View style={styles.separatorLine} />
+                    <View style={styles.separatorLabelContainer}>
+                      <Text style={styles.separatorLabelText}>{item.label}</Text>
+                    </View>
+                    <View style={styles.separatorLine} />
+                  </View>
+                ) : (
+                  <ChatMessage 
+                    text={item.data.text}
+                    isUser={item.data.isUser}
+                    timestamp={item.data.timestamp}
+                  />
+                )
               )}
               style={styles.messagesList}
               contentContainerStyle={[
@@ -233,6 +258,29 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: moderateScale(8),
     backgroundColor: COLORS.darkBackground,
+  },
+  separatorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: moderateScale(8),
+    paddingHorizontal: moderateScale(10),
+  },
+  separatorLine: {
+    flex: 1,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+  },
+  separatorLabelContainer: {
+    paddingHorizontal: moderateScale(8),
+    paddingVertical: moderateScale(3),
+    marginHorizontal: moderateScale(8),
+    backgroundColor: COLORS.cardDark,
+    borderRadius: moderateScale(12),
+  },
+  separatorLabelText: {
+    color: COLORS.lightGray,
+    fontSize: moderateScale(11),
+    fontWeight: '600',
   },
   loadingText: {
     color: COLORS.lightGray,

@@ -1,8 +1,9 @@
-import React, { forwardRef } from 'react';
+import React, { forwardRef, useMemo } from 'react';
 import { View, Text, StyleSheet, FlatList, ActivityIndicator } from 'react-native';
 import { moderateScale } from 'react-native-size-matters';
 import COLORS from '../../../constants/COLORS';
 import ChatMessage from './ChatMessage';
+import { formatMessageDayLabel, getDayKey } from './utils';
 
 /**
  * MessageList component to display a scrollable list of messages
@@ -26,19 +27,44 @@ const MessageList = forwardRef(({
   onLayout
 }, ref) => {
   
-  // Render individual message
-  const renderMessageItem = ({ item }) => {
-    // Determine if message is from current user
-    const isOwnMessage = item.senderId === userId;
-    
-    // Format the timestamp
-    const messageTimestamp = formatMessageTime(item.timestamp);
-    
+  // Build data with day separators interleaved
+  const listData = useMemo(() => {
+    const result = [];
+    let prevDayKey = null;
+    for (let i = 0; i < (messages?.length || 0); i += 1) {
+      const msg = messages[i];
+      const dayKey = getDayKey(msg.timestamp);
+      if (dayKey && dayKey !== prevDayKey) {
+        result.push({ type: 'separator', key: `sep-${dayKey}-${i}`, label: formatMessageDayLabel(msg.timestamp) });
+        prevDayKey = dayKey;
+      }
+      result.push({ type: 'message', key: msg.id || `msg-${i}`, data: msg });
+    }
+    return result;
+  }, [messages]);
+
+  // Render items (message or separator)
+  const renderItem = ({ item }) => {
+    if (item.type === 'separator') {
+      return (
+        <View style={styles.separatorContainer}>
+          <View style={styles.separatorLine} />
+          <View style={styles.separatorLabelContainer}>
+            <Text style={styles.separatorLabelText}>{item.label}</Text>
+          </View>
+          <View style={styles.separatorLine} />
+        </View>
+      );
+    }
+
+    const message = item.data;
+    const isOwnMessage = message.senderId === userId;
+    const messageTimestamp = formatMessageTime(message.timestamp);
     return (
-      <ChatMessage 
-        message={item} 
-        isOwnMessage={isOwnMessage} 
-        timestamp={messageTimestamp} 
+      <ChatMessage
+        message={message}
+        isOwnMessage={isOwnMessage}
+        timestamp={messageTimestamp}
       />
     );
   };
@@ -70,12 +96,10 @@ const MessageList = forwardRef(({
       overScrollMode="always"
       bounces={true}
       showsVerticalScrollIndicator={true}
-      data={messages}
+      data={listData}
       extraData={lastUpdate}
-      keyExtractor={(item, index) => 
-        item.id ? `msg-${item.id}` : `temp-msg-${index}-${item.clientMessageId || Date.now()}`
-      }
-      renderItem={renderMessageItem}
+      keyExtractor={(item, index) => item.key || `row-${index}`}
+      renderItem={renderItem}
       contentContainerStyle={styles.messagesContent}
       ListHeaderComponent={renderLoadingMoreIndicator}
       ListEmptyComponent={renderEmptyComponent}
@@ -103,6 +127,28 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     paddingHorizontal: moderateScale(15),
     paddingVertical: moderateScale(10),
+  },
+  separatorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: moderateScale(10),
+  },
+  separatorLine: {
+    flex: 1,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+  },
+  separatorLabelContainer: {
+    paddingHorizontal: moderateScale(8),
+    paddingVertical: moderateScale(3),
+    marginHorizontal: moderateScale(8),
+    backgroundColor: COLORS.cardDark,
+    borderRadius: moderateScale(12),
+  },
+  separatorLabelText: {
+    color: COLORS.lightGray,
+    fontSize: moderateScale(11),
+    fontWeight: '600',
   },
   loadingMoreContainer: {
     paddingVertical: moderateScale(15),

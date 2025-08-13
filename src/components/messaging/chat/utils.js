@@ -1,4 +1,4 @@
-import { format } from 'date-fns';
+import { format, isToday, isYesterday } from 'date-fns';
 
 /**
  * Format a message timestamp into a readable time string
@@ -11,34 +11,50 @@ export const formatMessageTime = (timestamp) => {
   }
   
   try {
-    let date;
-    
-    // Handle different timestamp formats
-    if (timestamp._seconds) {
-      // Firestore timestamp
-      date = new Date(timestamp._seconds * 1000);
-    } else if (timestamp.seconds) {
-      // Alternative Firestore timestamp format
-      date = new Date(timestamp.seconds * 1000);
-    } else if (timestamp instanceof Date) {
-      date = timestamp;
-    } else if (typeof timestamp === 'string') {
-      // Handle ISO string format
-      date = new Date(timestamp);
-    } else {
-      // Default to current time if we can't determine format
-      return format(new Date(), 'h:mm a');
-    }
-    
-    // Check if date is valid
-    if (isNaN(date.getTime())) {
-      // Default to current time if date is invalid
-      return format(new Date(), 'h:mm a');
-    }
-    
+    const date = toDate(timestamp);
+    if (!date) return format(new Date(), 'h:mm a');
     return format(date, 'h:mm a');
   } catch (error) {
     // Default to current time on error
     return format(new Date(), 'h:mm a');
   }
+};
+
+// Convert various timestamp shapes to a valid Date or null
+export const toDate = (timestamp) => {
+  try {
+    if (!timestamp) return null;
+    if (timestamp instanceof Date) return isNaN(timestamp.getTime()) ? null : timestamp;
+    if (timestamp._seconds) {
+      const d = new Date(timestamp._seconds * 1000);
+      return isNaN(d.getTime()) ? null : d;
+    }
+    if (timestamp.seconds) {
+      const d = new Date(timestamp.seconds * 1000);
+      return isNaN(d.getTime()) ? null : d;
+    }
+    if (typeof timestamp === 'string' || typeof timestamp === 'number') {
+      const d = new Date(timestamp);
+      return isNaN(d.getTime()) ? null : d;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+};
+
+// Returns a YYYY-MM-DD key in local time for grouping
+export const getDayKey = (timestamp) => {
+  const date = toDate(timestamp);
+  if (!date) return '';
+  return format(date, 'yyyy-MM-dd');
+};
+
+// Returns a human-friendly day label (Today, Yesterday, or formatted date)
+export const formatMessageDayLabel = (timestamp) => {
+  const date = toDate(timestamp);
+  if (!date) return '';
+  if (isToday(date)) return 'Today';
+  if (isYesterday(date)) return 'Yesterday';
+  return format(date, 'EEEE, MMM d, yyyy');
 };

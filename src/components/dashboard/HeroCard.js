@@ -10,7 +10,7 @@ const HeroCard = ({ username = 'there', isPlaying = false, onToggle = () => {} }
     <LinearGradient colors={[COLORS.primaryPurple, COLORS.gradientPink]} start={{x:0,y:0}} end={{x:1,y:1}} style={styles.heroCard}>
       <View style={styles.heroRow}>
         <View>
-          <Text style={styles.heroTitle}>Good Morning, {username}!</Text>
+          <Text style={styles.heroTitle}>Good day, {username}!</Text>
           <Text style={styles.heroSubtitle}>Ready for another great day?</Text>
         </View>
         <View style={styles.heroIconCircle}>

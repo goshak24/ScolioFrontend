@@ -14,6 +14,77 @@ import {
   startAfter
 } from 'firebase/firestore';
 
+// Cache config
+const GROUP_MESSAGES_CACHE_PREFIX = 'group_messages_';
+const GROUP_MESSAGES_TTL = 24 * 60 * 60 * 1000; // 24 hours
+const GROUP_MESSAGES_FRESH_THRESHOLD = 5 * 60 * 1000; // 5 minutes
+
+// Helpers: cache read/write with de-dup
+const readGroupMessagesCache = async (groupId) => {
+  try {
+    const raw = await AsyncStorage.getItem(`${GROUP_MESSAGES_CACHE_PREFIX}${groupId}`);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || !Array.isArray(parsed.messages)) return null;
+    return parsed;
+  } catch (e) {
+    return null;
+  }
+};
+
+const writeGroupMessagesCache = async (groupId, messages) => {
+  try {
+    await AsyncStorage.setItem(
+      `${GROUP_MESSAGES_CACHE_PREFIX}${groupId}`,
+      JSON.stringify({ messages, timestamp: Date.now() })
+    );
+  } catch {}
+};
+
+const mergeMessagesById = (existing, added) => {
+  const byId = new Map((existing || []).map(m => [m.id, m]));
+  (added || []).forEach(m => {
+    const prev = byId.get(m.id) || {};
+    byId.set(m.id, { ...prev, ...m });
+  });
+  // Preserve chronological order by createdAt if present, else insertion
+  const merged = Array.from(byId.values());
+  merged.sort((a, b) => {
+    const ad = Date.parse(a.createdAt || '');
+    const bd = Date.parse(b.createdAt || '');
+    if (!isNaN(ad) && !isNaN(bd)) return ad - bd;
+    return 0;
+  });
+  return merged;
+};
+
+// Track last seen/newest timestamps per group to scope realtime queries
+const lastSeenGroupTimestamps = {};
+
+// Helpers to normalize timestamps
+const toMillis = (value) => {
+  try {
+    if (!value) return null;
+    if (typeof value?.toMillis === 'function') return value.toMillis();
+    if (typeof value === 'string' || typeof value === 'number') {
+      const t = Date.parse(value);
+      return isNaN(t) ? null : t;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+};
+
+const getNewestTimestampMillis = (messages) => {
+  let max = null;
+  (messages || []).forEach((m) => {
+    const ts = toMillis(m?.createdAt);
+    if (ts !== null && (max === null || ts > max)) max = ts;
+  });
+  return max;
+};
+
 // Action types
 const SET_LOADING = 'set_loading';
 const SET_ERROR = 'set_error';
@@ -324,26 +395,56 @@ const getGroupDetails = (dispatch) => async (groupId) => {
 
 const getGroupMessages = (dispatch) => async (groupId, options = {}) => {
   try {
+    const now = Date.now();
+    const force = !!options.force;
+    const limit = options.limit;
+
+    // Attempt cache
+    if (!force) {
+      const cached = await readGroupMessagesCache(groupId);
+      if (cached && (now - (cached.timestamp || 0)) < GROUP_MESSAGES_TTL) {
+        // Use cached
+        dispatch({ type: SET_GROUP_MESSAGES, payload: { groupId, messages: cached.messages } });
+        // Optionally refresh in background if cache is getting old
+        const freshEnough = (now - (cached.timestamp || 0)) < GROUP_MESSAGES_FRESH_THRESHOLD;
+        if (!freshEnough) {
+          setTimeout(async () => {
+            try {
+              const params = new URLSearchParams();
+              if (limit) params.append('limit', limit);
+              const idTokenBg = await AsyncStorage.getItem('idToken');
+              const respBg = await api.get(`/groups/${groupId}/messages?${params.toString()}`, { headers: { 'Authorization': `Bearer ${idTokenBg}` } });
+              if (respBg.data?.success && Array.isArray(respBg.data.messages)) {
+                const merged = mergeMessagesById(cached.messages, respBg.data.messages);
+                dispatch({ type: SET_GROUP_MESSAGES, payload: { groupId, messages: merged } });
+                writeGroupMessagesCache(groupId, merged);
+                // Track newest timestamp for realtime scoping
+                const newest = getNewestTimestampMillis(merged);
+                if (newest) lastSeenGroupTimestamps[groupId] = newest;
+              }
+            } catch {}
+          }, 50);
+        }
+        return cached.messages;
+      }
+    }
+
+    // No valid cache -> fetch
     const params = new URLSearchParams();
-    if (options.limit) params.append('limit', options.limit);
+    if (limit) params.append('limit', limit);
     if (options.before) params.append('before', options.before);
 
     const idToken = await AsyncStorage.getItem('idToken');
     const response = await api.get(`/groups/${groupId}/messages?${params.toString()}`, {
-      headers: {
-        'Authorization': `Bearer ${idToken}`
-      }
+      headers: { 'Authorization': `Bearer ${idToken}` }
     });
-    
     if (response.data.success) {
-      dispatch({ 
-        type: SET_GROUP_MESSAGES, 
-        payload: { 
-          groupId, 
-          messages: response.data.messages 
-        }
-      });
-      return response.data.messages;
+      const messages = response.data.messages || [];
+      dispatch({ type: SET_GROUP_MESSAGES, payload: { groupId, messages } });
+      writeGroupMessagesCache(groupId, messages);
+      const newest = getNewestTimestampMillis(messages);
+      if (newest) lastSeenGroupTimestamps[groupId] = newest;
+      return messages;
     } else {
       throw new Error(response.data.error || 'Failed to fetch group messages');
     }
@@ -439,19 +540,19 @@ const listenToGroupMessages = (dispatch) => async (groupId) => {
     return cleanupExisting;
   }
 
-  // Real-time: listen only to the newest document to minimize reads.
+  // Real-time: listen only to NEW messages after our last seen timestamp
   const msgsRef = collection(db, 'groups', groupId, 'messages');
-  // Narrow to the last few minutes to prevent initial backfill on first attach
-  const fiveMinutesAgo = Timestamp.fromMillis(Date.now() - 5 * 60 * 1000);
+  const lastSeenMs = lastSeenGroupTimestamps[groupId] || (Date.now() - 5 * 60 * 1000);
+  const startTs = Timestamp.fromMillis(lastSeenMs + 1);
   const liveQ = query(
     msgsRef,
     where('deleted', '==', false),
-    where('createdAt', '>', fiveMinutesAgo),
+    where('createdAt', '>', startTs),
     orderBy('createdAt', 'asc'),
     fsLimit(10)
   );
 
-  const unsubscribe = onSnapshot(liveQ, { includeMetadataChanges: false }, (snapshot) => {
+  const unsubscribe = onSnapshot(liveQ, { includeMetadataChanges: false }, async (snapshot) => {
     try {
       // Only process 'added' changes to minimize work
       const added = snapshot
@@ -461,7 +562,18 @@ const listenToGroupMessages = (dispatch) => async (groupId) => {
           const data = c.doc.data();
           return { id: c.doc.id, ...data, createdAt: data.createdAt?.toDate?.()?.toISOString() };
         });
-      if (added.length > 0) dispatch({ type: APPEND_GROUP_MESSAGES, payload: { groupId, messages: added } });
+      if (added.length > 0) {
+        dispatch({ type: APPEND_GROUP_MESSAGES, payload: { groupId, messages: added } });
+        // Update cache by merging
+        try {
+          const cached = await readGroupMessagesCache(groupId);
+          const base = cached?.messages || [];
+          const merged = mergeMessagesById(base, added);
+          writeGroupMessagesCache(groupId, merged);
+          const newest = getNewestTimestampMillis(merged);
+          if (newest) lastSeenGroupTimestamps[groupId] = newest;
+        } catch {}
+      }
     } catch (err) {}
   });
 

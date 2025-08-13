@@ -1,4 +1,4 @@
-import React, { useState, useContext, useEffect, useRef } from 'react';
+import React, { useState, useContext, useEffect, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -11,7 +11,8 @@ import {
   Platform,
   KeyboardAvoidingView,
   RefreshControl,
-  Modal
+  Modal,
+  Keyboard
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { moderateScale } from 'react-native-size-matters';
@@ -24,6 +25,7 @@ import { Context as AuthContext } from '../context/AuthContext';
 import { Context as UserContext } from '../context/UserContext'; 
 import ChatInput from '../components/messaging/chat/ChatInput';
 import HeightSpacer from '../components/reusable/HeightSpacer';
+import { formatMessageDayLabel, getDayKey, formatMessageTime } from '../components/messaging/chat/utils';
 
 const GroupChatScreen = () => {
   const navigation = useNavigation();
@@ -41,6 +43,8 @@ const GroupChatScreen = () => {
   const [members, setMembers] = useState([]); 
   
   const flatListRef = useRef(null);
+  const prevMessageCountRef = useRef(0);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
   
   const { 
     state: GroupsState, 
@@ -74,6 +78,36 @@ const GroupChatScreen = () => {
     };
   }, [groupId]);
 
+  // Keep list anchored to bottom on keyboard events
+  useEffect(() => {
+    const showSub = Keyboard.addListener('keyboardDidShow', () => {
+      setKeyboardVisible(true);
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 60);
+    });
+    const hideSub = Keyboard.addListener('keyboardDidHide', () => {
+      setKeyboardVisible(false);
+    });
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
+  // Auto-scroll to bottom when new messages arrive
+  useEffect(() => {
+    const currentCount = messages?.length || 0;
+    if (currentCount === 0) return;
+    const prev = prevMessageCountRef.current;
+    prevMessageCountRef.current = currentCount;
+    if (currentCount >= prev) {
+      requestAnimationFrame(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      });
+    }
+  }, [messages]);
+
   const loadGroupData = async () => {
     try {
       setLoading(true);
@@ -102,7 +136,8 @@ const GroupChatScreen = () => {
     try {
       if (refresh) setRefreshing(true);
       
-      const messagesData = await getGroupMessages(groupId, { limit: 50 });
+      // Try to use cached first; only force on explicit user refresh
+      const messagesData = await getGroupMessages(groupId, { limit: 50, force: !!refresh });
       setMessages(messagesData || []);
       
       // Scroll to bottom after loading messages
@@ -176,17 +211,46 @@ const GroupChatScreen = () => {
     );
   };
 
-  const renderMessage = ({ item, index }) => {
-    const isCurrentUser = item.senderId === currentUserId;
-    const isSystemMessage = item.messageType === 'system';
-    const prevMessage = index > 0 ? messages[index - 1] : null;
+  // Build interleaved data with day separators
+  const listData = useMemo(() => {
+    const data = [];
+    let prevDayKey = null;
+    for (let i = 0; i < (messages?.length || 0); i += 1) {
+      const msg = messages[i];
+      const dayKey = getDayKey(msg?.createdAt);
+      if (dayKey && dayKey !== prevDayKey) {
+        data.push({ type: 'separator', key: `sep-${dayKey}-${i}`, label: formatMessageDayLabel(msg?.createdAt) });
+        prevDayKey = dayKey;
+      }
+      data.push({ type: 'message', key: msg.id || `msg-${i}`, data: msg, index: i });
+    }
+    return data;
+  }, [messages]);
+
+  const renderItem = ({ item }) => {
+    if (item.type === 'separator') {
+      return (
+        <View style={styles.separatorContainer}>
+          <View style={styles.separatorLine} />
+          <View style={styles.separatorLabelContainer}>
+            <Text style={styles.separatorLabelText}>{item.label}</Text>
+          </View>
+          <View style={styles.separatorLine} />
+        </View>
+      );
+    }
+
+    const m = item.data;
+    const isCurrentUser = m.senderId === currentUserId;
+    const isSystemMessage = m.messageType === 'system';
+    const prevMessage = item.index > 0 ? messages[item.index - 1] : null;
     const showSenderName = !isCurrentUser && !isSystemMessage && 
-      (prevMessage?.senderId !== item.senderId || prevMessage?.messageType === 'system');
+      (prevMessage?.senderId !== m.senderId || prevMessage?.messageType === 'system');
 
     if (isSystemMessage) {
       return (
         <View style={styles.systemMessageContainer}>
-          <Text style={styles.systemMessageText}>{item.text}</Text>
+          <Text style={styles.systemMessageText}>{m.text}</Text>
         </View>
       );
     }
@@ -197,7 +261,7 @@ const GroupChatScreen = () => {
         isCurrentUser ? styles.currentUserMessage : styles.otherUserMessage
       ]}>
         {showSenderName && (
-          <Text style={styles.senderName}>{item.senderName}</Text>
+          <Text style={styles.senderName}>{m.senderName}</Text>
         )}
         <View style={[
           styles.messageBubble,
@@ -207,16 +271,13 @@ const GroupChatScreen = () => {
             styles.messageText,
             isCurrentUser ? styles.currentUserText : styles.otherUserText
           ]}>
-            {item.text}
+            {m.text}
           </Text>
           <Text style={[
             styles.messageTime,
             isCurrentUser ? styles.currentUserTime : styles.otherUserTime
           ]}>
-            {new Date(item.createdAt).toLocaleTimeString([], { 
-              hour: '2-digit', 
-              minute: '2-digit' 
-            })}
+            {formatMessageTime(m.createdAt)}
           </Text>
         </View>
       </View>
@@ -441,9 +502,9 @@ const GroupChatScreen = () => {
         
         <FlatList
           ref={flatListRef}
-          data={messages}
-          keyExtractor={(item) => item.id}
-          renderItem={renderMessage}
+          data={listData}
+          keyExtractor={(item, index) => item.key || `row-${index}`}
+          renderItem={renderItem}
           style={styles.messagesList}
           contentContainerStyle={styles.messagesContainer}
           showsVerticalScrollIndicator={false}
@@ -457,9 +518,7 @@ const GroupChatScreen = () => {
           }
           ListEmptyComponent={renderEmptyMessages}
           onContentSizeChange={() => {
-            if (messages.length > 0) {
-              flatListRef.current?.scrollToEnd({ animated: true });
-            }
+            flatListRef.current?.scrollToEnd({ animated: true });
           }}
         />
         
@@ -468,6 +527,12 @@ const GroupChatScreen = () => {
           onChangeText={setMessageText}
           onSendPress={handleSendMessage}
           loading={sendingMessage}
+          onFocus={() => {
+            setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
+          }}
+          onInputContentSizeChange={() => {
+            requestAnimationFrame(() => flatListRef.current?.scrollToEnd({ animated: false }));
+          }}
         />
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -632,6 +697,30 @@ const styles = StyleSheet.create({
     paddingHorizontal: moderateScale(10),
     paddingVertical: moderateScale(10),
     flexGrow: 1,
+  },
+  separatorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: moderateScale(10),
+    paddingHorizontal: moderateScale(10),
+  },
+  separatorLine: {
+    flex: 1,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: '#444',
+    opacity: 0.6,
+  },
+  separatorLabelContainer: {
+    paddingHorizontal: moderateScale(8),
+    paddingVertical: moderateScale(3),
+    marginHorizontal: moderateScale(8),
+    backgroundColor: COLORS.cardDark,
+    borderRadius: moderateScale(12),
+  },
+  separatorLabelText: {
+    color: COLORS.lightGray,
+    fontSize: moderateScale(11),
+    fontWeight: '600',
   },
   messageContainer: {
     marginVertical: moderateScale(2),

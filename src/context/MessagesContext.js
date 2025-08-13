@@ -737,125 +737,88 @@ const setupMessageListener = (dispatch, getState) => async (conversationId, user
       }
     }
     
-    // Create ULTRA-PRECISE query that gets ONLY BRAND NEW messages
+    // Build two queries to satisfy Firestore rules that check senderId/receiverId
     const messagesRef = collection(db, 'messages');
-    let messagesQuery;
-    
-    if (lastMessageTimestamp) {
-      // 🎯 CRITICAL: Use milliseconds + 1ms to ensure we NEVER re-read the same message
-      const timestampObj = Timestamp.fromMillis((lastMessageTimestamp * 1000) + 1);
-      messagesQuery = query(
-        messagesRef,
-        where('conversationId', '==', conversationId),
-        where('timestamp', '>', timestampObj), // CRITICAL: Only get messages AFTER this exact timestamp
-        orderBy('timestamp', 'asc'),
-        limit(5) // ULTRA-MINIMAL: Only 5 new messages at a time
-      );
-      console.log(`🎯 ULTRA-PRECISE: Listening for messages AFTER ${new Date((lastMessageTimestamp * 1000) + 1).toISOString()}`);
-    } else {
-      // No existing messages - listen for any new ones, but ULTRA-LIMITED
-      messagesQuery = query(
-        messagesRef,
-        where('conversationId', '==', conversationId),
-        orderBy('timestamp', 'asc'),
-        limit(3) // ULTRA-MINIMAL: Only 3 messages for initial query
-      );
-      console.log(`🎯 ULTRA-PRECISE: Listening for ANY new messages (no cache) - LIMITED to 3`);
+    const tsConstraint = lastMessageTimestamp
+      ? where('timestamp', '>', Timestamp.fromMillis((lastMessageTimestamp * 1000) + 1))
+      : null;
+
+    const baseConstraints = [where('conversationId', '==', conversationId), orderBy('timestamp', 'asc')];
+    const ownConstraints = [where('senderId', '==', userId)];
+    const incomingConstraints = [where('receiverId', '==', userId)];
+    if (tsConstraint) {
+      ownConstraints.push(tsConstraint);
+      incomingConstraints.push(tsConstraint);
     }
-    
-    // Set up the real-time listener (ONLY NEW MESSAGES)
-    const unsubscribe = onSnapshot(
-      messagesQuery,
-      {
-        includeMetadataChanges: false // CRITICAL: Only server changes, ignore local changes
-      },
-      (snapshot) => {
-        try {
-          // Only continue if this is still the active conversation
-          if (listenerDetails.currentConversationId !== conversationId) {
-            return;
-          }
-          
-          // 🚀 MAXIMUM EFFICIENCY: Only process 'added' changes to avoid re-processing
-          const newMessages = [];
-          let latestTimestamp = lastSeenTimestamps[conversationId];
-          
-          snapshot.docChanges().forEach((change) => {
-            if (change.type === 'added') {
-              const data = change.doc.data();
-              const messageTimestamp = data.timestamp?.seconds || data.timestamp?._seconds;
-              
-              // ULTRA-STRICT: Only process if this is truly newer than our last seen timestamp
-              if (!latestTimestamp || messageTimestamp > latestTimestamp) {
-                newMessages.push({
-                  id: change.doc.id,
-                  ...data,
-                  isOwn: data.senderId === userId,
-                  status: 'sent',
-                  timestamp: data.timestamp?.seconds ? {
-                    _seconds: data.timestamp.seconds,
-                    _nanoseconds: data.timestamp.nanoseconds || 0
-                  } : data.timestamp
-                });
-                
-                // Update latest timestamp
-                if (messageTimestamp > (latestTimestamp || 0)) {
-                  latestTimestamp = messageTimestamp;
-                }
-              }
-            }
-          });
-          
-          // Update last seen timestamp to prevent re-processing
-          if (latestTimestamp) {
-            lastSeenTimestamps[conversationId] = latestTimestamp;
-          }
-          
-          if (newMessages.length > 0) {
-            console.log(`🆕 ${newMessages.length} NEW messages (Firebase reads: ${snapshot.size})`);
-            
-            // Get existing messages from cache
-            const existingMessages = messageCache[conversationId] || [];
-            
-            // ULTRA-STRICT: Filter out any duplicates to prevent key conflicts
-            const existingIds = new Set(existingMessages.map(msg => msg.id));
-            const trulyNewMessages = newMessages.filter(msg => msg.id && !existingIds.has(msg.id));
-            
-            if (trulyNewMessages.length > 0) {
-              // Append ONLY truly new messages to existing ones (chronological order)
-              const updatedMessages = [...existingMessages, ...trulyNewMessages];
-              
-              // Update cache and state
-              messageCache[conversationId] = updatedMessages;
-              
-              // Update AsyncStorage cache (background operation)
-              AsyncStorage.setItem(`${MESSAGES_CACHE_PREFIX}${otherUserId}`, JSON.stringify({
-                messages: updatedMessages,
-                timestamp: Date.now()
-              })).catch(() => {}); // Silent fail for cache
-              
-              // Update the messages in state
-              dispatch({ type: "SET_MESSAGES", payload: updatedMessages });
-              
-              console.log(`✅ Added ${trulyNewMessages.length} new messages (total: ${updatedMessages.length})`);
-            }
-          }
-        } catch (error) {
-          console.error("❌ Snapshot processing error:", error);
-        }
-      },
-      (error) => {
-        console.error("❌ Firestore listener error:", error);
-        // Clean up failed listener
-        if (activeListeners[conversationId]) {
-          delete activeListeners[conversationId];
-        }
-      }
+
+    const ownQuery = query(
+      messagesRef,
+      ...baseConstraints,
+      ...ownConstraints,
+      limit(5)
     );
-    
-    // Store the unsubscribe function
-    activeListeners[conversationId] = unsubscribe;
-    console.log(`✅ ULTRA-EFFICIENT Firebase listener created for: ${conversationId}`);
+    const incomingQuery = query(
+      messagesRef,
+      ...baseConstraints,
+      ...incomingConstraints,
+      limit(5)
+    );
+
+    console.log(`🎯 Listening with split queries (own and incoming)${lastMessageTimestamp ? ' AFTER ' + new Date((lastMessageTimestamp * 1000) + 1).toISOString() : ''}`);
+
+    const processSnapshot = (snapshot) => {
+      try {
+        if (listenerDetails.currentConversationId !== conversationId) return;
+        const newMessages = [];
+        let latestTimestamp = lastSeenTimestamps[conversationId];
+        snapshot.docChanges().forEach((change) => {
+          if (change.type !== 'added') return;
+          const data = change.doc.data();
+          const messageTimestamp = data.timestamp?.seconds || data.timestamp?._seconds;
+          if (!latestTimestamp || messageTimestamp > latestTimestamp) {
+            newMessages.push({
+              id: change.doc.id,
+              ...data,
+              isOwn: data.senderId === userId,
+              status: 'sent',
+              timestamp: data.timestamp?.seconds ? {
+                _seconds: data.timestamp.seconds,
+                _nanoseconds: data.timestamp.nanoseconds || 0
+              } : data.timestamp
+            });
+            if (messageTimestamp > (latestTimestamp || 0)) {
+              latestTimestamp = messageTimestamp;
+            }
+          }
+        });
+        if (latestTimestamp) lastSeenTimestamps[conversationId] = latestTimestamp;
+        if (newMessages.length === 0) return;
+        const existingMessages = messageCache[conversationId] || [];
+        const existingIds = new Set(existingMessages.map(m => m.id));
+        const deduped = newMessages.filter(m => m.id && !existingIds.has(m.id));
+        if (deduped.length === 0) return;
+        const updated = [...existingMessages, ...deduped];
+        messageCache[conversationId] = updated;
+        AsyncStorage.setItem(`${MESSAGES_CACHE_PREFIX}${otherUserId}`, JSON.stringify({ messages: updated, timestamp: Date.now() })).catch(() => {});
+        dispatch({ type: 'SET_MESSAGES', payload: updated });
+      } catch (err) {
+        console.error('❌ Snapshot processing error:', err);
+      }
+    };
+
+    const unsubscribeOwn = onSnapshot(ownQuery, { includeMetadataChanges: false }, processSnapshot, (error) => {
+      console.error('❌ Firestore listener error (own):', error);
+    });
+    const unsubscribeIncoming = onSnapshot(incomingQuery, { includeMetadataChanges: false }, processSnapshot, (error) => {
+      console.error('❌ Firestore listener error (incoming):', error);
+    });
+
+    // Store combined unsubscribe
+    activeListeners[conversationId] = () => {
+      try { unsubscribeOwn(); } catch {}
+      try { unsubscribeIncoming(); } catch {}
+    };
+    console.log(`✅ Split Firebase listeners created for: ${conversationId}`);
     
     // Return the cleanup function
     return () => {

@@ -166,7 +166,7 @@ const Dashboard = () => {
     { id: 'calendar', title: 'Calendar', subtitle: 'Plan your week like a pro', icon: 'calendar', bg: '#8B5CF620', action: 'Open 📅' },
     { id: 'community', title: 'Community', subtitle: 'Your squad awaits', icon: 'people', bg: '#22C55E20', action: 'Say hi 👋' },
     { id: 'ai', title: 'AI Bestie', subtitle: 'Ask me anything', icon: 'chatbubbles', bg: '#06B6D420', action: 'Spill the tea ☕' },
-    { id: 'doctors', title: 'Doctors Hub', subtitle: 'Find specialists', icon: 'medkit', bg: '#F59E0B20', action: 'Find 🩺' },
+    //{ id: 'doctors', title: 'Doctors Hub', subtitle: 'Find specialists', icon: 'medkit', bg: '#F59E0B20', action: 'Find 🩺' },
   ];
 
   const braceAction = { id: 'brace', title: 'Brace Timer', subtitle: `${braceHoursToday} / ${user?.treatmentData?.brace?.wearingSchedule || 16} hours today`, icon: 'time', bg: '#3B82F620', action: 'Start timer ▶' };
@@ -247,10 +247,7 @@ const Dashboard = () => {
                     break;
                   case 'ai':
                     navigate('AI');
-                    break;
-                  case 'doctors':
-                    navigate('FindDoctors');
-                    break;
+                    break; 
                   default:
                     break;
                 }
@@ -286,10 +283,11 @@ const Dashboard = () => {
               return items.slice(0, 4);
             })()} />
 
-            {/* Doctors Hub */}
+            {/* Doctors Hub 
             <View style={styles.cardBlock}>
               <DoctorsHubCard />
             </View>
+            */}
 
           </View>
         </ScrollView>
