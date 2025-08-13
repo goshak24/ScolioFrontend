@@ -49,6 +49,7 @@ const GroupChatScreen = () => {
   const { 
     state: GroupsState, 
     getGroupDetails, 
+    getGroupMembers,
     getGroupMessages, 
     sendMessage, 
     leaveGroup,
@@ -77,6 +78,19 @@ const GroupChatScreen = () => {
       if (typeof unsubscribe === 'function') unsubscribe();
     };
   }, [groupId]);
+
+  // Fetch members on demand when modal opens
+  useEffect(() => {
+    const loadMembers = async () => {
+      try {
+        if (showMembersModal && getGroupMembers) {
+          const fetched = await getGroupMembers(groupId);
+          if (Array.isArray(fetched)) setMembers(fetched);
+        }
+      } catch (e) {}
+    };
+    loadMembers();
+  }, [showMembersModal, groupId]);
 
   // Keep list anchored to bottom on keyboard events
   useEffect(() => {
@@ -113,15 +127,14 @@ const GroupChatScreen = () => {
       setLoading(true);
       
       // Load group details and messages in parallel
-      const [detailsResult] = await Promise.allSettled([
-        getGroupDetails(groupId),
-        loadMessages()
-      ]);
+    const [detailsResult] = await Promise.allSettled([
+      getGroupDetails(groupId, { includeMembers: false }),
+      loadMessages()
+    ]);
       
       if (detailsResult.status === 'fulfilled') {
         setGroupDetails(detailsResult.value.group);
-        // Populate members list if provided by backend; otherwise keep empty
-        setMembers(Array.isArray(detailsResult.value.members) ? detailsResult.value.members : []);
+        // Do not fetch members here; fetch on demand when modal opens
       }
       
     } catch (error) {
@@ -415,11 +428,11 @@ const GroupChatScreen = () => {
           ) : (
             <FlatList
               data={members}
-              keyExtractor={(item, index) => String(item.uid || item.id || index)}
+              keyExtractor={(item, index) => String(item.userId || item.uid || item.id || index)}
               renderItem={({ item }) => (
                 <View style={styles.memberRow}>
                   <Text style={styles.memberName}>{friendlyMemberName(item)}</Text>
-                  {isAdmin && (item.uid || item.id) !== currentUserId ? (
+                  {isAdmin && (item.userId || item.uid || item.id) !== currentUserId ? (
                     <View style={styles.memberActions}>
                       <TouchableOpacity style={styles.memberActionBtn} onPress={() => handleKickMember(item)}>
                         <Text style={styles.memberActionText}>Remove</Text>

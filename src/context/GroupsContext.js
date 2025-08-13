@@ -361,10 +361,13 @@ const banMember = (dispatch) => async (groupId, memberId) => {
   }
 };
 
-const getGroupDetails = (dispatch) => async (groupId) => {
+const getGroupDetails = (dispatch) => async (groupId, options = {}) => {
   try {
     const idToken = await AsyncStorage.getItem('idToken');
-    const response = await api.get(`/groups/${groupId}`, {
+    const params = new URLSearchParams();
+    if (options.includeMembers === false) params.append('includeMembers', 'false');
+    const query = params.toString();
+    const response = await api.get(`/groups/${groupId}${query ? `?${query}` : ''}` , {
       headers: {
         'Authorization': `Bearer ${idToken}`
       }
@@ -390,6 +393,23 @@ const getGroupDetails = (dispatch) => async (groupId) => {
     console.error('Get group details error:', error);
     dispatch({ type: SET_ERROR, payload: error.message || 'Failed to fetch group details' });
     throw error;
+  }
+};
+
+// Lightweight members fetch (on demand for modal)
+const getGroupMembers = (dispatch) => async (groupId) => {
+  try {
+    const idToken = await AsyncStorage.getItem('idToken');
+    const response = await api.get(`/groups/${groupId}/members`, {
+      headers: { 'Authorization': `Bearer ${idToken}` }
+    });
+    if (response.data?.success && Array.isArray(response.data.members)) {
+      return response.data.members;
+    }
+    return [];
+  } catch (error) {
+    console.error('Get group members error:', error);
+    return [];
   }
 };
 
@@ -618,6 +638,7 @@ export const { Provider, Context } = createDataContext(
     joinGroup,
     leaveGroup,
     getGroupDetails,
+    getGroupMembers,
     getGroupMessages,
     sendMessage,
     clearGroupsCache,
